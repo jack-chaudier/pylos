@@ -15,8 +15,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { atomize, compact, compile, type EpisodeInput, openVault, type Provider, recall } from "@pylos/core";
-import { RECALL_TOOL } from "@pylos/core/pure";
-import { retained } from "@pylos/core/pure";
+import { RECALL_TOOL, retained } from "@pylos/core/pure";
 import type { ChatMessage } from "@pylos/protocol";
 import { RollingSummary } from "./baseline.ts";
 import { buildCorpus } from "./corpus.ts";
@@ -168,13 +167,23 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
     return { text, pages };
   };
 
-  type Item = { kind: "fact" | "quote" | "number"; query: string; value1: string; value2: string; numeric?: number };
+  type Item = {
+    kind: "fact" | "quote" | "number";
+    query: string;
+    value1: string;
+    value2: string;
+    numeric?: number;
+  };
   const usedFacts = new Set<number>();
   const usedQuotes = new Set<number>();
   const usedNumbers = new Set<number>();
   const pickItem = (seq: number, i: number): Item | undefined => {
     const order: Array<"fact" | "quote" | "number"> =
-      i % 3 === 0 ? ["quote", "fact", "number"] : i % 3 === 1 ? ["number", "fact", "quote"] : ["fact", "quote", "number"];
+      i % 3 === 0
+        ? ["quote", "fact", "number"]
+        : i % 3 === 1
+          ? ["number", "fact", "quote"]
+          : ["fact", "quote", "number"];
     for (const kind of order) {
       if (kind === "fact") {
         const f = corpus.manifest.facts.filter((x) => x.seq2 < seq && !usedFacts.has(x.id)).at(-1);
@@ -270,7 +279,13 @@ function score(
   tokens: number,
   pages: number,
   answer: string,
-  fact: { kind: "fact" | "quote" | "number"; query: string; value1: string; value2: string; numeric?: number },
+  fact: {
+    kind: "fact" | "quote" | "number";
+    query: string;
+    value1: string;
+    value2: string;
+    numeric?: number;
+  },
 ): ProbeScore {
   const current =
     answer.includes(fact.value2) ||
