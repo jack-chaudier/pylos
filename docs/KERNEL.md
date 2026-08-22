@@ -454,9 +454,11 @@ routing vocabulary, so "turn 345" never ledger-routes on the number 345.
   interrogative) **and** the AND-mode FTS query has ≥ 2 terms **and** either it
   names something that is neither resident nor in the ledger (as before), or the
   ledger and atom routes resolved no page this turn, or the query itself names
-  nothing routable (routes that fired on the previous assistant turn's names do
-  not count against a name-free question). `k = 2`, trigger `search`, counted
-  against `P_max`.
+  nothing routable. `k = 2`, trigger `search`, counted against `P_max`.
+* Order within one turn: sequence route → routes for the query's own names →
+  lexical search → routes for the previous assistant turn's names (§5.1), which
+  take only what budget remains. The model's previous sentence may be mid-task,
+  but it never starves the question being asked.
 * A `recall({query})` call (trigger `model`) always runs the search after the
   name routes, `k ≤ 4`, excluding what is already resident or served. Free text
   is a legitimate address: the model rewords, the kernel returns exact spans or

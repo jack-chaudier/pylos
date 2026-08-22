@@ -187,11 +187,14 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   // The sequence route consumed its own spans: "turn 345" was an address, and an
   // address must not re-enter the vocabulary as the number 345 (KERNEL A9.3).
   const routableQuery = consume(queryText, references);
-  const hits =
-    request.hits ??
-    (routableQuery.length > 0 || (request.prevAssistant ?? "").length > 0
-      ? [...names(routableQuery), ...names(request.prevAssistant ?? "")]
-      : []);
+  // The user's question routes first; the previous assistant turn's names
+  // (the model may be mid-task, KERNEL §5.1) route last, with whatever budget is
+  // left — they must never starve the question being asked (KERNEL A9.4).
+  const queryHits = request.hits ?? (routableQuery.length > 0 ? names(routableQuery) : []);
+  const prevHits = request.hits ? [] : names(request.prevAssistant ?? "");
+  const stopNames =
+    queryHits.length + prevHits.length > 0 ? vault.stopNames.all(threadId) : new Set<string>();
+  const answered = new Set<string>();
 
   // ---- 0. atom routing (deterministic, exact, cheap)
   //
@@ -199,166 +202,168 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   // current certificate for a named subject is *paged* rather than dropped. The
   // block is a certificate — claim, deciding value, pointer — never a paraphrase,
   // and a superseded value is always labelled with its validity interval.
-  const stopNames = hits.length > 0 ? vault.stopNames.all(threadId) : new Set<string>();
-  const atomHits = rank(dedupeHits(hits)).filter((hit) => !stopNames.has(hit.name));
-  const answered = new Set<string>();
-  for (const hit of atomHits) {
-    if (!canServe()) break;
-    const atoms = vault.atoms.byName(threadId, hit.name, 8);
-    if (atoms.length === 0) continue;
-    const started = performance.now();
-    const lines: string[] = [];
-    const seqs: Seq[] = [];
-    const keys: string[] = [];
-    // One name can carry several slots ("where does X live" and "where was X
-    // born"). Emit a certificate for each current slot, plus the interval of the
-    // value it replaced, rather than guessing which slot the query meant.
-    for (const key of [...new Set(atoms.map((a) => a.key))].slice(0, 3)) {
-      if (answered.has(key)) continue;
-      const forKey = atoms.filter((a) => a.key === key);
-      const current = forKey.find((a) => a.phase === "SUPPORTED");
-      // A closed proposal is HISTORICAL but was never true, so it can never
-      // stand as the previous value of a slot (KERNEL A9.1).
-      const previous = forKey.find((a) => a.phase === "HISTORICAL" && authoritative(a));
-      // An open proposal is shown only when nothing authoritative holds the
-      // slot: the model should know a claim exists and that it is unconfirmed.
-      const proposed = current === undefined ? forKey.find((a) => a.phase === "PROPOSED") : undefined;
-      if (current === undefined && previous === undefined && proposed === undefined) continue;
-      // Skip only when the *current* certificate is already legible in the
-      // packet. A resident line carrying the superseded value is a reason to
-      // page, not a reason to stay quiet.
-      if (current !== undefined && residentText.includes(`${key} = ${current.value}`)) continue;
-      answered.add(key);
-      keys.push(key);
-      if (proposed !== undefined) {
-        lines.push(
-          `${proposed.key} ≈ ${proposed.value} ⟨proposed by ${proposed.authority} #${proposed.sourceSeq} · unconfirmed⟩`,
-        );
-        seqs.push(proposed.sourceSeq);
-      }
-      if (current !== undefined) {
-        lines.push(`${current.key} = ${current.value} ⟨#${current.sourceSeq}⟩`);
-        seqs.push(current.sourceSeq);
-      }
-      if (previous !== undefined) {
-        lines.push(
-          `${previous.key} = ${previous.value} ⟨historical #${previous.validFromSeq}→#${previous.validToSeq ?? "?"}⟩`,
-        );
-        seqs.push(previous.sourceSeq);
-      }
-      if (current !== undefined && previous !== undefined) {
-        historical.push({
-          key,
-          current: current.value,
-          previous: previous.value,
-          changedAtSeq: current.validFromSeq,
-        });
-      }
-    }
-    if (lines.length === 0) continue;
-    const text = lines.join("\n");
-    const cost = tokenizer(text) + 8;
-    if (cost > room()) break;
-    blocks.push({ seq: seqs[0] as Seq, role: "system", trigger: `memory:${hit.name}`, text });
-    used += cost;
-    records.push({
-      trigger: "historical",
-      name: keys.join(", "),
-      seqs,
-      tokens: cost,
-      latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
-      resolved: true,
-    });
-  }
-
-  // ---- 1. ledger routing (deterministic)
-  const routable = rank(dedupeHits(hits)).filter((hit) => {
-    if (stopNames.has(hit.name)) return false;
-    if (isResident(hit, residentNames, residentText)) return false;
-    return vault.losses.has(threadId, hit.name);
-  });
-
-  for (const hit of routable) {
-    if (!canServe()) break;
-    const started = performance.now();
-    const locators = orderLocators(vault, threadId, vault.losses.byName(threadId, hit.name, 4), request);
-    let served = false;
-    const seqs: Seq[] = [];
-    let tokens = 0;
-    for (const locator of locators) {
-      if (servedSeqs.has(locator.seq)) continue;
-      const episode = vault.episodes.get(threadId, locator.seq);
-      if (episode === null || episode.meta.removed === true) continue;
-      if (!resolves(vault, threadId, episode.content, locator.seq, hit)) continue;
-      const text = excerpt(
-        episode.content,
-        locator.span,
-        Math.min(TOKENS_PER_PAGE, room() - tokens),
-        tokenizer,
-      );
-      if (text.length === 0) break;
-      blocks.push({ seq: episode.seq, role: episode.role, trigger: `ledger:${hit.name}`, text });
-      seqs.push(episode.seq);
-      servedSeqs.add(episode.seq);
-      tokens += tokenizer(text) + 8;
-      served = true;
-      // neighbour ±1 only while budget remains
-      const neighbour = vault.episodes.get(threadId, episode.seq + 1);
-      if (neighbour !== null && !servedSeqs.has(neighbour.seq) && room() - tokens > 200) {
-        const ntext = excerpt(neighbour.content, undefined, 160, tokenizer);
-        blocks.push({ seq: neighbour.seq, role: neighbour.role, trigger: "ledger:neighbour", text: ntext });
-        seqs.push(neighbour.seq);
-        servedSeqs.add(neighbour.seq);
-        tokens += tokenizer(ntext) + 8;
-      }
-      break;
-    }
-    used += tokens;
-    records.push({
-      trigger: "ledger",
-      name: hit.name,
-      seqs,
-      tokens,
-      latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
-      resolved: served,
-    });
-  }
-
-  // ---- 2. historical keys reached by value rather than by subject (KERNEL §5.2)
-  if (hits.length > 0) {
-    const keys = historicalKeysFor(vault, threadId, hits).filter((k) => !answered.has(k.key));
-    for (const entry of keys) {
+  const route = (hits: readonly NameHit[]): void => {
+    const atomHits = rank(dedupeHits(hits)).filter((hit) => !stopNames.has(hit.name));
+    for (const hit of atomHits) {
       if (!canServe()) break;
+      const atoms = vault.atoms.byName(threadId, hit.name, 8);
+      if (atoms.length === 0) continue;
       const started = performance.now();
-      const lines = [
-        `${entry.key} = ${entry.current.value} ⟨#${entry.current.validFromSeq}⟩ (current)`,
-        `${entry.key} = ${entry.previous.value} ⟨historical #${entry.previous.validFromSeq}→#${entry.previous.validToSeq ?? "?"}⟩`,
-      ].join("\n");
-      const cost = tokenizer(lines) + 8;
+      const lines: string[] = [];
+      const seqs: Seq[] = [];
+      const keys: string[] = [];
+      // One name can carry several slots ("where does X live" and "where was X
+      // born"). Emit a certificate for each current slot, plus the interval of the
+      // value it replaced, rather than guessing which slot the query meant.
+      for (const key of [...new Set(atoms.map((a) => a.key))].slice(0, 3)) {
+        if (answered.has(key)) continue;
+        const forKey = atoms.filter((a) => a.key === key);
+        const current = forKey.find((a) => a.phase === "SUPPORTED");
+        // A closed proposal is HISTORICAL but was never true, so it can never
+        // stand as the previous value of a slot (KERNEL A9.1).
+        const previous = forKey.find((a) => a.phase === "HISTORICAL" && authoritative(a));
+        // An open proposal is shown only when nothing authoritative holds the
+        // slot: the model should know a claim exists and that it is unconfirmed.
+        const proposed = current === undefined ? forKey.find((a) => a.phase === "PROPOSED") : undefined;
+        if (current === undefined && previous === undefined && proposed === undefined) continue;
+        // Skip only when the *current* certificate is already legible in the
+        // packet. A resident line carrying the superseded value is a reason to
+        // page, not a reason to stay quiet.
+        if (current !== undefined && residentText.includes(`${key} = ${current.value}`)) continue;
+        answered.add(key);
+        keys.push(key);
+        if (proposed !== undefined) {
+          lines.push(
+            `${proposed.key} ≈ ${proposed.value} ⟨proposed by ${proposed.authority} #${proposed.sourceSeq} · unconfirmed⟩`,
+          );
+          seqs.push(proposed.sourceSeq);
+        }
+        if (current !== undefined) {
+          lines.push(`${current.key} = ${current.value} ⟨#${current.sourceSeq}⟩`);
+          seqs.push(current.sourceSeq);
+        }
+        if (previous !== undefined) {
+          lines.push(
+            `${previous.key} = ${previous.value} ⟨historical #${previous.validFromSeq}→#${previous.validToSeq ?? "?"}⟩`,
+          );
+          seqs.push(previous.sourceSeq);
+        }
+        if (current !== undefined && previous !== undefined) {
+          historical.push({
+            key,
+            current: current.value,
+            previous: previous.value,
+            changedAtSeq: current.validFromSeq,
+          });
+        }
+      }
+      if (lines.length === 0) continue;
+      const text = lines.join("\n");
+      const cost = tokenizer(text) + 8;
       if (cost > room()) break;
-      blocks.push({
-        seq: entry.current.validFromSeq,
-        role: "system",
-        trigger: `historical:${entry.key}`,
-        text: lines,
-      });
+      blocks.push({ seq: seqs[0] as Seq, role: "system", trigger: `memory:${hit.name}`, text });
       used += cost;
-      historical.push({
-        key: entry.key,
-        current: entry.current.value,
-        previous: entry.previous.value,
-        changedAtSeq: entry.current.validFromSeq,
-      });
       records.push({
         trigger: "historical",
-        name: entry.key,
-        seqs: [entry.previous.validFromSeq, entry.current.validFromSeq],
+        name: keys.join(", "),
+        seqs,
         tokens: cost,
         latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
         resolved: true,
       });
     }
-  }
+
+    // ---- 1. ledger routing (deterministic)
+    const routable = rank(dedupeHits(hits)).filter((hit) => {
+      if (stopNames.has(hit.name)) return false;
+      if (isResident(hit, residentNames, residentText)) return false;
+      return vault.losses.has(threadId, hit.name);
+    });
+
+    for (const hit of routable) {
+      if (!canServe()) break;
+      const started = performance.now();
+      const locators = orderLocators(vault, threadId, vault.losses.byName(threadId, hit.name, 4), request);
+      let served = false;
+      const seqs: Seq[] = [];
+      let tokens = 0;
+      for (const locator of locators) {
+        if (servedSeqs.has(locator.seq)) continue;
+        const episode = vault.episodes.get(threadId, locator.seq);
+        if (episode === null || episode.meta.removed === true) continue;
+        if (!resolves(vault, threadId, episode.content, locator.seq, hit)) continue;
+        const text = excerpt(
+          episode.content,
+          locator.span,
+          Math.min(TOKENS_PER_PAGE, room() - tokens),
+          tokenizer,
+        );
+        if (text.length === 0) break;
+        blocks.push({ seq: episode.seq, role: episode.role, trigger: `ledger:${hit.name}`, text });
+        seqs.push(episode.seq);
+        servedSeqs.add(episode.seq);
+        tokens += tokenizer(text) + 8;
+        served = true;
+        // neighbour ±1 only while budget remains
+        const neighbour = vault.episodes.get(threadId, episode.seq + 1);
+        if (neighbour !== null && !servedSeqs.has(neighbour.seq) && room() - tokens > 200) {
+          const ntext = excerpt(neighbour.content, undefined, 160, tokenizer);
+          blocks.push({ seq: neighbour.seq, role: neighbour.role, trigger: "ledger:neighbour", text: ntext });
+          seqs.push(neighbour.seq);
+          servedSeqs.add(neighbour.seq);
+          tokens += tokenizer(ntext) + 8;
+        }
+        break;
+      }
+      used += tokens;
+      records.push({
+        trigger: "ledger",
+        name: hit.name,
+        seqs,
+        tokens,
+        latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+        resolved: served,
+      });
+    }
+
+    // ---- 2. historical keys reached by value rather than by subject (KERNEL §5.2)
+    if (hits.length > 0) {
+      const keys = historicalKeysFor(vault, threadId, hits).filter((k) => !answered.has(k.key));
+      for (const entry of keys) {
+        if (!canServe()) break;
+        const started = performance.now();
+        const lines = [
+          `${entry.key} = ${entry.current.value} ⟨#${entry.current.validFromSeq}⟩ (current)`,
+          `${entry.key} = ${entry.previous.value} ⟨historical #${entry.previous.validFromSeq}→#${entry.previous.validToSeq ?? "?"}⟩`,
+        ].join("\n");
+        const cost = tokenizer(lines) + 8;
+        if (cost > room()) break;
+        blocks.push({
+          seq: entry.current.validFromSeq,
+          role: "system",
+          trigger: `historical:${entry.key}`,
+          text: lines,
+        });
+        used += cost;
+        historical.push({
+          key: entry.key,
+          current: entry.current.value,
+          previous: entry.previous.value,
+          changedAtSeq: entry.current.validFromSeq,
+        });
+        records.push({
+          trigger: "historical",
+          name: entry.key,
+          seqs: [entry.previous.validFromSeq, entry.current.validFromSeq],
+          tokens: cost,
+          latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+          resolved: true,
+        });
+      }
+    }
+  };
+
+  route(queryHits);
 
   // ---- 3. lexical search (KERNEL A9.4)
   //
@@ -369,7 +374,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   // the model's own address for a memory, and the kernel answers it with exact
   // spans or with UNKNOWN.
   const byModel = request.trigger === "model" && queryText.length > 0;
-  const unknownName = hits.some(
+  const unknownName = queryHits.some(
     (hit) => !isResident(hit, residentNames, residentText) && !vault.losses.has(threadId, hit.name),
   );
   const asksSomething = queryText.includes("?") || INTERROGATIVE.test(queryText);
@@ -377,7 +382,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   // A question that names nothing routable is exactly the case the lexical
   // route exists for; routes that resolved on the previous assistant turn's
   // names answered the model's sentence, not the user's question.
-  const nothingNamed = references.length === 0 && names(routableQuery).length === 0;
+  const nothingNamed = references.length === 0 && queryHits.length === 0;
   const fires =
     byModel ||
     (asksSomething && ftsTerms(queryText).length >= 2 && (unknownName || noRouteResolved || nothingNamed));
@@ -404,6 +409,8 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       resolved: seqs.length > 0,
     });
   }
+
+  route(prevHits);
 
   return { blocks, records, historical, tokens: used };
 }

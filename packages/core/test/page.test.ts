@@ -149,3 +149,27 @@ test("a name-free question still searches when the previous reply carried routab
   expect(search?.resolved).toBe(true);
   expect(search?.seqs).toContain(450);
 });
+
+test("the previous reply's names never starve the question being asked", () => {
+  const planted = new Map([[450, "the tea tasted smoky after the rain."]]);
+  const { vault, thread } = longThread(4096, planted);
+  // Three names the ledger knows, all from the model's previous sentence: on a
+  // small budget that is the whole paged slot if they route first.
+  const sample = vault.db
+    .query("SELECT DISTINCT name FROM loss WHERE thread_id = ? AND kind = 'entity' LIMIT 3")
+    .all(thread.id) as Array<{ name: string }>;
+  expect(sample.length).toBe(3);
+  const result = page(vault, thread.id, {
+    query: "how did the tea taste after the rain?",
+    prevAssistant: `Noted: ${sample.map((r) => r.name).join(", ")}.`,
+    budget: 1350,
+    search: true,
+  });
+  const search = result.records.findIndex((r) => r.trigger === "search");
+  expect(search).toBeGreaterThanOrEqual(0);
+  expect(result.records[search]?.resolved).toBe(true);
+  expect(result.records[search]?.seqs).toContain(450);
+  // routes fired for the previous reply come after the search, never before
+  const prevRoute = result.records.findIndex((r) => r.trigger === "ledger" || r.trigger === "historical");
+  expect(prevRoute === -1 || prevRoute > search).toBe(true);
+});
