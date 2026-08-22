@@ -221,7 +221,8 @@ const PATTERNS: Pattern[] = [
   // number, optionally followed by a unit token
   {
     kind: "number",
-    re: /(-?\d[\d,]*(?:\.\d+)?)(?:[ ]?([A-Za-z%]{1,6}))?\b/g,
+    // no letter/digit/dot immediately before: `p50`, `v2`, `3.14.1` are not numbers
+    re: /(?<![A-Za-z0-9.])(-?\d[\d,]*(?:\.\d+)?)(?:[ ]?([A-Za-z%]{1,6}))?\b/g,
     refine: (m) => numberName(m[1] as string, m[2] ?? ""),
   },
   // dotted / snake / kebab / path identifiers, filenames with an extension
@@ -396,39 +397,77 @@ export function queryNames(query: string): NameHit[] {
   return names(query, { max: 64 });
 }
 
-/** Numbers appearing in a text, for the row-21 `retained` tolerance. */
-export function numbersIn(text: string): number[] {
-  const out: number[] = [];
-  const re = /-?\d[\d,]*(?:\.\d+)?/g;
+/** A number as it occurs in a text, with the unit token that follows it (if any). */
+export interface NumberOccurrence {
+  value: number;
+  /** Lower-cased trailing token, or `""` when the number stands alone. */
+  unit: string;
+}
+
+/**
+ * Every number in a text, each with its trailing unit token. Kernel markup
+ * (`⟨#345⟩`, `⟦recovered #12 · user⟧`) is claimed and skipped exactly as
+ * `names()` claims it: a certificate's own pointer is scaffolding, and must
+ * never count as a witness for a value the view no longer contains.
+ */
+export function numberOccurrences(text: string): NumberOccurrence[] {
+  const markup: Array<[number, number]> = [];
+  const marks = /[⟨⟦][^⟩⟧\n]*[⟩⟧]/g;
+  let mark = marks.exec(text);
+  while (mark !== null) {
+    markup.push([mark.index, mark.index + mark[0].length]);
+    mark = marks.exec(text);
+  }
+  const out: NumberOccurrence[] = [];
+  const re = /(-?\d[\d,]*(?:\.\d+)?)(?:[ ]?([A-Za-z%]{1,6}))?/g;
   let m = re.exec(text);
   while (m !== null) {
-    const value = Number(m[0].replace(/,/g, ""));
-    if (Number.isFinite(value)) out.push(value);
+    const at = m.index;
+    if (!markup.some(([start, end]) => at >= start && at < end)) {
+      const value = Number((m[1] as string).replace(/,/g, ""));
+      if (Number.isFinite(value)) out.push({ value, unit: (m[2] ?? "").toLowerCase() });
+    }
     m = re.exec(text);
   }
   return out;
 }
 
+function equivalent(x: number, value: number): boolean {
+  const close = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9;
+  return (
+    close(x, value) ||
+    close(x, Math.round(value)) ||
+    close(x, Math.round(value * 10) / 10) ||
+    close(value, Math.round(x)) ||
+    close(value, Math.round(x * 10) / 10)
+  );
+}
+
 /**
- * Row-21 numeric presence: exact, within 1% relative, or equal after rounding to
- * 0 or 1 decimal places (THEORY §6). Used so a number is not "paged back" when
- * the packet already contains it in a slightly different rendering.
+ * Numeric presence (KERNEL A9.2): a lost number is retained by a text only if
+ * some occurrence in it is the *same* number up to rendering — equal, or equal
+ * after rounding either side to 0 or 1 decimal places — and, when the lost name
+ * carries a unit, only if that occurrence carries the same unit.
+ *
+ * The 1% relative window this replaces (THEORY §6) let an unrelated `4950 ms`
+ * stand in for a lost `5000 ms`, and unit-blindness let `48250 usd` stand in for
+ * `48250 eur`. Both are silent losses wearing a witness's coat.
  */
-export function retained(text: string, value: number): boolean {
-  for (const x of numbersIn(text)) {
-    if (Math.abs(x - value) < 1e-9) return true;
-    if (value !== 0 && Math.abs(x - value) / Math.abs(value) <= 0.01) return true;
-    if (x === Math.round(value) || x === Math.round(value * 10) / 10) return true;
+export function retained(text: string, value: number, unit?: string): boolean {
+  const want = (unit ?? "").toLowerCase();
+  for (const found of numberOccurrences(text)) {
+    if (want.length > 0 && found.unit !== want) continue;
+    if (equivalent(found.value, value)) return true;
   }
   return false;
 }
 
-/** Parse a normalized number-name back to its numeric value, if it is one. */
-export function numericValue(name: string): number | null {
-  const m = /^(-?\d+(?:\.\d+)?)(?:\s|$)/.exec(name);
-  if (!m) return null;
+/** Parse a normalized number-name (`"3.2 ms"`, `"483112"`) back into value and unit. */
+export function parseNumberName(name: string): NumberOccurrence | null {
+  const m = /^(-?\d+(?:\.\d+)?)(?:\s+([a-z%]{1,6}))?$/.exec(name);
+  if (m === null) return null;
   const value = Number(m[1]);
-  return Number.isFinite(value) ? value : null;
+  return Number.isFinite(value) ? { value, unit: m[2] ?? "" } : null;
 }
 
 /** Normalize an arbitrary string as a name of the given kind (for atom keys/values). */

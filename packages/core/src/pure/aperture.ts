@@ -93,6 +93,7 @@ export function aperture(episodes: readonly ApertureEpisode[], options: Aperture
         sourceSpan: draft.span,
         validFromSeq: episode.seq,
         phase: "SUPPORTED",
+        authority: episode.role === "assistant" ? "assistant" : "user",
         scope: "global",
         pinned: false,
         confidence: draft.confidence,

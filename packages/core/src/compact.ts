@@ -140,7 +140,9 @@ function sealLeaf(
   options: CompactOptions,
 ): StoredCapsule {
   const episodes = vault.episodes.range(threadId, from, to);
-  const atoms = vault.atoms.inRange(threadId, from, to);
+  // A proposal is never a certificate (KERNEL A9.1): it must not be frozen into
+  // capsule text, where it would read as settled long after its turn scrolled by.
+  const atoms = vault.atoms.inRange(threadId, from, to).filter((a) => a.phase !== "PROPOSED");
   const units: CapsuleUnit[] = episodes.map((e) => ({ seq: e.seq, text: e.content }));
   const atomLines: CapsuleAtomLine[] = atoms.map((a) => ({
     key: a.key,

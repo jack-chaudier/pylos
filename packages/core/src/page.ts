@@ -8,12 +8,14 @@
  *                ∧ n ∉ names(resident part of K_t)
  *                ∧ n is not a stop-name
  *
- * Numbers compare with the row-21 tolerance (exact, 1% relative, or equal after
- * rounding to 0/1 dp); everything else is exact normalized string equality.
- * A page that finds no exact material returns UNKNOWN and is recorded as such.
- * Pages are never fuzzy.
+ * Numbers compare by rounding-equivalence with unit agreement (KERNEL A9.2);
+ * everything else is exact normalized string equality. A page that finds no
+ * exact material returns UNKNOWN and is recorded as such. Pages are never fuzzy.
  *
- * One trigger runs *before* ledger routing: **atom routing**. A named subject
+ * The **sequence route** (KERNEL A9.3) runs before everything: a query that
+ * names a position — "turn 345" — is answered from that position exactly.
+ *
+ * Then **atom routing**. A named subject
  * whose current certificate did not fit the frontier slot is paged as a
  * certificate (`key = value ⟨#seq⟩`, plus the interval of whatever it replaced).
  * This is the frontier-overflow path of THEORY §12 — when the live frontier is
@@ -22,10 +24,11 @@
  * spend the paged slot on the episode that stated the *old* value.
  */
 
-import type { Atom, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
-import { KIND_PRIORITY, type NameHit, names, numericValue, retained } from "./pure/names.ts";
+import type { Atom, LossEntry, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
+import { KIND_PRIORITY, type NameHit, names, parseNumberName, retained } from "./pure/names.ts";
 import type { PagedBlock } from "./pure/render.ts";
 import { approxTokens, type Tokenizer } from "./pure/tokens.ts";
+import { ftsTerms } from "./rows.ts";
 import type { Vault } from "./vault.ts";
 
 /** Tokens assumed per served page when sizing `P_max` (KERNEL A4). */
@@ -54,6 +57,13 @@ export interface PageRequest {
   tokenizer?: Tokenizer;
   /** Disable the lexical fallback (KERNEL §5.3). */
   search?: boolean;
+  /**
+   * Routing names to use instead of the ones read from `query` / `prevAssistant`.
+   * The verification round supplies the draft's names directly (KERNEL A9.5).
+   */
+  hits?: NameHit[];
+  /** Serve user and tool locators before assistant ones (the check round). */
+  userSourceFirst?: boolean;
 }
 
 export interface PageResult {
@@ -68,8 +78,8 @@ const INTERROGATIVE = /\b(?:what|where|when|who|which|why|how|did|do|does|is|are
 
 /**
  * Serve pages for one turn. Triggers run in order and share one budget:
- * explicit/model recall → atom routing → ledger routing → historical keys →
- * lexical search.
+ * explicit/model recall → sequence → atom routing → ledger routing →
+ * historical keys → lexical search.
  */
 export function page(vault: Vault, threadId: string, request: PageRequest): PageResult {
   const tokenizer = request.tokenizer ?? approxTokens;
@@ -117,10 +127,71 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   }
 
   const queryText = request.query ?? "";
+
+  // ---- sequence route (KERNEL A9.3): the query addresses the archive by position
+  //
+  // "what did I say on turn 345?" is an exact question and deserves an exact
+  // answer at any archive size. It runs before every other trigger because a
+  // named position leaves nothing to infer.
+  const references = request.hits === undefined ? sequenceRefs(queryText) : [];
+  for (const reference of references) {
+    if (!canServe()) break;
+    const started = performance.now();
+    const wanted: Seq[] = [];
+    let missing = false;
+    for (let seq = reference.from; seq <= reference.to; seq += 1) {
+      const episode = vault.episodes.get(threadId, seq);
+      if (episode === null || episode.meta.removed === true) {
+        missing = true;
+        continue;
+      }
+      if (!servedSeqs.has(seq)) wanted.push(seq);
+    }
+    // Nothing to fetch and nothing missing: the turn is already in the view.
+    if (wanted.length === 0 && !missing) continue;
+    const seqs: Seq[] = [];
+    let tokens = 0;
+    for (const seq of wanted) {
+      if (room() - tokens <= 60) break;
+      const episode = vault.episodes.get(threadId, seq);
+      if (episode === null) continue;
+      const text = excerpt(episode.content, undefined, Math.min(TOKENS_PER_PAGE, room() - tokens), tokenizer);
+      if (text.length === 0) break;
+      blocks.push({ seq, role: episode.role, trigger: "sequence", text });
+      seqs.push(seq);
+      servedSeqs.add(seq);
+      tokens += tokenizer(text) + 8;
+    }
+    // The neighbour is context for a single named turn, not for a range.
+    if (seqs.length === 1 && room() - tokens > 200) {
+      const neighbour = vault.episodes.get(threadId, (seqs[0] as Seq) + 1);
+      if (neighbour !== null && !servedSeqs.has(neighbour.seq) && neighbour.meta.removed !== true) {
+        const text = excerpt(neighbour.content, undefined, 160, tokenizer);
+        blocks.push({ seq: neighbour.seq, role: neighbour.role, trigger: "sequence:neighbour", text });
+        seqs.push(neighbour.seq);
+        servedSeqs.add(neighbour.seq);
+        tokens += tokenizer(text) + 8;
+      }
+    }
+    used += tokens;
+    records.push({
+      trigger: "sequence",
+      query: reference.from === reference.to ? `#${reference.from}` : `#${reference.from}–#${reference.to}`,
+      seqs,
+      tokens,
+      latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+      resolved: seqs.length > 0,
+    });
+  }
+
+  // The sequence route consumed its own spans: "turn 345" was an address, and an
+  // address must not re-enter the vocabulary as the number 345 (KERNEL A9.3).
+  const routableQuery = consume(queryText, references);
   const hits =
-    queryText.length > 0 || (request.prevAssistant ?? "").length > 0
-      ? [...names(queryText), ...names(request.prevAssistant ?? "")]
-      : [];
+    request.hits ??
+    (routableQuery.length > 0 || (request.prevAssistant ?? "").length > 0
+      ? [...names(routableQuery), ...names(request.prevAssistant ?? "")]
+      : []);
 
   // ---- 0. atom routing (deterministic, exact, cheap)
   //
@@ -146,14 +217,25 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       if (answered.has(key)) continue;
       const forKey = atoms.filter((a) => a.key === key);
       const current = forKey.find((a) => a.phase === "SUPPORTED");
-      const previous = forKey.find((a) => a.phase === "HISTORICAL");
-      if (current === undefined && previous === undefined) continue;
+      // A closed proposal is HISTORICAL but was never true, so it can never
+      // stand as the previous value of a slot (KERNEL A9.1).
+      const previous = forKey.find((a) => a.phase === "HISTORICAL" && authoritative(a));
+      // An open proposal is shown only when nothing authoritative holds the
+      // slot: the model should know a claim exists and that it is unconfirmed.
+      const proposed = current === undefined ? forKey.find((a) => a.phase === "PROPOSED") : undefined;
+      if (current === undefined && previous === undefined && proposed === undefined) continue;
       // Skip only when the *current* certificate is already legible in the
       // packet. A resident line carrying the superseded value is a reason to
       // page, not a reason to stay quiet.
       if (current !== undefined && residentText.includes(`${key} = ${current.value}`)) continue;
       answered.add(key);
       keys.push(key);
+      if (proposed !== undefined) {
+        lines.push(
+          `${proposed.key} ≈ ${proposed.value} ⟨proposed by ${proposed.authority} #${proposed.sourceSeq} · unconfirmed⟩`,
+        );
+        seqs.push(proposed.sourceSeq);
+      }
       if (current !== undefined) {
         lines.push(`${current.key} = ${current.value} ⟨#${current.sourceSeq}⟩`);
         seqs.push(current.sourceSeq);
@@ -199,7 +281,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   for (const hit of routable) {
     if (!canServe()) break;
     const started = performance.now();
-    const locators = vault.losses.byName(threadId, hit.name, 4);
+    const locators = orderLocators(vault, threadId, vault.losses.byName(threadId, hit.name, 4), request);
     let served = false;
     const seqs: Seq[] = [];
     let tokens = 0;
@@ -278,17 +360,33 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     }
   }
 
-  // ---- 3. lexical search (KERNEL A4: only on a question with an unknown name)
+  // ---- 3. lexical search (KERNEL A9.4)
+  //
+  // At turn time it fires on a question with at least two searchable terms, when
+  // either something unknown was named or no other route resolved anything: a
+  // question the deterministic routes could not answer is exactly when the
+  // archive should be read. A `recall({query})` always searches — free text is
+  // the model's own address for a memory, and the kernel answers it with exact
+  // spans or with UNKNOWN.
+  const byModel = request.trigger === "model" && queryText.length > 0;
   const unknownName = hits.some(
     (hit) => !isResident(hit, residentNames, residentText) && !vault.losses.has(threadId, hit.name),
   );
   const asksSomething = queryText.includes("?") || INTERROGATIVE.test(queryText);
-  if (request.search !== false && asksSomething && unknownName && canServe()) {
+  const noRouteResolved = records.every((record) => !record.resolved);
+  // A question that names nothing routable is exactly the case the lexical
+  // route exists for; routes that resolved on the previous assistant turn's
+  // names answered the model's sentence, not the user's question.
+  const nothingNamed = references.length === 0 && names(routableQuery).length === 0;
+  const fires =
+    byModel ||
+    (asksSomething && ftsTerms(queryText).length >= 2 && (unknownName || noRouteResolved || nothingNamed));
+  if (request.search !== false && fires && canServe()) {
     const started = performance.now();
     const found = vault.episodes.search(threadId, queryText, 8).filter((e) => !servedSeqs.has(e.seq));
     const seqs: Seq[] = [];
     let tokens = 0;
-    for (const episode of found.slice(0, 2)) {
+    for (const episode of found.slice(0, byModel ? 4 : 2)) {
       const text = excerpt(episode.content, undefined, Math.min(TOKENS_PER_PAGE, room() - tokens), tokenizer);
       if (text.length === 0) break;
       blocks.push({ seq: episode.seq, role: episode.role, trigger: "search", text });
@@ -337,6 +435,80 @@ export function recall(
   };
 }
 
+/** At most this many turn references per query, and this many episodes per range. */
+const MAX_SEQUENCE_REFS = 3;
+const MAX_SEQUENCE_SPAN = 6;
+
+const SEQUENCE_CUES = [
+  // "#345", "#345-350"
+  /#(\d{1,9})(?:\s*(?:-|–|—|to|through)\s*#?(\d{1,9}))?/g,
+  // "turn 345", "turns 345-350", "message 345", "episode 345", "seq 345"
+  /\b(?:turns?|messages?|episodes?|seq)\s*#?\s*(\d{1,9})(?:\s*(?:-|–|—|to|through)\s*#?(\d{1,9}))?/gi,
+  // "the 345th turn"
+  /\bthe\s+(\d{1,9})(?:st|nd|rd|th)\s+(?:turn|message|episode)\b/gi,
+];
+
+/** "issue #12", "PR #12", "gh #12" number somebody else's archive, not ours. */
+const FOREIGN_HASH = /(?:issue|pr|pull|ticket|bug|gh)\s?$/i;
+
+/** One turn reference, with the span of the query text that produced it. */
+export interface SequenceRef {
+  from: Seq;
+  to: Seq;
+  /** `[start, end)` in the query — consumed before `names()` sees it. */
+  start: number;
+  end: number;
+}
+
+/**
+ * Explicit turn references in a query (KERNEL A9.3). A bare number is never a
+ * reference — "I have 345 apples" addresses no turn — so a cue word or `#` is
+ * required, and a `#` that belongs to an issue or pull-request number is not
+ * ours. Returned in the order they were written, deduplicated by target.
+ */
+export function sequenceRefs(query: string): SequenceRef[] {
+  if (query.length === 0) return [];
+  const found: SequenceRef[] = [];
+  for (const pattern of SEQUENCE_CUES) {
+    pattern.lastIndex = 0;
+    let match = pattern.exec(query);
+    while (match !== null) {
+      const from = Number(match[1]);
+      const to = match[2] === undefined || match[2] === "" ? from : Number(match[2]);
+      if (from >= 1 && to >= from && !FOREIGN_HASH.test(query.slice(0, match.index))) {
+        found.push({
+          from,
+          to: Math.min(to, from + MAX_SEQUENCE_SPAN - 1),
+          start: match.index,
+          end: match.index + match[0].length,
+        });
+      }
+      match = pattern.exec(query);
+    }
+  }
+  found.sort((a, b) => a.start - b.start);
+  const out: SequenceRef[] = [];
+  for (const reference of found) {
+    if (out.some((r) => r.from === reference.from && r.to === reference.to)) continue;
+    out.push(reference);
+    if (out.length >= MAX_SEQUENCE_REFS) break;
+  }
+  return out;
+}
+
+/**
+ * Blank out the spans a trigger has already consumed, keeping every offset. A
+ * turn reference is an address, not a value: "turn 345" must not also enter the
+ * routing vocabulary as the number 345 (KERNEL A9.3).
+ */
+function consume(text: string, spans: readonly SequenceRef[]): string {
+  let out = text;
+  for (const span of spans) {
+    out = out.slice(0, span.start) + " ".repeat(span.end - span.start) + out.slice(span.end);
+  }
+  return out;
+}
+
 function dedupeHits(hits: readonly NameHit[]): NameHit[] {
   const seen = new Set<string>();
   const out: NameHit[] = [];
@@ -355,12 +527,41 @@ function rank(hits: readonly NameHit[]): NameHit[] {
   );
 }
 
-/** Row-21 presence: numbers with tolerance, everything else exact. */
-function isResident(hit: NameHit, residentNames: Set<string>, residentText: string): boolean {
+/**
+ * Candidate locators, most recent first — except in the check round, where the
+ * user's and tool turns come first (KERNEL A9.5). A draft's own lineage is not
+ * evidence for it: if the most recent mention of a value is the assistant's
+ * earlier turn, serving that first would let a model confirm itself.
+ */
+function orderLocators(
+  vault: Vault,
+  threadId: string,
+  locators: readonly LossEntry[],
+  request: PageRequest,
+): LossEntry[] {
+  if (request.userSourceFirst !== true) return [...locators];
+  const rankOf = (entry: LossEntry): number =>
+    vault.episodes.get(threadId, entry.seq)?.role === "assistant" ? 1 : 0;
+  return [...locators]
+    .map((entry, index) => ({ entry, index, rank: rankOf(entry) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((row) => row.entry);
+}
+
+/** Only the user establishes what a slot holds (KERNEL A9.1). */
+function authoritative(atom: Atom): boolean {
+  return atom.authority === "user";
+}
+
+/**
+ * Presence in the view: numbers by rounding-equivalence with unit agreement
+ * (KERNEL A9.2), everything else by exact normalized string.
+ */
+export function isResident(hit: NameHit, residentNames: Set<string>, residentText: string): boolean {
   if (residentNames.has(hit.name)) return true;
-  if (hit.kind === "number") {
-    const value = numericValue(hit.name);
-    if (value !== null && residentText.length > 0 && retained(residentText, value)) return true;
+  if (hit.kind === "number" && residentText.length > 0) {
+    const parsed = parseNumberName(hit.name);
+    if (parsed !== null && retained(residentText, parsed.value, parsed.unit)) return true;
   }
   return false;
 }
@@ -424,7 +625,7 @@ function historicalKeysFor(vault: Vault, threadId: string, hits: readonly NameHi
       seen.add(atom.key);
       const history = vault.atoms.historyOf(threadId, atom.key);
       const current = history.find((a) => a.phase === "SUPPORTED");
-      const previous = history.find((a) => a.phase === "HISTORICAL");
+      const previous = history.find((a) => a.phase === "HISTORICAL" && authoritative(a));
       if (current === undefined || previous === undefined) continue;
       out.push({ key: atom.key, current, previous });
       if (out.length >= 3) return out;

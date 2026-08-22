@@ -5,6 +5,7 @@ import {
   deriveLedger,
   nameSet,
   names,
+  parseNumberName,
   retained,
   sourceNamesOfEpisode,
   truncateLines,
@@ -64,11 +65,36 @@ test("the vocabulary is capped by kind priority", () => {
   expect(names(text).length).toBeLessThanOrEqual(64);
 });
 
-test("row-21 numeric tolerance", () => {
+test("numeric presence is rounding-equivalence, not a tolerance window (KERNEL A9.2)", () => {
   expect(retained("value was 100.4", 100.4)).toBe(true);
   expect(retained("value was 100", 100.4)).toBe(true);
-  expect(retained("value was 101", 100.4)).toBe(true);
+  // 101 is a different number, however close: the 1% window is gone.
+  expect(retained("value was 101", 100.4)).toBe(false);
   expect(retained("value was 130", 100.4)).toBe(false);
+  // The near-collision from the audit: an unrelated 4950 ms is not a witness.
+  expect(retained("p99 latency at 4950 ms", 5000, "ms")).toBe(false);
+  expect(retained("p99 latency at 5,000.0 ms", 5000, "ms")).toBe(true);
+});
+
+test("a number retains another only when the unit agrees", () => {
+  expect(retained("the invoice was 48,250 USD", 48250, "usd")).toBe(true);
+  expect(retained("the invoice was 48,250 USD", 48250, "eur")).toBe(false);
+  expect(retained("the invoice was 48250 eur", 48250, "usd")).toBe(false);
+  // A lost name without a unit is not made stricter by one in the text.
+  expect(retained("the invoice was 48,250 USD", 48250)).toBe(true);
+});
+
+test("kernel markup is never a numeric witness", () => {
+  // A certificate's own pointer must not stand in for the value it points at.
+  expect(retained("rule.x = never ⟨#48250⟩", 48250.37)).toBe(false);
+  expect(retained("… ⟨#345⟩", 345)).toBe(false);
+  expect(retained("⟦recovered #12 · user⟧\nthe figure was 345", 345)).toBe(true);
+});
+
+test("parseNumberName splits a normalized number-name into value and unit", () => {
+  expect(parseNumberName("3.2 ms")).toEqual({ value: 3.2, unit: "ms" });
+  expect(parseNumberName("483112")).toEqual({ value: 483112, unit: "" });
+  expect(parseNumberName("ada okafor")).toBeNull();
 });
 
 test("the extractive writer keeps atom lines before prose, and truncates at lines", () => {
@@ -137,4 +163,11 @@ test("the browser aperture compiles a real bounded packet from an array of episo
   expect(routed.pages.length).toBeGreaterThan(0);
   expect(routed.messages.map((m) => m.content).join("\n")).toContain("48250.75");
   expect(routed.frontier.some((line) => line.includes("Tuesday 09:30"))).toBe(true);
+});
+
+test("digits glued to a letter are an identifier fragment, not a number (p50, v2)", () => {
+  const found = names("the p50 latency of v2 is 250 ms").map((n) => n.name);
+  expect(found).not.toContain("50");
+  expect(found).not.toContain("2");
+  expect(found).toContain("250 ms");
 });

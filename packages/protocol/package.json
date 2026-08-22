@@ -1,9 +1,11 @@
 {
   "name": "@pylos/protocol",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "license": "Apache-2.0"
 }

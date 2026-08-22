@@ -405,7 +405,10 @@ export class Vault {
         try {
           const rows = this.stmt(
             "SELECT e.* FROM episode_fts f JOIN episode e ON e.rowid = f.rowid " +
-              "WHERE episode_fts MATCH ? AND e.thread_id = ? ORDER BY bm25(episode_fts) ASC LIMIT ?",
+              "WHERE episode_fts MATCH ? AND e.thread_id = ? " +
+              // Equal scores must not depend on how SQLite happened to walk the
+              // index: the newest matching turn wins, always.
+              "ORDER BY bm25(episode_fts) ASC, e.seq DESC LIMIT ?",
           ).all(match, threadId, limit) as EpisodeRow[];
           return rows.map(toEpisode);
         } catch {
@@ -456,8 +459,8 @@ export class Vault {
     insert: (atom: Atom): void => {
       this.stmt(
         "INSERT INTO atom (id, thread_id, kind, key, value, text, source_seq, source_span, valid_from_seq, " +
-          "valid_to_seq, superseded_by, phase, scope, pinned, confidence, created_by, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "valid_to_seq, superseded_by, phase, authority, scope, pinned, confidence, created_by, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         atom.id,
         atom.threadId,
@@ -471,6 +474,7 @@ export class Vault {
         atom.validToSeq ?? null,
         atom.supersededBy ?? null,
         atom.phase,
+        atom.authority,
         atom.scope,
         atom.pinned ? 1 : 0,
         atom.confidence,
@@ -485,9 +489,7 @@ export class Vault {
       const value = atom.value.replace(/\s+/g, " ").trim().toLowerCase();
       if (value.length > 1 && value.length <= 96) seen.add(value);
       for (const name of seen) link.run(atom.threadId, name.slice(0, 96), atom.id);
-      this.bump(atom.threadId, {
-        [atom.phase === "SUPPORTED" ? COUNTERS.atomsSupported : COUNTERS.atomsHistorical]: 1,
-      });
+      this.bump(atom.threadId, { [phaseCounter(atom.phase)]: 1 });
     },
 
     /** Current atoms for a key, most recent first. */
@@ -578,12 +580,17 @@ export class Vault {
         ).all(threadId, from, to) as AtomRow[]
       ).map(toAtom),
 
-    /** Supersede: never overwrite, always interval-close (KERNEL §2). */
-    supersede: (threadId: string, priorId: string, byId: string, atSeq: Seq): void => {
+    /**
+     * Supersede: never overwrite, always interval-close (KERNEL §2). Also how an
+     * open proposal is closed when the user finally rules on its key (A9.1) —
+     * `prior.phase` says which counter the row is leaving.
+     */
+    supersede: (threadId: string, prior: Atom, byId: string, atSeq: Seq): void => {
       this.stmt(
         "UPDATE atom SET phase = 'HISTORICAL', valid_to_seq = ?, superseded_by = ? WHERE id = ? AND thread_id = ?",
-      ).run(atSeq, byId, priorId, threadId);
-      this.bump(threadId, { [COUNTERS.atomsSupported]: -1, [COUNTERS.atomsHistorical]: 1 });
+      ).run(atSeq, byId, prior.id, threadId);
+      this.bump(threadId, { [phaseCounter(prior.phase)]: -1 });
+      this.bump(threadId, { [COUNTERS.atomsHistorical]: 1 });
     },
 
     pin: (threadId: string, atomId: string, pinned: boolean): void => {
@@ -964,6 +971,13 @@ export class Vault {
       hash,
     );
   }
+}
+
+/** Which O(1) counter a phase belongs to. `REVOKED` atoms are counted nowhere. */
+export function phaseCounter(phase: AtomPhase): string {
+  if (phase === "SUPPORTED") return COUNTERS.atomsSupported;
+  if (phase === "PROPOSED") return COUNTERS.atomsProposed;
+  return COUNTERS.atomsHistorical;
 }
 
 /** The compiler version stamped into packets so an X-ray can be re-rendered. */

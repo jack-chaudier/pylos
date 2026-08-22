@@ -156,6 +156,28 @@ CREATE INDEX IF NOT EXISTS atom_recent ON atom(thread_id, phase, valid_from_seq)
 CREATE INDEX IF NOT EXISTS loss_route ON loss(thread_id, name, seq DESC);
 `,
   },
+  {
+    name: "005-authority",
+    sql: `
+-- KERNEL A9.1: who asserted an atom. Everything written before this migration
+-- was read from a user or tool episode by the rule atomizer, or entered by the
+-- user, so 'user' is the correct reading for existing rows as well as the default.
+ALTER TABLE atom ADD COLUMN authority TEXT NOT NULL DEFAULT 'user';
+`,
+  },
+  {
+    name: "006-fts-porter",
+    sql: `
+-- KERNEL A9.4: stemming, so "tasted" is reachable from "taste". The index is
+-- external-content, so it is dropped and rebuilt from \`episode\` — no archive
+-- text lives here. Removed episodes carry only their tombstone placeholder in
+-- \`content\`, so the rebuild cannot resurrect forgotten text.
+DROP TABLE IF EXISTS episode_fts;
+CREATE VIRTUAL TABLE episode_fts
+  USING fts5(content, content='episode', content_rowid='rowid', tokenize='porter unicode61');
+INSERT INTO episode_fts(episode_fts) VALUES('rebuild');
+`,
+  },
 ];
 
 /** Counter keys maintained incrementally (see `counter`). */
@@ -169,4 +191,5 @@ export const COUNTERS = {
   losses: "losses",
   atomsSupported: "atoms.supported",
   atomsHistorical: "atoms.historical",
+  atomsProposed: "atoms.proposed",
 } as const;

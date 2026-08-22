@@ -4,7 +4,7 @@
  * `pylos` — the kernel's command line.
  *
  * ```
- * pylos serve [--port 4317]
+ * pylos serve [--port 7334]
  * pylos verify [--thread ID] [--full]
  * pylos export --out FILE [--thread ID] [--passphrase P] [--range A:B]
  * pylos import FILE [--passphrase P]
@@ -59,7 +59,7 @@ function num(args: Args, key: string): number | undefined {
 
 const USAGE = `pylos — the forever chat
 
-  pylos serve [--port 4317]            start the local API (needs @pylos/server)
+  pylos serve [--port 7334]            start the local API (needs @pylos/server)
   pylos verify [--thread ID] [--full]  replay the hash chain
   pylos stats  [--thread ID] [--json]  archive size, ledger, atoms, head hash
   pylos export --out FILE              write an encrypted .pylos bundle
@@ -97,7 +97,7 @@ async function main(argv: string[]): Promise<number> {
           process.stderr.write("@pylos/server is installed but exports no serve()\n");
           return 1;
         }
-        await server.serve({ port: num(args, "port") ?? 4317, ...vaultOptions });
+        await server.serve({ port: num(args, "port"), ...vaultOptions });
         return 0;
       } catch (error) {
         process.stderr.write(

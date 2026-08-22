@@ -374,6 +374,7 @@ export async function importBundle(
     for (const row of tombstones) insertRow(vault, "tombstone", { ...row, thread_id: threadId });
     counters["atoms.supported"] = atoms.filter((a) => a.phase === "SUPPORTED").length;
     counters["atoms.historical"] = atoms.filter((a) => a.phase === "HISTORICAL").length;
+    counters["atoms.proposed"] = atoms.filter((a) => a.phase === "PROPOSED").length;
     // capsules.insert bumps COUNTERS.capsules itself; do not double count.
     counters.losses = loss.filter((l) => l.resolved_by === null || l.resolved_by === undefined).length;
     vault.bump(threadId, counters);

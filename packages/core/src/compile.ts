@@ -205,7 +205,11 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
   );
   const seenHistoricalKeys = new Set<string>();
   const historicalDigest = [...paged.historical, ...recentHistorical(vault, threadId)]
-    .filter((h) => (seenHistoricalKeys.has(h.key) ? false : (seenHistoricalKeys.add(h.key), true)))
+    .filter((h) => {
+      if (seenHistoricalKeys.has(h.key)) return false;
+      seenHistoricalKeys.add(h.key);
+      return true;
+    })
     .slice(0, 3);
   const filteredViews = capsuleViews.map((view) => ({
     ...view,
@@ -382,8 +386,10 @@ function recentHistorical(
 ): Array<{ key: string; current: string; previous: string; changedAtSeq: Seq }> {
   const rows = vault.db
     .query(
+      // Authority filter: a closed proposal is HISTORICAL too, but it was never
+      // true, so it can never be the "was" of a ⟦changed⟧ line (KERNEL A9.1).
       "SELECT key, value, valid_to_seq FROM atom WHERE thread_id = ? AND phase = 'HISTORICAL' " +
-        "AND valid_to_seq IS NOT NULL ORDER BY valid_to_seq DESC LIMIT 3",
+        "AND authority = 'user' AND valid_to_seq IS NOT NULL ORDER BY valid_to_seq DESC LIMIT 3",
     )
     .all(threadId) as Array<{ key: string; value: string; valid_to_seq: number }>;
   const out: Array<{ key: string; current: string; previous: string; changedAtSeq: Seq }> = [];

@@ -37,6 +37,7 @@ export function stats(vault: Vault, threadId: string, options: { verify?: boolea
     atoms: {
       supported: vault.counter(threadId, COUNTERS.atomsSupported),
       historical: vault.counter(threadId, COUNTERS.atomsHistorical),
+      proposed: vault.counter(threadId, COUNTERS.atomsProposed),
     },
     ...(last === null
       ? {}

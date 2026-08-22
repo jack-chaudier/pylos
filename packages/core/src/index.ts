@@ -17,6 +17,7 @@ export {
   type AtomizeOptions,
   atomize,
   atomizeWithModel,
+  authorityOf,
   type ModelAtomCandidate,
   type ModelExtractor,
 } from "./atomize.ts";
@@ -47,16 +48,20 @@ export { canonicalHash, chainHash, genesisHash, newId, sha256 } from "./hash.ts"
 export {
   containsName,
   excerpt,
+  isResident,
   type PageRequest,
   type PageResult,
   page,
   recall,
   resolves,
+  type SequenceRef,
+  sequenceRefs,
   TOKENS_PER_PAGE,
 } from "./page.ts";
 // The pure layer is re-exported for convenience; `@pylos/core/pure` is the
 // browser-safe entry point that carries no Bun or SQLite import.
 export * from "./pure/index.ts";
+export { ftsQuery, ftsTerms } from "./rows.ts";
 export { COUNTERS, MIGRATIONS } from "./schema.ts";
 export { stats } from "./stats.ts";
 export {
@@ -74,6 +79,7 @@ export {
   type EpisodeInput,
   openVault,
   PACKET_MESSAGE_RETENTION,
+  phaseCounter,
   pylosHome,
   type StoredCapsule,
   Vault,

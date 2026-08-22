@@ -84,6 +84,45 @@ test("completeness: every source name is either in the capsule text or in its le
   }
 });
 
+test("a proposal is never a capsule certificate, but its key is still in the ledger", () => {
+  const { vault, thread } = tempVault();
+  const claimed = vault.episodes.append(thread.id, {
+    role: "assistant",
+    content: "Halden Works is based in Valletta.",
+  });
+  atomize(vault, thread.id, [claimed.seq]);
+  const key = "person.halden-works.location";
+  expect(vault.atoms.byKey(thread.id, key, "PROPOSED")).toHaveLength(1);
+
+  const next = rng(16);
+  for (let i = 0; i < 64; i += 1) {
+    const appended = vault.episodes.append(thread.id, {
+      role: "user",
+      content: syntheticTurn(next, i),
+    });
+    atomize(vault, thread.id, [appended.seq]);
+  }
+  compact(vault, thread.id, { budget: 8192 });
+
+  const capsule = vault.capsules.list(thread.id, 0, 10).find((c) => c.fromSeq <= 1 && c.toSeq >= 1);
+  expect(capsule).toBeDefined();
+  const sealed = capsule as NonNullable<typeof capsule>;
+  // No certificate line for a proposal — a model's claim never reads as settled.
+  expect(sealed.text).not.toContain(`${key} = Valletta`);
+  // But the key is accounted for: dropped, with an exact locator.
+  const entry = vault.losses.inRange(thread.id, sealed.fromSeq, sealed.toSeq).find((l) => l.name === key);
+  expect(entry?.kind).toBe("atom");
+  expect(entry?.seq).toBe(1);
+
+  const source = sourceNamesForRange(vault, thread.id, sealed.fromSeq, sealed.toSeq);
+  const present = nameSet(sealed.text, { max: 8192 });
+  const ledger = new Set(vault.losses.inRange(thread.id, sealed.fromSeq, sealed.toSeq).map((l) => l.name));
+  const unaccounted = [...new Set(source.map((s) => s.name))].filter(
+    (name) => !present.has(name) && !ledger.has(name),
+  );
+  expect(unaccounted).toEqual([]);
+});
+
 test("conservation: a parent's ledger contains every child's ledger", () => {
   const { vault, thread } = fill(15, 2048);
   let checked = 0;
