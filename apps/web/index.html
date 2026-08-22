@@ -57,7 +57,7 @@
   </head>
 
   <body>
-    <a class="skip" href="#aperture">Skip to the aperture</a>
+    <a class="skip" href="#console">Skip to the demo</a>
 
     <!-- ── nav ────────────────────────────────────────────────────────── -->
     <header class="nav">
@@ -73,7 +73,7 @@
           <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
           <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos">GitHub</a>
           <a href="#download">Download</a>
-          <a class="is-accent" href="#download" data-app-url>Install</a>
+          <a class="is-accent" href="#console">Try it</a>
         </nav>
       </div>
     </header>
@@ -90,8 +90,8 @@
             invention.
           </p>
           <div class="hero__cta">
-            <a class="btn btn--primary" href="#download" data-app-url>Install Pylos →</a>
-            <a class="btn btn--ghost" href="#download">Download</a>
+            <a class="btn btn--primary" href="#console">Try the impossible thread →</a>
+            <a class="btn btn--ghost" href="#download">Install</a>
             <button class="btn btn--quiet" type="button" data-play-aperture>
               Watch turn 1,000,000
             </button>
@@ -155,7 +155,8 @@
             <div class="ap__timeline">
               <canvas data-ap-canvas height="46" aria-hidden="true"></canvas>
               <span class="mono" data-ap-levels
-                >Compaction hierarchy · level 4 → level 0 · the ember mark is turn 483,112</span
+                >Compaction hierarchy · level 4 → level 0 · the ember mark is turn 483,112, where the
+                rule changed</span
               >
             </div>
 
@@ -163,19 +164,24 @@
               <p class="recov__line" data-ap-recovered-line>↺ recovered</p>
               <p class="recov__quote" data-ap-recovered-quote></p>
               <p class="recov__meta" data-ap-recovered-meta></p>
+              <p class="recov__resident" data-ap-resident></p>
             </div>
           </div>
 
           <div class="ap__foot">
-            <p class="mono" data-ap-status>Ready · seed 0x50594C4F · deterministic</p>
+            <p class="mono" data-ap-status>Ready · seed 1 · deterministic</p>
             <button class="btn btn--quiet" type="button" data-ap-replay>Replay</button>
           </div>
           <p class="ap__note">
             This is an exhibit, not the proof: the browser-safe subset of the compiler
-            (<code>@pylos/core/pure</code> — no vault, no chain, no index) run in this tab from seed
-            <code>0x50594C4F</code> over a synthetic thread. It computes real capsules, a real
-            ledger and a real packet; if the ledger does not route, it says so. The proof is the
-            deterministic million-turn bench artifact in
+            (<code>@pylos/core/pure</code> — no vault, no chain, no index) run in this tab over the
+            bench's own corpus at seed <code>1</code> — the same million turns
+            <code>pylos bench million</code> ingests, generated here by the same function. It
+            computes real capsules, a real ledger and a real packet, and reports what actually
+            happened: the closing question about the migration rule needs no page, because the rule
+            is a certificate the frontier keeps resident; the closing question about an exact quote
+            does, and the ledger returns the turn it is on. The proof is the deterministic
+            million-turn bench artifact in
             <a class="link" href="https://github.com/jack-chaudier/pylos/tree/main/bench/results"
               >bench/results</a
             >. How long the run takes depends on your machine; the size of the packet does not.
@@ -183,6 +189,56 @@
             to disk.
           </p>
           <p class="sr" role="status" data-ap-live></p>
+        </div>
+      </section>
+
+      <!-- ── the console ──────────────────────────────────────────────── -->
+      <section class="console" id="console" tabindex="-1" aria-labelledby="console-title">
+        <div class="wrap">
+          <div class="sec__head">
+            <p class="mono">Try it · in this tab · no sign-in, no account, no upload</p>
+            <h2 class="sec__title" id="console-title">The impossible thread.</h2>
+            <p class="sec__lede">
+              The million turns above are still here. Ask them something. The kernel answering is the
+              real one — <code>@pylos/core/pure</code>, running in your browser over the same thread
+              the published bench ingests. <strong>No model is called.</strong> Every line below is
+              archived text, or a certificate the kernel derived from archived text, and it says
+              which route found it.
+            </p>
+          </div>
+
+          <div class="console__panel">
+            <form class="console__form" data-console-form>
+              <label class="sr" for="console-input">Ask the thread</label>
+              <input
+                class="console__input"
+                id="console-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="What did I say on turn 345?"
+                data-console-input
+              />
+              <button class="btn btn--primary" type="submit">Ask</button>
+            </form>
+            <div class="console__chips" data-console-chips>
+              <span class="mono">Try</span>
+            </div>
+            <p class="mono console__status" data-console-status></p>
+          </div>
+
+          <div class="console__cards" data-console-cards></div>
+
+          <p class="ap__note">
+            The routes are the kernel's: a turn number is an address; a standing rule is a
+            certificate that stays resident however old it is; a name a capsule dropped has an exact
+            locator in the loss ledger; a fact you stated outranks a fact the assistant stated; and a
+            sentence with no name in it can only be found by searching for its words. Each card says
+            which one fired. The two model answers in the migration card are recorded — they come
+            from <a class="link" href="/bench/trap.json">/bench/trap.json</a>, the artifact the live
+            bench wrote, with the packet hash beside them. Nothing on this page asks a model
+            anything.
+          </p>
         </div>
       </section>
 
@@ -300,12 +356,13 @@
       <section class="download" id="download" tabindex="-1" aria-labelledby="dl-title">
         <div class="wrap">
           <div class="sec__head">
-            <p class="mono">Download · v1.1.1 · Apache-2.0</p>
+            <p class="mono">Install · v1.2.0 · Apache-2.0</p>
             <h2 class="sec__title" id="dl-title">One window. One composer. No vocabulary.</h2>
             <p class="sec__lede">
-              Install, run <code>pylos serve</code>, open <code>http://127.0.0.1:7334/app/</code> — the
-              web app, local-first, your vault on your machine. The desktop app wraps the same UI;
-              self-hosting for a team is <code>pylos serve --hosted</code>.
+              Pylos runs on your machine. Install it, run <code>pylos serve</code>, and open
+              <code>http://127.0.0.1:7334/app/</code> — the same one-composer app, against a vault in
+              your own home directory. The desktop build wraps exactly that. Serving it to a machine
+              you own is supported too: <code>pylos serve --hosted</code>.
             </p>
           </div>
 
@@ -313,7 +370,7 @@
             <article class="card" data-os="mac">
               <p class="card__meta">macOS 13+ · Apple silicon &amp; Intel</p>
               <h3 class="card__os">macOS</h3>
-              <p class="card__meta">pylos-1.1.1.dmg</p>
+              <p class="card__meta">pylos-1.2.0.dmg</p>
               <a
                 class="btn btn--primary"
                 href="https://github.com/jack-chaudier/pylos/releases"
@@ -323,7 +380,7 @@
             <article class="card" data-os="linux">
               <p class="card__meta">Debian / Ubuntu · .deb (AppImage soon)</p>
               <h3 class="card__os">Linux</h3>
-              <p class="card__meta">pylos-1.1.1.deb</p>
+              <p class="card__meta">pylos-1.2.0.deb</p>
               <a
                 class="btn btn--primary"
                 href="https://github.com/jack-chaudier/pylos/releases"
@@ -346,9 +403,10 @@
             </button>
           </div>
           <p class="dl__note">
-            A thread exported from the browser imports into the desktop app and back; the
-            <code>.pylos</code> bundle is the same either way. Builds are unsigned for now; on
-            macOS, right-click → Open the first time. Source, checksums and every release live on
+            The desktop app and <code>pylos serve</code> share one vault format: a thread exported
+            from either imports into the other, and the <code>.pylos</code> bundle verifies its hash
+            chain on the way in. Builds are unsigned for now; on macOS, right-click → Open the first
+            time. Source, checksums and every release live on
             <a class="link" href="https://github.com/jack-chaudier/pylos/releases">GitHub</a>.
           </p>
         </div>
@@ -360,7 +418,7 @@
       <div class="wrap">
         <p class="footer__line">The tablets survived because the palace burned.</p>
         <ul class="footer__meta">
-          <li>Pylos v1.1.1</li>
+          <li>Pylos v1.2.0</li>
           <li>Apache-2.0</li>
           <li><a href="https://github.com/jack-chaudier/pylos">GitHub</a></li>
           <li>

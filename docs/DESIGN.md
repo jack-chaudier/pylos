@@ -53,11 +53,14 @@ Fonts allowed only for the hosted landing.
 * Top edge: the thread title in Newsreader, and at the far right the
   **evidence bar** — a mono strip `archive N turns · N GiB · view X / B ·
   ledger N · recovered N · N models · chain ✓`, each figure with a hover title
-  explaining what it counts. It is the only place the machinery shows;
-  clicking it opens the **X-ray** drawer. A changed figure settles rather than
-  jumps (220ms). A resident meter beneath it fills with ember as the packet is
-  built, then settles. Under 720px the bar collapses to archive, view and
-  recovered — the three that change while you talk.
+  explaining what it counts. When a turn ran more than one provider request
+  the view figure grows a suffix — `view 7.9k / 8.2k · 3 rounds` — since the
+  budget the kernel guarded was spent across rounds, not once. It is the only
+  place the machinery shows; clicking it opens the **X-ray** drawer. A changed
+  figure settles rather than jumps (220ms). A resident meter beneath it fills
+  with ember as the packet is built, then settles. Under 720px the bar
+  collapses to archive, view and recovered — the three that change while you
+  talk.
 * Hosted mode opens on a **sign-in screen**: wordmark, one line (*One
   conversation. Every model. Nothing forgotten silently.*), a pill **Sign in
   with xAI**. Starting it shows a one-time user code in Geist Mono and a pill
@@ -67,11 +70,18 @@ Fonts allowed only for the hosted landing.
 * A checked answer: when a draft names something the view did not contain and
   the ledger knows where it is, Pylos pages the exact text and gives the model
   one round to reissue the answer. The provisional text is dropped and
-  `↺ verified against the archive · names` appears above the answer that
-  replaced it, in ember mono.
+  `↺ reopened the archive · names` appears above the answer that replaced it,
+  in ember mono. If the check round itself could not complete, the line reads
+  `archive could not be re-read · names — unverified`, in oxblood — the draft
+  is kept, but the failure is not hidden. If the check ran and nothing
+  changed, the line adds `· answer stood`.
 * In the X-ray, atoms a model proposed but nothing has confirmed render ash,
   not ink: `≈ key value ⟨proposed by assistant #seq · unconfirmed⟩`. A
-  proposal is never a certificate; the ash tone is the tell.
+  proposal is never a certificate; the ash tone is the tell. The drawer heads
+  itself "What the model saw" and, when a turn ran more than one provider
+  request, appends the count — "— N rounds" — and every resident span in the
+  list carries its `epistemic` tag, with the legend "only supported spans
+  count as evidence" underneath.
 * Messages: no bubbles. User turns in ink with a thin verdigris left rule;
   assistant turns plain. Timestamps and seq numbers appear on hover only, in
   mono ash.
@@ -96,25 +106,47 @@ Fonts allowed only for the hosted landing.
 
 Structure (low density, large type, one scroll):
 
-1. Thin nav: wordmark `pylos`, Theory, GitHub, Download, and accent **Open app**
-   linking to the hosted app at `/app/`.
+1. Thin nav: wordmark `pylos`, **Theory** · **GitHub** · **Download** ·
+   accent **Try it**, the last linking to `#console`.
 2. Hero on bone: overline `OPEN SOURCE · APACHE-2.0 · WEB · MAC + LINUX`, display
    headline **Talk forever.** (alt: *A conversation that outlives every model.*),
-   one sentence, three CTAs — pill **Open Pylos →** (primary, to `/app/`), ghost
-   **Download**, and quiet **Watch turn 1,000,000** for the aperture.
+   one sentence, three CTAs — pill **Try the impossible thread →** (primary, to
+   `#console`), ghost **Install**, and quiet **Watch turn 1,000,000** for the
+   aperture.
 3. **The aperture** — a live, in-browser run of the real `@pylos/core` compiler
    over a synthetic stream: one counter races toward 1,000,000 turns, the other
    (view tokens) stays flat; a thin ledger strip shows losses being recorded
    and a recovered span lighting up in ember. Ten seconds, no video. When the
    closing question's ledger route does not fire, the exhibit says so —
    `no route fired`, nothing claimed — rather than showing a recovery that
-   did not happen.
-4. Three short statements with mono captions: *The archive is exact.* · *The
+   did not happen. Its closing act shows both receipts the kernel actually
+   produces for that run, side by side: `● resident` for the certificate that
+   needed no page, `↺ recovered` for the ledger route that did.
+4. **The console** (`#console`) — the part of the exhibit a visitor drives: one
+   input, mono suggestion pills seeded from the thread's own planted content,
+   answering against the same in-browser compiler and the bench's own
+   `createCorpus("1", 1_000_000)`, no model call. Answers render as cards,
+   newest first, capped at four: the question in Newsreader; the packet's own
+   label (`⟦recovered #345 · sequence⟧`, `● resident #483112 · frontier
+   certificate`) in ember mono; evidence lines in mono, colored by what they
+   are — a certificate ink, a proposal or a historical or an absent line ash,
+   the resolved span picked out ember italic within its line; a hairline
+   archive-position rail under the card with an ember tick at the answer's
+   seq; a mono receipt row (trigger, locator, tokens paged); a caption in ash
+   explaining the route. The trap card is the one exception: two columns
+   under one headline, the recorded live-bench answers side by side, the
+   Pylos column washed verdigris — a visitor can put the same closing
+   question to the archive as the bench did, and see both routes and both
+   recorded answers at once.
+5. Three short statements with mono captions: *The archive is exact.* · *The
    view is bounded.* · *Nothing is forgotten silently.*
-5. The trap (from the bench): two columns, same model, same question at turn
+6. The trap (from the bench): two columns, same model, same question at turn
    1,000,000 — rolling summary vs Pylos; the baseline follows the stale rule,
    Pylos pages the revision. Real outputs, hash-linked to the bench artifact.
-6. Download cards (macOS · Linux) + a copyable install line.
-7. Footer: the Pylos line — *The tablets survived because the palace burned.*
+7. Download section: install, run `pylos serve`, open
+   `http://127.0.0.1:7334/app/` — cards for macOS and Linux plus a copyable
+   install line. `pylos serve --hosted` is documented as supported, for
+   self-hosting; Pylos does not run a hosted deployment.
+8. Footer: the Pylos line — *The tablets survived because the palace burned.*
 
 OG image: bone background, verdigris wordmark, ember numeral.

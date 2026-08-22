@@ -28,7 +28,7 @@ pylos/
 
 ## Milestones
 
-Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) is done: the hosted backend runs `pylos serve --hosted` from the release tarball on a RunPod pod (template `pylos-hosted`, vaults on the pod's `/workspace` volume), `https://pylos.vercel.app/app/` rewrites `/app/*`, `/api/*`, `/v1/*` to it, sign-in is the xAI device grant, and `bench/results/million-2.md` is the kernel 1.1 artifact. Open: a domain of its own and a cheaper CPU host (needs a public container image or a RunPod API key — see CHANGELOG 1.1.1).
+Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) shipped a hosted backend on RunPod; that hosted deployment has since been **retired** — see Decisions below and milestone 9. Milestone 9 (v1.2, the integrity sprint) is released as v1.2.0: A10.1–A10.7 are implemented and tested, turn serialization moved the user's atomization ahead of `compile()`, the gateway's check semantics carry a `status` instead of a flag, and the landing page's console (the impossible thread) is live.
 
 | # | Milestone | Done means |
 | --- | --- | --- |
@@ -39,7 +39,8 @@ Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub re
 | 5 | Web | Landing deployed on Vercel with the live aperture and the trap exhibit from real bench output. |
 | 6 | Proofs | Millionth Turn (deterministic + live sample), Brain Transplant (Grok → Claude → Ollama), Laptop Funeral (export/destroy/import/verify/continue), recorded in `bench/results` and linked from README. |
 | 7 | v1.0.0 | CHANGELOG, tagged release with artifacts, README with honest claim boundary. |
-| 8 | Web app (v1.1) | Hosted server with one vault per signed-in user; xAI device-grant login; the app served at `/app/` by `pylos serve`; landing page rewritten around **Open Pylos** as the primary CTA; the hosted app deployed at a public URL. |
+| 8 | Web app (v1.1) | Hosted server with one vault per signed-in user; xAI device-grant login; the app served at `/app/` by `pylos serve`; landing page rewritten around **Open Pylos** as the primary CTA; the hosted app deployed at a public URL. Superseded by milestone 9: the hosted deployment is retired. |
+| 9 | Integrity sprint (v1.2) | KERNEL A10.1 (support-aware routing and the check round), A10.2 (user atoms committed before `compile()`), A10.3 (every provider request of a turn ≤ B, receipted in `Packet.rounds`), A10.4 (check status `revised`/`confirmed`/`none`/`check-failed`), A10.5 (authority migrated by replay), A10.6 (forgetting complete and chain-bound), A10.7 (export as a reachability closure, import restores packets) — each with a kernel test as the referee; turn serialization and the gateway's check semantics updated to match; the landing page's console — the impossible thread — live over the bench's own corpus, no model calls. Released as v1.2.0. |
 
 ## Decisions already made (do not relitigate)
 
@@ -49,12 +50,22 @@ Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub re
 * Deterministic ledger (string-presence) is the source of truth; model writers are optional and truncated mechanically.
 * No training run unless a measured natural residual demands one (DREAM §18). RunPod budget is reserved for an optional local atomizer/sentinel only after v1 works.
 * Tools default off. Retrieved content is data, never instructions.
-* Web app first: v1.1 makes the hosted web app the primary way in. xAI
-  device-grant login is the identity — no other identity provider in v1.1.
-  Users bring their own xAI account for inference; Pylos does not proxy or
-  pay for it. Desktop remains the local-first option, wrapping the same app.
-  The hosted backend is a single Bun process with one SQLite vault per user
-  under `<home>/users/<id>/` — no Postgres, no separate database service.
+* Web app first: v1.1 made the hosted web app the primary way in. xAI
+  device-grant login is the identity — no other identity provider. Users
+  bring their own xAI account for inference; Pylos does not proxy or pay for
+  it. The hosted backend was a single Bun process with one SQLite vault per
+  user under `<home>/users/<id>/` — no Postgres, no separate database
+  service.
+* **Superseding the above: production is local-first.** The RunPod-hosted
+  deployment is retired; Pylos does not run a hosted instance. `pylos serve`
+  → `http://127.0.0.1:7334/app/`, or the desktop app, is the product; `pylos
+  serve --hosted` stays supported in the binary for anyone who wants to run
+  their own multi-user server, but that is self-hosting, not something Pylos
+  operates.
+* The landing page's demo (the console, `#console`) runs against the bench's
+  own generator — `createCorpus(seed, n)` in `@pylos/core/pure` — so
+  `apps/web` and `bench` share one corpus and one thread; no model is called
+  from the browser.
 
 ## Claim boundary for v1 (what we will and won't say)
 

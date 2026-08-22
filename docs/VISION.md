@@ -2,14 +2,20 @@
 
 > One conversation. Every model. Nothing forgotten silently.
 
-Pylos is a web app: sign in with your xAI account and your thread lives in
-your own vault on the server. The same React app is wrapped by a local-first
-desktop shell (Tauri, macOS + Linux), and a headless `pylos serve` runs it
-without any UI at all — all three share the same kernel and the same
-`.pylos` bundle. Every surface is one text box, one scrolling conversation,
-an attachment control, and a small model switch. That is the whole visible
-product. The invisible product is the reason the conversation never has to
-end.
+Pylos is local-first: install it, run `pylos serve`, and the app opens at
+`http://127.0.0.1:7334/app/` on your own machine, with your thread in your
+own vault. The same React app is wrapped by a desktop shell (Tauri, macOS +
+Linux) for the same local experience without a terminal. `--hosted` turns the
+identical binary into a multi-user server for anyone who wants to run their
+own — Pylos itself does not operate one. Every surface is one text box, one
+scrolling conversation, an attachment control, and a small model switch. That
+is the whole visible product. The invisible product is the reason the
+conversation never has to end.
+
+Before any of that, the landing page carries a demo that needs no install: a
+console running the real, browser-safe half of the kernel over the bench's
+own 1,000,000-turn corpus, in the tab, with no model call. See
+`docs/DESIGN.md` §"the landing page".
 
 ## Why the name
 
@@ -83,6 +89,10 @@ compact the source of truth, and never let the view forget what it forgot.**
   turns · view 23.1k / 24k · 2 recovered`.
 * When the kernel pages something back: a single quiet line above the answer —
   *Recovered two earlier moments before answering.*
+* When a draft states something the view did not contain and the archive is
+  re-read to check it: *↺ reopened the archive · names.* If the re-check
+  itself could not run, the line says so instead — *archive could not be
+  re-read · names — unverified* — the draft stands, but the gap is not hidden.
 * When a belief has changed: *That was true earlier, but it changed on turn
   4,812.* with both moments one click away.
 * When the model changes: a hairline divider — *Grok stopped here. Claude

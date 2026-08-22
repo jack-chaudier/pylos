@@ -24,9 +24,9 @@
  * spend the paged slot on the episode that stated the *old* value.
  */
 
-import type { Atom, LossEntry, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
+import type { Atom, Epistemic, LossEntry, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
 import { KIND_PRIORITY, type NameHit, names, parseNumberName, retained } from "./pure/names.ts";
-import type { PagedBlock } from "./pure/render.ts";
+import { epistemicOfRole, type PagedBlock } from "./pure/render.ts";
 import { approxTokens, type Tokenizer } from "./pure/tokens.ts";
 import { ftsTerms } from "./rows.ts";
 import type { Vault } from "./vault.ts";
@@ -110,7 +110,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     for (const episode of episodes) {
       const text = excerpt(episode.content, undefined, Math.min(TOKENS_PER_PAGE, room() - tokens), tokenizer);
       if (text.length === 0) break;
-      blocks.push({ seq: episode.seq, role: episode.role, trigger, text });
+      blocks.push({
+        seq: episode.seq,
+        role: episode.role,
+        trigger,
+        text,
+        epistemic: epistemicOfRole(episode.role),
+      });
       seqs.push(episode.seq);
       servedSeqs.add(episode.seq);
       tokens += tokenizer(text) + 8;
@@ -157,7 +163,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       if (episode === null) continue;
       const text = excerpt(episode.content, undefined, Math.min(TOKENS_PER_PAGE, room() - tokens), tokenizer);
       if (text.length === 0) break;
-      blocks.push({ seq, role: episode.role, trigger: "sequence", text });
+      blocks.push({
+        seq,
+        role: episode.role,
+        trigger: "sequence",
+        text,
+        epistemic: epistemicOfRole(episode.role),
+      });
       seqs.push(seq);
       servedSeqs.add(seq);
       tokens += tokenizer(text) + 8;
@@ -167,7 +179,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       const neighbour = vault.episodes.get(threadId, (seqs[0] as Seq) + 1);
       if (neighbour !== null && !servedSeqs.has(neighbour.seq) && neighbour.meta.removed !== true) {
         const text = excerpt(neighbour.content, undefined, 160, tokenizer);
-        blocks.push({ seq: neighbour.seq, role: neighbour.role, trigger: "sequence:neighbour", text });
+        blocks.push({
+          seq: neighbour.seq,
+          role: neighbour.role,
+          trigger: "sequence:neighbour",
+          text,
+          epistemic: epistemicOfRole(neighbour.role),
+        });
         seqs.push(neighbour.seq);
         servedSeqs.add(neighbour.seq);
         tokens += tokenizer(text) + 8;
@@ -212,6 +230,10 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       const lines: string[] = [];
       const seqs: Seq[] = [];
       const keys: string[] = [];
+      // A certificate block supports only what the user authorized: a current
+      // user-authority value. A block that carries only a proposal or only a
+      // superseded interval is legible, never evidence (KERNEL A10.1).
+      let epistemic: Epistemic = "NON_AUTHORITATIVE";
       // One name can carry several slots ("where does X live" and "where was X
       // born"). Emit a certificate for each current slot, plus the interval of the
       // value it replaced, rather than guessing which slot the query meant.
@@ -237,16 +259,20 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
             `${proposed.key} ≈ ${proposed.value} ⟨proposed by ${proposed.authority} #${proposed.sourceSeq} · unconfirmed⟩`,
           );
           seqs.push(proposed.sourceSeq);
+          if (epistemic === "NON_AUTHORITATIVE") epistemic = "PROPOSED";
         }
         if (current !== undefined) {
           lines.push(`${current.key} = ${current.value} ⟨#${current.sourceSeq}⟩`);
           seqs.push(current.sourceSeq);
+          if (authoritative(current)) epistemic = "SUPPORTED";
+          else if (epistemic === "NON_AUTHORITATIVE") epistemic = "PROPOSED";
         }
         if (previous !== undefined) {
           lines.push(
             `${previous.key} = ${previous.value} ⟨historical #${previous.validFromSeq}→#${previous.validToSeq ?? "?"}⟩`,
           );
           seqs.push(previous.sourceSeq);
+          if (epistemic === "NON_AUTHORITATIVE") epistemic = "HISTORICAL";
         }
         if (current !== undefined && previous !== undefined) {
           historical.push({
@@ -261,7 +287,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       const text = lines.join("\n");
       const cost = tokenizer(text) + 8;
       if (cost > room()) break;
-      blocks.push({ seq: seqs[0] as Seq, role: "system", trigger: `memory:${hit.name}`, text });
+      blocks.push({ seq: seqs[0] as Seq, role: "system", trigger: `memory:${hit.name}`, text, epistemic });
       used += cost;
       records.push({
         trigger: "historical",
@@ -285,10 +311,14 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       const started = performance.now();
       const locators = orderLocators(vault, threadId, vault.losses.byName(threadId, hit.name, 4), request);
       let served = false;
+      let inView = false;
       const seqs: Seq[] = [];
       let tokens = 0;
       for (const locator of locators) {
-        if (servedSeqs.has(locator.seq)) continue;
+        if (servedSeqs.has(locator.seq)) {
+          inView = true;
+          continue;
+        }
         const episode = vault.episodes.get(threadId, locator.seq);
         if (episode === null || episode.meta.removed === true) continue;
         if (!resolves(vault, threadId, episode.content, locator.seq, hit)) continue;
@@ -299,7 +329,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
           tokenizer,
         );
         if (text.length === 0) break;
-        blocks.push({ seq: episode.seq, role: episode.role, trigger: `ledger:${hit.name}`, text });
+        blocks.push({
+          seq: episode.seq,
+          role: episode.role,
+          trigger: `ledger:${hit.name}`,
+          text,
+          epistemic: epistemicOfRole(episode.role),
+        });
         seqs.push(episode.seq);
         servedSeqs.add(episode.seq);
         tokens += tokenizer(text) + 8;
@@ -308,7 +344,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
         const neighbour = vault.episodes.get(threadId, episode.seq + 1);
         if (neighbour !== null && !servedSeqs.has(neighbour.seq) && room() - tokens > 200) {
           const ntext = excerpt(neighbour.content, undefined, 160, tokenizer);
-          blocks.push({ seq: neighbour.seq, role: neighbour.role, trigger: "ledger:neighbour", text: ntext });
+          blocks.push({
+            seq: neighbour.seq,
+            role: neighbour.role,
+            trigger: "ledger:neighbour",
+            text: ntext,
+            epistemic: epistemicOfRole(neighbour.role),
+          });
           seqs.push(neighbour.seq);
           servedSeqs.add(neighbour.seq);
           tokens += tokenizer(ntext) + 8;
@@ -316,6 +358,9 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
         break;
       }
       used += tokens;
+      // Every locator was already in the view: the packet holds this material
+      // exactly, so there is nothing to serve and nothing UNKNOWN (KERNEL A10.1).
+      if (!served && inView) continue;
       records.push({
         trigger: "ledger",
         name: hit.name,
@@ -343,6 +388,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
           role: "system",
           trigger: `historical:${entry.key}`,
           text: lines,
+          epistemic: authoritative(entry.current) ? "SUPPORTED" : "PROPOSED",
         });
         used += cost;
         historical.push({
@@ -394,7 +440,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     for (const episode of found.slice(0, byModel ? 4 : 2)) {
       const text = excerpt(episode.content, undefined, Math.min(TOKENS_PER_PAGE, room() - tokens), tokenizer);
       if (text.length === 0) break;
-      blocks.push({ seq: episode.seq, role: episode.role, trigger: "search", text });
+      blocks.push({
+        seq: episode.seq,
+        role: episode.role,
+        trigger: "search",
+        text,
+        epistemic: epistemicOfRole(episode.role),
+      });
       seqs.push(episode.seq);
       servedSeqs.add(episode.seq);
       tokens += tokenizer(text) + 8;

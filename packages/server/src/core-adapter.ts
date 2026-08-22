@@ -19,8 +19,16 @@ import type {
   ToolDef,
   TurnEvent,
 } from "@pylos/protocol";
-import type { AttachInput, ForgetTarget, Kernel, ThreadSettings, TurnInput } from "./kernel.ts";
+import type {
+  AttachInput,
+  ForgetOutcome,
+  ForgetTarget,
+  Kernel,
+  ThreadSettings,
+  TurnInput,
+} from "./kernel.ts";
 import type { ProviderFn, ProviderEvent as ServerProviderEvent } from "./providers/types.ts";
+import { type Ticket, TurnQueue } from "./turn-queue.ts";
 
 // The kernel's own vocabulary, structurally typed so the server never imports
 // its concrete classes at type level (the module is loaded dynamically).
@@ -76,7 +84,18 @@ interface CoreModule {
     options: Record<string, unknown>,
   ): Promise<{ assistantEpisode: Episode; usage?: unknown }>;
   handoff(vault: Vault, threadId: string, from: string, to: string): Episode;
-  forget(vault: Vault, threadId: string, target: ForgetTarget): { tombstoneId: string };
+  forget(
+    vault: Vault,
+    threadId: string,
+    target: ForgetTarget,
+  ): {
+    tombstoneId: string;
+    removalSeq: Seq;
+    echoes: Seq[];
+    capsules: number;
+    packets: number;
+    blobs: string[];
+  };
   stats(vault: Vault, threadId: string, options?: { verify?: boolean }): ThreadStats;
   verify(
     vault: Vault,
@@ -103,6 +122,7 @@ export function bindCore(module: unknown, home: string): Kernel {
 
 class CoreKernel implements Kernel {
   readonly backend = "core" as const;
+  private readonly turns = new TurnQueue();
 
   constructor(
     private readonly core: CoreModule,
@@ -244,10 +264,17 @@ class CoreKernel implements Kernel {
     return episode;
   }
 
-  async forget(threadId: ThreadId, target: ForgetTarget): Promise<{ tombstoneId: string }> {
+  async forget(threadId: ThreadId, target: ForgetTarget): Promise<ForgetOutcome> {
     this.thread(threadId);
     const result = this.core.forget(this.vault, threadId, target);
-    return { tombstoneId: result.tombstoneId };
+    return {
+      tombstoneId: result.tombstoneId,
+      removalSeq: result.removalSeq,
+      echoes: result.echoes,
+      capsules: result.capsules,
+      packets: result.packets,
+      blobs: result.blobs.length,
+    };
   }
 
   async exportBundle(
@@ -280,12 +307,40 @@ class CoreKernel implements Kernel {
   }
 
   /**
+   * Claims the thread's next turn slot now — a full queue is a `429` here,
+   * before the caller has opened a stream — and streams the turn once the turns
+   * ahead of it have committed.
+   */
+  runTurn(threadId: ThreadId, input: TurnInput, provider: ProviderFn): AsyncIterable<TurnEvent> {
+    this.thread(threadId);
+    return this.streamTurn(this.turns.enter(threadId), threadId, input, provider);
+  }
+
+  /**
    * The kernel emits `TurnEvent`s through a callback and resolves when the turn
    * commits; the HTTP layer wants an async iterable. This is that bridge, with
    * a bounded queue so a slow client cannot stall the kernel's transaction.
    */
-  async *runTurn(threadId: ThreadId, input: TurnInput, provider: ProviderFn): AsyncGenerator<TurnEvent> {
-    this.thread(threadId);
+  private async *streamTurn(
+    ticket: Ticket,
+    threadId: ThreadId,
+    input: TurnInput,
+    provider: ProviderFn,
+  ): AsyncGenerator<TurnEvent> {
+    try {
+      await ticket.ready(input.signal);
+      if (input.signal?.aborted === true) return;
+      yield* this.turnEvents(threadId, input, provider);
+    } finally {
+      ticket.release();
+    }
+  }
+
+  private async *turnEvents(
+    threadId: ThreadId,
+    input: TurnInput,
+    provider: ProviderFn,
+  ): AsyncGenerator<TurnEvent> {
     const queue: TurnEvent[] = [];
     let notify: (() => void) | undefined;
     let finished = false;
@@ -319,20 +374,25 @@ class CoreKernel implements Kernel {
         notify?.();
       });
 
-    for (;;) {
-      while (queue.length > 0) {
-        const event = queue.shift();
-        if (event !== undefined) yield event;
+    try {
+      for (;;) {
+        while (queue.length > 0) {
+          const event = queue.shift();
+          if (event !== undefined) yield event;
+        }
+        if (finished) break;
+        await new Promise<void>((resolve) => {
+          notify = () => {
+            notify = undefined;
+            resolve();
+          };
+        });
       }
-      if (finished) break;
-      await new Promise<void>((resolve) => {
-        notify = () => {
-          notify = undefined;
-          resolve();
-        };
-      });
+    } finally {
+      // A client that leaves mid-turn does not release the thread: the kernel's
+      // transactions finish before the next turn on this thread may start.
+      await running;
     }
-    await running;
     if (failure !== undefined) throw providerFailure ?? failure;
   }
 

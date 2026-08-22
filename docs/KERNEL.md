@@ -174,6 +174,10 @@ absent from the artifact) and of the Mirage-conservation law
 
 ## 4. The context compiler `C_B(H_t, q_t) → (K_t, L_t, P_t)`
 
+*Superseded in part by A10.1: every resident item carries an `epistemic` label,
+and it is `Support(K_t)`, not this section's `K_t^resident`, that routing (§5)
+and the check round (§6) read as "already in the view".*
+
 Input: thread, budget `B` (tokens; default 32,768; the demo runs at 8,192 to
 make the point), the query `q_t`, the target model's capabilities.
 Token counting: an approximate tokenizer (chars/3.6 with a 10% safety margin)
@@ -207,6 +211,9 @@ The compiler emits:
 
 ## 5. Paging (read-time)
 
+*Superseded in part by A10.1: the routing rule (§4/A4) and numeric presence
+(A9.2) are decided against `Support(K_t)`, not raw residency.*
+
 Triggers, in order, each bounded by the `paged` share:
 
 1. **Ledger routing (deterministic).** `names(q_t) ∩ loss.name` → page the
@@ -226,6 +233,10 @@ Pages are never fuzzy.
 
 ## 6. Turn protocol
 
+*Superseded by A10.2 (user atomization moves into tx A, before `compile()`)
+and A10.3 (every provider request of the turn, not just the compiled packet,
+is bounded and receipted as `Packet.rounds`).*
+
 ```
 turn(thread, text, attachments?, model) :
   1. append user episode (and attachment episodes) — tx
@@ -242,6 +253,10 @@ every time; no provider conversation id is ever required to continue.
 
 ## 7. Export / import — `.pylos` bundle
 
+*Superseded in part by A10.7: the object set is a reachability closure over
+the exported episodes, not the whole profile, and import restores
+`packets.jsonl` so the X-ray survives transport.*
+
 A single file: `pylos-<threadid>-<headseq>.pylos` = AES-256-GCM over a zip of
 `{manifest.json, episodes.jsonl, atoms.jsonl, capsules.jsonl, loss.jsonl,
 packets.jsonl, tombstones.jsonl, objects/*}` with a key derived from a
@@ -251,6 +266,10 @@ refuses on mismatch. Selective export by seq range is allowed and marks the
 manifest as partial.
 
 ## 8. Forgetting
+
+*Superseded in part by A10.6: redaction re-derives capsules and packets over
+the surviving source instead of leaving them untouched, and the removal itself
+is an append-only chain event, checked by `verify()`.*
 
 `forget(target)` writes a tombstone, marks atoms `REVOKED`, sets
 `loss.resolved_by`, deletes FTS rows and the inline content of the targeted
@@ -503,3 +522,217 @@ where `revised` is `final ≠ draft` and `draftSha256 = sha256(draft)`, so the
 receipt proves what the check changed. If the check round fails, the draft stands
 and `revised` is false: a reply is never lost to the check. One extra round per
 turn, at most.
+
+## A10. v1.2 amendments
+
+Seven changes adopted after the v1.1 product audit. Each subsection names the
+earlier text it amends; where they conflict, A10 wins.
+
+### A10.1 Presence is not support (§4, §5, A4, A9.5)
+
+Being *in* the packet and being *evidence* are different things. Every
+`ResidentItem` therefore carries an `epistemic` label:
+
+| resident span | `epistemic` |
+| --- | --- |
+| a frontier certificate of a `SUPPORTED` atom whose authority is `user` | `SUPPORTED` |
+| a recent or paged episode with role `user`, `tool` or `attachment` | `SUPPORTED` |
+| a recent or paged episode with role `assistant`; a `≈ … ⟨proposed by …⟩` line | `PROPOSED` |
+| a `⟨historical …⟩` certificate block, the `⟦changed⟧` line | `HISTORICAL` |
+| the header, capsule blocks, the `⟨lost: …⟩` digest, a handoff or system note, the current query | `NON_AUTHORITATIVE` |
+
+`support(K_t)` is the text of the `SUPPORTED` spans, and it is `support`, not
+`packetText(K_t)`, that the kernel reads as "already in the view":
+
+* ledger routing (A4) skips a name iff `n ∈ names(support)`;
+* numeric presence (A9.2) is decided against `support`;
+* the verification round (A9.5) checks a draft against `support` plus the
+  `SUPPORTED` material paged mid-turn.
+
+`names(packetText(K_t))` still filters the `⟨lost: …⟩` digest (THEORY §11): what
+the model can read is not a *loss* of this view. Legibility and support are
+separate questions and the packet answers both.
+
+Three consequences, each a mirage this closes:
+
+* **The question is not its own witness.** The current user turn is rendered as
+  resident type `query`, once, at the end of the messages array; the recent
+  window covers episodes with `seq < turnSeq` and stops before it. A leading
+  question — *"was the contract 48,250 USD?"* — no longer suppresses the ledger
+  route for the value it names, so the exact turn is paged back before the model
+  answers instead of after.
+* **Capsule gist cannot suppress an exact page.** A name surviving in a capsule's
+  prose is a mention, not the value; the page is served anyway.
+* **The model's own earlier word cannot authorize.** A value that is resident only
+  in an assistant episode is not support, so a draft restating it is checked
+  against the archive (A9.5) exactly as if the view had never contained it.
+
+`turnSeq` is the sequence of the user turn the packet answers. When no such
+episode has been appended — the bench, an X-ray re-render, a baseline
+comparison — it defaults to `headSeq + 1`: the recent window then covers the
+whole archive tail and the packet carries no `query` span.
+
+A ledger route whose every locator is already resident in the view records no
+page: material the packet already holds is not `UNKNOWN`.
+
+### A10.2 The user's word is authoritative before the model speaks (§6, A6)
+
+The atomizer ran over the user and the assistant turn together, in tx B — after
+the reply. A correction made this turn (*"I moved to Porto"*) therefore reached
+the model as an ordinary recent line while the frontier still certified the old
+value. The transactions are now:
+
+* **tx A**: attachment episodes, the user episode, **rule atomization of the user
+  episode** (authority `user`, superseding as A9.1 requires), `compile()`, then
+  the `pending` packet row.
+* **tx B**: tool episodes, the assistant episode, rule atomization of the
+  assistant episode (authority `assistant` ⇒ `PROPOSED`), compaction, packet
+  `done`.
+
+Compaction stays in tx B: sealing is by sequence, and the user episode of the
+current turn seals nothing that the assistant episode will not seal a moment
+later. A provider failure after tx A leaves the user's atom committed — the user
+said it, so it is true of the archive whether or not a model ever replied.
+
+### A10.3 Every provider request is bounded and receipted (§4, §6, A5, A7)
+
+Only the compiled packet was bounded; recall results and the check prompt were
+appended to the messages array without a cap and without a receipt.
+
+* **Bounded.** Every provider request of a turn is measured by the kernel's own
+  count over `packetText(messages)` and must be `≤ B`. Recall and check material
+  shares the turn's paged slot; when a round would still exceed `B`, the oldest
+  spans of the recent window are displaced — they are recoverable by sequence,
+  the material this round is about is not. This is `fitRound(messages, budget)`:
+  a pure function that keeps the system header and the final prompt, drops from
+  the front, and never separates a tool result from the call that asked for it.
+* **Receipted.** `Packet.rounds: RequestRound[]` records one entry per provider
+  request, in order. Ordinal 0 is the compiled packet, so
+  `rounds[0].messagesDigest = packet.digest`. Each round carries
+  `{messagesDigest, tokens, budget, pages, responseDigest, usage, status}`, where
+  `pages` are the pages served to build *that* round. `Usage` on the episode is
+  the sum across rounds. `vault.packets.finish()` stores the rounds with the
+  packet.
+* **Chained.** `roundsDigest = sha256(concat of the rounds' messagesDigest)` goes
+  into the assistant episode's meta, and the chain covers it: the A5 pick grows to
+
+```
+meta_hash = sha256(cjson(pick(meta, blob, mime, name, size, from, to)))                            -- meta.roundsDigest absent
+meta_hash = sha256(cjson(pick(meta, blob, mime, name, size, from, to, packetId, check, roundsDigest)))  -- present
+```
+
+  so the receipt of *what the model saw, across every round* is inside the hash
+  chain, and so is the packet it answered and the check it ran. `roundsDigest`
+  selects the pick because v1.1 wrote `packetId` and `check` into meta *outside*
+  it: an episode that carries no `roundsDigest` was written before this
+  amendment and hashes exactly as it did, so existing vaults still verify.
+  `usage` and `pages` stay outside both picks — they are provider-reported and
+  may be back-filled.
+
+### A10.4 The check has a status, and a failed check is never silent (A9.5)
+
+`meta.check = {names, status, draftSha256}` with
+`status ∈ {revised, confirmed, none, check-failed}`:
+
+* `revised` — the reissued answer differed from the draft;
+* `confirmed` — the check round ran and the draft stood;
+* `none` — nothing to check: every name the draft stated was already supported;
+* `check-failed` — no reissued answer was obtained (the provider errored, or
+  returned nothing). The draft is kept, as before, and suffixed with exactly one
+  kernel line:
+
+```
+⟨pylos: the archive could not be re-read for: <names> — treat these values as unverified⟩
+```
+
+`meta.check` is written for every turn on which the check was enabled; its
+absence means the check was switched off. `draftSha256` is the hash of the draft
+before any of this, so the receipt proves what the check changed.
+`TurnEvent{type:"check"}` is unchanged.
+
+### A10.5 Authority is migrated by replay, not by assumption (A9.1)
+
+Migration `005-authority` set `authority = 'user'` on every existing atom, on the
+reading that everything before it came from a user turn. That reading was wrong:
+v1.0 atomized assistant turns too, so an assistant's claim could cross the
+migration wearing the user's authority — and, once `SUPPORTED`, hold the slot
+against the user's own word.
+
+A vault is repaired by **replay**, not by patching: atoms are derived state, and
+the episodes are exact. On open, if the code migration `008-authority-replay` has
+not been applied and the vault shows the tell — an atom with authority `user`
+whose source episode's role is `assistant` or `tool` — the kernel, in one
+transaction per thread, clears `atom` and `atom_name`, resets the atom counters,
+and replays `atomize` over every episode of the thread in sequence order under
+the current rules. `pinned` is restored by key wherever the key still exists.
+Capsules and `loss` rows are left alone: they are conservative — a name recorded
+as lost stays pageable, and a capsule's text is not authority.
+
+The replay is `O(archive)`, once, on the first open of an affected vault; a vault
+with no tell pays one indexed query. Vaults created by this version or later are
+marked at creation and never replay.
+### A10.6 Forgetting is complete and chain-bound (§8, A5)
+
+`forget(target)` removes the targeted episodes' text and everything derived from
+it that still carries that text.
+
+* **Capsules.** Every capsule whose range contains a removed seq has its text
+  re-derived over the surviving source: each line the extractive writer emitted
+  from a removed episode — its `⟨#seq⟩` locator says which — is deleted, as is
+  any unlocated line (only a model writer produces those) that carries a name of
+  the removed text. The capsule's `kept` index loses the entries whose locator is
+  a removed episode, so a later compaction cannot resurrect a pointer into
+  forgotten material. Names that leave the text this way are re-accounted against
+  the capsule's *surviving* source vocabulary — level 0: the surviving episodes
+  in the range and the atoms whose validity starts there; above level 0: the
+  surviving `kept` of the capsule's children, or its own `kept` for the rolling
+  root — and the resulting `dropped` entries the ledger does not already hold are
+  appended, never with a locator in removed material. The `capsule.dropped`
+  column and existing `loss` rows are not rewritten: the ledger only ever gains
+  rows and `resolved_by` marks.
+* **Packets.** A packet loses its `messages` when they could still carry the
+  removed material: its `turn_seq` is a removed seq, its `resident[]` names one
+  or a capsule whose text just changed, its `pages[]` names one, or its rendered
+  text still contains a routing name of the removed material — a frontier
+  certificate read from the removed sentence leaves no structural trace, so the
+  text is the last check, and the error is in the safe direction. `digest`,
+  `resident`, `ledger`, `pages` and `compilerVersion` stay, and the X-ray labels
+  the packet reconstructed — the treatment A7 already gives packets past the
+  retention window.
+* **Blobs.** An attachment's bytes are deleted from `objects/` and its `blob` row
+  dropped once no episode that is not itself removed references its hash;
+  reference counting is over `meta.blob` across the whole vault, not one thread.
+  `meta.blob` stays on the removed episode — it is inside `meta_hash`, and the
+  chain is immutable — so the archive still proves an attachment was there.
+* **Assistant echoes are not guessed at.** An assistant turn that restated the
+  forgotten text is an episode of its own, and it is removed only when the user
+  targets it. What `forget` does instead is name the candidates: the tombstone
+  records `echoes`, the seqs of assistant episodes that carry any routing name of
+  the removed text, so the interface can ask ("this reply quoted it — forget it
+  too?"). Silence would be worse than a question.
+
+Removal is an **append-only event**. After the redaction, `forget` appends one
+`system` episode, `⟦removed #a, #b · <tombstone>⟧`, and records its seq on the
+tombstone; the chain therefore records that a removal happened, when, and against
+which tombstone. `verify()` requires, for every episode with `meta.removed =
+true`: a `tombstone` row whose id is the one in `meta.tombstone`, and a later
+`system` episode at that tombstone's `removal_seq` whose content — which is
+covered by `content_hash`, and so by the chain — names both that seq and that
+tombstone. A `removed` flag set by hand in the database fails verification
+instead of skipping the `content_hash` check. Tombstones written before this
+amendment carry `removal_seq = 0` and are accepted as legacy: a chain event
+cannot be minted retroactively without rewriting the chain.
+
+### A10.7 Export is a reachability closure; import restores receipts (§7, A7)
+
+A bundle carries the blobs its own episodes reach, not the vault's: the object
+set is `{meta.blob of the exported episodes that are not removed}`. A profile
+holds one thread today but is not required to; exporting thread A must never ship
+thread B's attachments, and a partial export ships only what its range reaches.
+
+`packets.jsonl` is restored on import — `digest`, `resident`, `ledger`, `pages`,
+`status`, `compilerVersion`, and `messages` when the export carried them — so the
+X-ray survives a Laptop Funeral: an imported thread can still show what each turn
+was compiled from, and re-render older packets from `resident[]` (A7). Import
+checks the restored packet count against `manifest.counts.packets` and refuses on
+disagreement, as it does for the per-file digests.

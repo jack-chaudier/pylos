@@ -113,6 +113,8 @@ export interface ConfirmProps {
   title: string;
   note: string;
   confirm: string;
+  /** What declining means here; "Keep it" when the sheet is about one turn. */
+  cancel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -126,7 +128,7 @@ export function ConfirmSheet(props: ConfirmProps): React.JSX.Element {
         <p>{props.note}</p>
         <div className="sheet-actions">
           <button type="button" className="ghost" onClick={props.onCancel}>
-            Keep it
+            {props.cancel ?? "Keep it"}
           </button>
           <button type="button" className="pill" onClick={props.onConfirm}>
             {props.confirm}

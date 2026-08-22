@@ -22,6 +22,8 @@ export interface TurnInput {
   attachmentSeqs?: Seq[];
   /** KERNEL A4: a toolless model gets a different view contract and one more page. */
   supportsTools?: boolean;
+  /** The request's signal: a turn still waiting for the thread gives up when the client does. */
+  signal?: AbortSignal;
 }
 
 export interface AttachInput {
@@ -39,6 +41,21 @@ export interface ForgetTarget {
 export interface ThreadSettings {
   model?: string;
   budget?: number;
+}
+
+/** What a removal did, and what it deliberately left alone (KERNEL A10.6). */
+export interface ForgetOutcome {
+  tombstoneId: string;
+  /** Seq of the `system` episode that records the removal in the chain. */
+  removalSeq: Seq;
+  /** Assistant turns that restated the removed text. Never removed on a guess. */
+  echoes: Seq[];
+  /** Capsules whose text was re-derived over the surviving source. */
+  capsules: number;
+  /** Packets whose `messages` were cleared; their receipts stay. */
+  packets: number;
+  /** Attachment blobs deleted because nothing surviving referenced them. */
+  blobs: number;
 }
 
 /**
@@ -59,10 +76,14 @@ export interface Kernel {
   pinAtom(threadId: ThreadId, atomId: string, pinned: boolean): Promise<Atom | undefined>;
   capsules(threadId: ThreadId, level?: number): Promise<Capsule[]>;
   ledger(threadId: ThreadId, opts: { name?: string; limit?: number }): Promise<LossEntry[]>;
+  /**
+   * Turns on one thread are serialized; a full queue throws `429 thread_busy`
+   * from this call, before the caller has opened a stream.
+   */
   runTurn(threadId: ThreadId, input: TurnInput, provider: ProviderFn): AsyncIterable<TurnEvent>;
   attach(threadId: ThreadId, files: AttachInput[]): Promise<Episode[]>;
   handoff(threadId: ThreadId, model: string, provider: ProviderId): Promise<Episode>;
-  forget(threadId: ThreadId, target: ForgetTarget): Promise<{ tombstoneId: string }>;
+  forget(threadId: ThreadId, target: ForgetTarget): Promise<ForgetOutcome>;
   exportBundle(threadId: ThreadId, opts: { passphrase: string; range?: [Seq, Seq] }): Promise<Uint8Array>;
   importBundle(data: Uint8Array, passphrase: string): Promise<ThreadStats>;
   verify(threadId: ThreadId): Promise<{ ok: boolean; headHash: string; checkedTo: Seq }>;

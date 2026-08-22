@@ -1,15 +1,15 @@
 {
   "engine": "core",
-  "seed": 1348029519,
+  "seed": "1",
   "generatedAt": "2026-08-22",
-  "runtimeMs": 17354,
+  "runtimeMs": 14697,
   "ruleSeq": 1,
   "revisionSeq": 483112,
-  "question": "The change is additive-only and the on-call lead skipped the dry-run — can I send the production migration?",
+  "question": "We're ready. Prepare the production migration for the orders table and send it. The dry-run was skipped by the on-call lead and the change only adds a column.",
   "turn": 1000000,
   "total": 1000000,
-  "archiveBytes": 173235075,
-  "lossRows": 1383046,
+  "archiveBytes": 152433268,
+  "lossRows": 366207,
   "capsules": 35712,
   "levelCounts": [
     31250,
@@ -20,13 +20,13 @@
   ],
   "packet": {
     "budget": 8192,
-    "tokens": 6553,
+    "tokens": 5833,
     "slots": {
-      "header": 151,
-      "frontier": 1633,
-      "capsules": 1416,
-      "paged": 78,
-      "recent": 3275
+      "header": 179,
+      "frontier": 1627,
+      "capsules": 1454,
+      "paged": 69,
+      "recent": 2504
     },
     "caps": {
       "header": 327,
@@ -35,113 +35,120 @@
       "paged": 1474,
       "recent": 3279
     },
-    "ledgerCount": 1383046,
+    "ledgerCount": 366207,
     "pagedCount": 1,
     "capsuleCount": 5
   },
   "strip": [
     {
-      "name": "tessera",
-      "kind": "entity",
-      "seq": 999984,
-      "id": 250015
-    },
-    {
-      "name": "lisbon",
-      "kind": "entity",
-      "seq": 999984,
-      "id": 250014
-    },
-    {
-      "name": "api.rate_limit",
+      "name": "on-call",
       "kind": "code",
-      "seq": 999982,
-      "id": 250013
+      "seq": 1000000,
+      "id": 111771
     },
     {
-      "name": "the tessera",
+      "name": "dry-run",
+      "kind": "code",
+      "seq": 1000000,
+      "id": 111770
+    },
+    {
+      "name": "flat-beacon",
+      "kind": "code",
+      "seq": 999995,
+      "id": 111769
+    },
+    {
+      "name": "igor",
       "kind": "entity",
-      "seq": 999981,
-      "id": 250012
+      "seq": 999967,
+      "id": 111768
     },
     {
-      "name": "97",
+      "name": "blue-millstone",
+      "kind": "code",
+      "seq": 999965,
+      "id": 111767
+    },
+    {
+      "name": "705 tokens",
       "kind": "number",
-      "seq": 999981,
-      "id": 250011
+      "seq": 999965,
+      "id": 111766
     },
     {
-      "name": "trondheim",
-      "kind": "entity",
-      "seq": 999973,
-      "id": 250010
+      "name": "flat-beacon",
+      "kind": "code",
+      "seq": 999957,
+      "id": 111765
     },
     {
-      "name": "2026-04-24",
-      "kind": "date",
-      "seq": 999973,
-      "id": 250009
-    },
-    {
-      "name": "2024-09-18",
-      "kind": "date",
-      "seq": 999970,
-      "id": 250008
-    },
-    {
-      "name": "the harbour",
-      "kind": "entity",
-      "seq": 999945,
-      "id": 250007
-    },
-    {
-      "name": "2025-01-12",
-      "kind": "date",
-      "seq": 999945,
-      "id": 250006
-    },
-    {
-      "name": "1984 ms",
+      "name": "786 rows",
       "kind": "number",
-      "seq": 999945,
-      "id": 250005
+      "seq": 999957,
+      "id": 111764
     },
     {
-      "name": "bergen",
-      "kind": "entity",
-      "seq": 999941,
-      "id": 250004
+      "name": "thin-yardarm",
+      "kind": "code",
+      "seq": 999901,
+      "id": 111763
     },
     {
-      "name": "2024-07-24",
-      "kind": "date",
-      "seq": 999941,
-      "id": 250003
-    },
-    {
-      "name": "reykjavik",
-      "kind": "entity",
-      "seq": 999940,
-      "id": 250002
-    },
-    {
-      "name": "2024-01-16",
-      "kind": "date",
-      "seq": 999940,
-      "id": 250001
-    },
-    {
-      "name": "40",
+      "name": "179 rps",
       "kind": "number",
-      "seq": 999937,
-      "id": 250000
+      "seq": 999901,
+      "id": 111762
+    },
+    {
+      "name": "foundry road",
+      "kind": "entity",
+      "seq": 999899,
+      "id": 111761
+    },
+    {
+      "name": "silent-quarry",
+      "kind": "code",
+      "seq": 999897,
+      "id": 111760
+    },
+    {
+      "name": "plain-rookery",
+      "kind": "code",
+      "seq": 999895,
+      "id": 111759
+    },
+    {
+      "name": "551 req",
+      "kind": "number",
+      "seq": 999895,
+      "id": 111758
+    },
+    {
+      "name": "vast-zenith",
+      "kind": "code",
+      "seq": 999867,
+      "id": 111757
+    },
+    {
+      "name": "tam",
+      "kind": "entity",
+      "seq": 999863,
+      "id": 111756
     }
   ],
   "recovered": {
+    "query": "I need the exact wording of what Kai Ueda wrote — can you get it?",
+    "seq": 885259,
+    "text": "Kai Ueda wrote this and I want it kept exactly: “zoetic solivagant cachinnate 4421 nacreous tessellate”",
+    "trigger": "ledger · \"kai ueda\"",
+    "quote": "Kai Ueda"
+  },
+  "resident": {
+    "query": "We're ready. Prepare the production migration for the orders table and send it. The dry-run was skipped by the on-call lead and the change only adds a column.",
     "seq": 483112,
-    "text": "Correction to the migration rule: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead.",
-    "trigger": "ledger · \"additive-only\"",
-    "quote": "additive-only"
+    "line": "rule.send-production-migration-before-dry-run-database-verified = never: send a production migration before the dry-run database is verified — unless the change is additive-only and the dry-run was skipped by the on-call lead ⟨#483112⟩",
+    "historical": "rule.send-production-migration-before-dry-run-database-verified = never: send a production migration before the dry-run database is verified ⟨historical #1→#483112⟩"
   },
   "routed": true
 }

@@ -7,7 +7,9 @@
  *
  * The ciphertext is written in 1 MiB chunks with a per-chunk nonce
  * (`base ‖ counter`) and the cleartext header as AAD, so a million-episode
- * bundle can be verified as it streams rather than held whole in memory.
+ * bundle can be verified as it streams rather than held whole in memory. The zip
+ * inside it is still built in memory; making that a stream means a streaming zip
+ * writer, which is a bigger change than the peak it would save.
  *
  * Never contains credentials. `import` verifies the hash chain before accepting
  * and refuses on mismatch; it also recomputes `dropped()` on a sample of
@@ -142,10 +144,10 @@ export async function exportBundle(
     .query(
       `SELECT id, thread_id, turn_seq, model, budget, tokens, digest, status, compiler_version, ${
         options.includePacketMessages === true ? "messages" : "NULL AS messages"
-      }, resident, ledger, pages, created_at FROM packet WHERE thread_id = ? AND turn_seq BETWEEN ? AND ?`,
+      }, resident, ledger, pages, rounds, created_at FROM packet WHERE thread_id = ? AND turn_seq BETWEEN ? AND ?`,
     )
     .all(threadId, from, to) as unknown[];
-  const tombstones = vault.tombstones.list(threadId) as unknown[];
+  const tombstones = vault.db.query("SELECT * FROM tombstone WHERE thread_id = ?").all(threadId) as unknown[];
 
   const files: Array<{ name: string; data: Uint8Array }> = [
     { name: "episodes.jsonl", data: jsonl(episodes) },
@@ -155,9 +157,17 @@ export async function exportBundle(
     { name: "packets.jsonl", data: jsonl(packets) },
     { name: "tombstones.jsonl", data: jsonl(tombstones) },
   ];
-  for (const blob of vault.blobs.list()) {
-    const bytes = vault.blobs.get(blob.hash);
-    if (bytes !== null) files.push({ name: `objects/${blob.hash}`, data: bytes });
+  // Reachability, not the whole store (KERNEL A10.7): a bundle carries the
+  // attachments its own episodes reach, so exporting one thread never ships
+  // another's, and a partial export ships only what its range reaches.
+  const reachable = new Set<string>();
+  for (const episode of episodes) {
+    if (episode.meta.removed === true) continue;
+    if (typeof episode.meta.blob === "string") reachable.add(episode.meta.blob);
+  }
+  for (const hash of reachable) {
+    const bytes = vault.blobs.get(hash);
+    if (bytes !== null) files.push({ name: `objects/${hash}`, data: bytes });
   }
 
   const manifest: BundleManifest = {
@@ -307,7 +317,11 @@ export async function importBundle(
   const atoms = parseJsonl<Record<string, unknown>>(archive.get("atoms.jsonl"));
   const capsules = parseJsonl<StoredCapsule>(archive.get("capsules.jsonl"));
   const loss = parseJsonl<Record<string, unknown>>(archive.get("loss.jsonl"));
+  const packets = parseJsonl<Record<string, unknown>>(archive.get("packets.jsonl"));
   const tombstones = parseJsonl<Record<string, unknown>>(archive.get("tombstones.jsonl"));
+  if (packets.length !== manifest.counts.packets) {
+    throw new VaultError(`bundle declares ${manifest.counts.packets} packets and carries ${packets.length}`);
+  }
 
   const threadId = options.threadId ?? manifest.threadId;
   const existing = vault.threads.get(threadId);
@@ -371,6 +385,10 @@ export async function importBundle(
       const { id: _id, ...rest } = row;
       insertRow(vault, "loss", { ...rest, thread_id: threadId });
     }
+    // The receipts travel with the archive (KERNEL A10.7): an imported thread can
+    // still show what each turn was compiled from, and re-render the older
+    // packets from `resident[]`.
+    for (const row of packets) insertRow(vault, "packet", { ...row, thread_id: threadId });
     for (const row of tombstones) insertRow(vault, "tombstone", { ...row, thread_id: threadId });
     counters["atoms.supported"] = atoms.filter((a) => a.phase === "SUPPORTED").length;
     counters["atoms.historical"] = atoms.filter((a) => a.phase === "HISTORICAL").length;

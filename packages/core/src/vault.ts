@@ -12,7 +12,7 @@
  */
 
 import { Database, type Statement } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -33,6 +33,7 @@ import { canonicalHash, chainHash, genesisHash, newId, sha256 } from "./hash.ts"
 import { canonicalJson } from "./pure/canonical.ts";
 import { names } from "./pure/names.ts";
 import { approxTokens } from "./pure/tokens.ts";
+import { needsAuthorityReplay, replayAtoms } from "./replay.ts";
 import {
   type AtomRow,
   type CapsuleRow,
@@ -41,14 +42,16 @@ import {
   type LossRow,
   type PacketRow,
   type ThreadRow,
+  type TombstoneRow,
   toAtom,
   toCapsule,
   toEpisode,
   toLoss,
   toPacket,
   toThread,
+  toTombstone,
 } from "./rows.ts";
-import { COUNTERS, MIGRATIONS } from "./schema.ts";
+import { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
 
 /** Chain checkpoint interval (KERNEL §1). */
 export const CHECKPOINT_EVERY = 4096;
@@ -77,12 +80,23 @@ export interface EpisodeInput {
   blob?: { bytes: Uint8Array; mime?: string; name?: string };
 }
 
-/** Immutable meta keys — the only ones covered by the chain (KERNEL A5). */
-const IMMUTABLE_META = ["blob", "mime", "name", "size", "from", "to"] as const;
+/** Immutable meta keys the chain has always covered (KERNEL A5). */
+const CHAINED_META = ["blob", "mime", "name", "size", "from", "to"] as const;
+/** The turn's receipts, chained since KERNEL A10.3. */
+const CHAINED_RECEIPTS = ["packetId", "check", "roundsDigest"] as const;
 
-function metaHashOf(meta: EpisodeMeta): string {
+/**
+ * `meta_hash` (KERNEL A5, A10.3). `usage` and `pages` are never picked: they are
+ * provider-reported and may be back-filled. The receipt keys are picked only for
+ * episodes that carry a `roundsDigest` — the marker of an episode written under
+ * A10.3 — so an archive written before this amendment hashes exactly as it did
+ * and existing chains still verify.
+ */
+export function metaHashOf(meta: EpisodeMeta): string {
+  const keys: readonly string[] =
+    meta.roundsDigest === undefined ? CHAINED_META : [...CHAINED_META, ...CHAINED_RECEIPTS];
   const picked: Record<string, unknown> = {};
-  for (const key of IMMUTABLE_META) {
+  for (const key of keys) {
     const value = meta[key];
     if (value !== undefined) picked[key] = value;
   }
@@ -115,6 +129,20 @@ export function chainRecord(input: {
 export interface StoredCapsule extends Capsule {
   /** Names still visible in this capsule's text, with their deepest locators. */
   kept: LossEntry[];
+}
+
+/** The record of one removal (KERNEL §8, A10.6). */
+export interface Tombstone {
+  id: string;
+  threadId: string;
+  /** What the user asked to remove: `seqs:…`, `range:…` or `atoms:…`. */
+  target: string;
+  reason: string;
+  createdAt: number;
+  /** Seq of the `system` episode that records this removal; 0 for legacy rows. */
+  removalSeq: Seq;
+  /** Assistant episodes that carry a routing name of the removed text. */
+  echoes: Seq[];
 }
 
 export interface AppendResult {
@@ -183,6 +211,20 @@ export class Vault {
           .run(migration.name, Date.now());
       })();
     }
+    if (!applied.has(AUTHORITY_REPLAY)) this.replayAuthority();
+  }
+
+  /**
+   * KERNEL A10.5. Not expressible in SQL: what an atom is allowed to do depends
+   * on the rules, so the repair is to run them again over the exact episodes. A
+   * vault without the tell — every vault this version created — is marked done
+   * after one indexed query.
+   */
+  private replayAuthority(): void {
+    for (const thread of this.threads.list()) {
+      if (needsAuthorityReplay(this, thread.id)) replayAtoms(this, thread.id);
+    }
+    this.db.query("INSERT INTO migration (name, applied_at) VALUES (?, ?)").run(AUTHORITY_REPLAY, Date.now());
   }
 
   /** Cached prepared statement. */
@@ -451,6 +493,22 @@ export class Vault {
         mime: string | null;
         size: number;
       }>,
+    /**
+     * True if any episode that has not itself been removed still references this
+     * hash — across every thread, since `objects/` is one content-addressed store.
+     * A scan of `meta`: `forget` is user-initiated and rare, and the alternative
+     * is an index paid for on every append.
+     */
+    referenced: (hash: string): boolean =>
+      this.stmt(
+        "SELECT 1 FROM episode WHERE json_extract(meta, '$.blob') = ? " +
+          "AND COALESCE(json_extract(meta, '$.removed'), 0) != 1 LIMIT 1",
+      ).get(hash) !== null,
+    /** Delete the bytes and the row. Only `forget` may call this (KERNEL A10.6). */
+    delete: (hash: string): void => {
+      rmSync(join(this.objectsDir, hash), { force: true });
+      this.stmt("DELETE FROM blob WHERE hash = ?").run(hash);
+    },
   };
 
   // ------------------------------------------------------------------ atoms
@@ -822,8 +880,8 @@ export class Vault {
     insert: (packet: Packet, status: PacketStatus = "done"): void => {
       this.stmt(
         "INSERT OR REPLACE INTO packet (id, thread_id, turn_seq, model, budget, tokens, digest, status, " +
-          "compiler_version, messages, resident, ledger, pages, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "compiler_version, messages, resident, ledger, pages, rounds, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         packet.id,
         packet.threadId,
@@ -838,13 +896,16 @@ export class Vault {
         JSON.stringify(packet.resident),
         JSON.stringify(packet.ledger),
         JSON.stringify(packet.pages),
+        JSON.stringify(packet.rounds ?? []),
         packet.createdAt,
       );
     },
 
-    finish: (packetId: string, pages: unknown[]): void => {
-      this.stmt("UPDATE packet SET status = 'done', pages = ? WHERE id = ?").run(
+    /** Close the packet with what was served and what was sent (KERNEL A10.3). */
+    finish: (packetId: string, pages: unknown[], rounds: unknown[] = []): void => {
+      this.stmt("UPDATE packet SET status = 'done', pages = ?, rounds = ? WHERE id = ?").run(
         JSON.stringify(pages),
+        JSON.stringify(rounds),
         packetId,
       );
     },
@@ -883,14 +944,29 @@ export class Vault {
     create: (threadId: string, target: string, reason: string): string => {
       const id = newId("tb");
       this.stmt(
-        "INSERT INTO tombstone (id, thread_id, target, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO tombstone (id, thread_id, target, reason, created_at, removal_seq, echoes) " +
+          "VALUES (?, ?, ?, ?, ?, NULL, '[]')",
       ).run(id, threadId, target, reason, Date.now());
       return id;
     },
-    list: (threadId: string): Array<{ id: string; target: string; reason: string; created_at: number }> =>
-      this.stmt("SELECT id, target, reason, created_at FROM tombstone WHERE thread_id = ?").all(
-        threadId,
-      ) as Array<{ id: string; target: string; reason: string; created_at: number }>,
+    /** Bind a tombstone to its chain event and the echoes it found (KERNEL A10.6). */
+    record: (id: string, removalSeq: Seq, echoes: readonly Seq[]): void => {
+      this.stmt("UPDATE tombstone SET removal_seq = ?, echoes = ? WHERE id = ?").run(
+        removalSeq,
+        canonicalJson([...echoes]),
+        id,
+      );
+    },
+    get: (id: string): Tombstone | null => {
+      const row = this.stmt("SELECT * FROM tombstone WHERE id = ?").get(id) as TombstoneRow | undefined;
+      return row == null ? null : toTombstone(row);
+    },
+    list: (threadId: string): Tombstone[] =>
+      (
+        this.stmt("SELECT * FROM tombstone WHERE thread_id = ? ORDER BY created_at ASC").all(
+          threadId,
+        ) as TombstoneRow[]
+      ).map(toTombstone),
   };
 
   // --------------------------------------------------------------- internal

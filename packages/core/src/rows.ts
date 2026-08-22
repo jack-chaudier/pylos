@@ -17,10 +17,12 @@ import type {
   Packet,
   PacketStatus,
   Role,
+  Seq,
   Thread,
   ThreadSettings,
 } from "@pylos/protocol";
-import type { StoredCapsule } from "./vault.ts";
+import { ftsTerms } from "./pure/terms.ts";
+import type { StoredCapsule, Tombstone } from "./vault.ts";
 
 export interface EpisodeRow {
   seq: number;
@@ -96,6 +98,7 @@ export interface PacketRow {
   resident: string;
   ledger: string;
   pages: string;
+  rounds: string | null;
   created_at: number;
 }
 
@@ -106,6 +109,29 @@ export interface ThreadRow {
   head_seq: number;
   head_hash: string;
   settings: string;
+}
+
+export interface TombstoneRow {
+  id: string;
+  thread_id: string;
+  target: string;
+  reason: string;
+  created_at: number;
+  /** NULL only on a row no `forget` wrote; 0 means legacy (KERNEL A10.6). */
+  removal_seq: number | null;
+  echoes: string | null;
+}
+
+export function toTombstone(row: TombstoneRow): Tombstone {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    target: row.target,
+    reason: row.reason,
+    createdAt: row.created_at,
+    removalSeq: row.removal_seq ?? 0,
+    echoes: row.echoes === null ? [] : (JSON.parse(row.echoes) as Seq[]),
+  };
 }
 
 export function toThread(row: ThreadRow): Thread {
@@ -201,40 +227,15 @@ export function toPacket(row: PacketRow): Packet {
     resident: JSON.parse(row.resident) as Packet["resident"],
     ledger: JSON.parse(row.ledger) as Packet["ledger"],
     pages: JSON.parse(row.pages) as Packet["pages"],
+    ...(row.rounds === null ? {} : { rounds: JSON.parse(row.rounds) as Packet["rounds"] }),
     createdAt: row.created_at,
   };
 }
 
-/**
- * Build a safe FTS5 MATCH expression from free text.
- *
- * Terms are ANDed, not ORed, and function words are dropped: an OR over
- * "where"/"live"/"now" matches most of a million-episode archive and BM25 then
- * has to score all of it. Lexical search is a fallback, and a fallback that
- * costs half a second is not one.
- */
-const FTS_STOP = new Set(
-  (
-    "the and for that with this from what where when who which why how does did was were are you your " +
-    "our their his her its not but all any can could will would should about into onto over under " +
-    "have has had been being remind tell give show much many some other than then there here now " +
-    "like after before earlier said back again still yet"
-  ).split(" "),
-);
+/** The tokenizer lives in `pure/terms.ts`; `page.ts` and `index.ts` take it from here. */
+export { ftsTerms };
 
-/**
- * The searchable terms of a query: ≥ 3 characters (KERNEL A9.4 — "tea" and
- * "rain" are addresses), stoplisted, deduplicated, capped at 6.
- */
-export function ftsTerms(query: string): string[] {
-  const terms = query
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s.-]/gu, " ")
-    .split(/\s+/)
-    .filter((t) => t.length >= 3 && t.length < 40 && !FTS_STOP.has(t));
-  return [...new Set(terms)].slice(0, 6);
-}
-
+/** Build a safe FTS5 MATCH expression from free text. */
 export function ftsQuery(query: string, mode: "and" | "or" = "and"): string | null {
   const unique = ftsTerms(query);
   if (unique.length === 0) return null;

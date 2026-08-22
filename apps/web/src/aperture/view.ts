@@ -2,25 +2,28 @@
  * The aperture — the one place on this page where Pylos is not described but
  * run.
  *
- * A synthetic thread of a million turns is streamed through the compiler in
- * this tab: episodes are appended, capsules seal every 32 turns and roll up
- * every 8 capsules, each seal writes its losses into the ledger, and the packet
- * is recompiled as it goes. The archive counter runs away; the view counter
- * does not. At the end the question from turn 1,000,000 routes through the
- * ledger and the exact span from turn 483,112 comes back.
+ * The bench's own million-turn thread is streamed through the compiler in this
+ * tab: episodes are appended, capsules seal every 32 turns and roll up every 8
+ * capsules, each seal writes its losses into the ledger, and the packet is
+ * recompiled as it goes. The archive counter runs away; the view counter does
+ * not. At the end two closing questions are put to the view — the migration
+ * trap, which the resident rule certificate answers without a page, and an
+ * exact quote from hundreds of thousands of turns back, which only the loss
+ * ledger can reach.
  *
  * Deterministic, replayable, and nothing here is a video.
  */
 
+import { mountConsole } from "./console";
 import { createDriver, type Driver } from "./driver";
 import type { RunState, StripEntry } from "./run";
+import { REVISION_SEQ, SEED } from "./thread";
 
 const DURATION_MS = 10_000;
 const SLOW_UPDATE_MS = 110;
 const CANVAS_UPDATE_MS = 60;
 const MAX_CHIPS = 16;
 const CHIPS_PER_TICK = 3;
-const REVISION_SEQ = 483_112;
 
 const SLOTS = ["header", "frontier", "capsules", "paged", "recent"] as const;
 
@@ -43,6 +46,7 @@ export function mountAperture(): void {
     recovLine: must(section, "[data-ap-recovered-line]"),
     recovQuote: must(section, "[data-ap-recovered-quote]"),
     recovMeta: must(section, "[data-ap-recovered-meta]"),
+    resident: must(section, "[data-ap-resident]"),
     status: must(section, "[data-ap-status]"),
     replay: must<HTMLButtonElement>(section, "[data-ap-replay]"),
     engine: must(section, "[data-ap-engine]"),
@@ -74,6 +78,12 @@ export function mountAperture(): void {
   let playing = false;
   let hasRun = false;
   let latest = driver.initial();
+  const askConsole = mountConsole();
+  // The console is usable before the run finishes: the served snapshot is the
+  // same run, from the same seed, computed at build time.
+  void loadSnapshot().then((snap) => {
+    if (snap) askConsole?.setState(snap, "snapshot");
+  });
 
   paint(latest, 0);
   fitCanvas(els.canvas);
@@ -108,13 +118,17 @@ export function mountAperture(): void {
     els.ledgerCount.textContent = `Ledger · ${nf.format(state.lossRows)} entries · 0 removed (conserved)`;
 
     const counts = state.levelCounts;
+    const marks =
+      state.recovered === null
+        ? `the ember mark is turn ${nf.format(REVISION_SEQ)}`
+        : `the ember marks are turns ${nf.format(REVISION_SEQ)} and ${nf.format(state.recovered.seq)}`;
     els.levels.textContent =
       counts.length === 0
-        ? "Compaction hierarchy · level 4 → level 0 · the ember mark is turn 483,112"
+        ? `Compaction hierarchy · level 4 → level 0 · ${marks}`
         : `Capsules · ${counts
             .map((n, i) => `L${i} ${nf.format(n)}`)
             .reverse()
-            .join(" · ")} · the ember mark is turn 483,112`;
+            .join(" · ")} · ${marks}`;
   }
 
   function pushChips(strip: readonly StripEntry[], limit: number): void {
@@ -136,14 +150,19 @@ export function mountAperture(): void {
   }
 
   /**
-   * Only a real route gets a recovery. If the ledger did not return the
-   * revision, the exhibit says so rather than dressing up a near miss.
+   * Only a real route gets a recovery. If the ledger returned nothing, the
+   * exhibit says so rather than dressing up a near miss.
    */
   function reveal(state: RunState): void {
     if (!state.routed) {
       els.recovery.dataset.on = "false";
       return;
     }
+    // The trap's receipt: a certificate already in the view, and no page.
+    els.resident.textContent =
+      state.resident === null
+        ? ""
+        : `● resident #${nf.format(state.resident.seq)} · “${clip(state.resident.query)}” · the current rule certificate is in the view and the turn-1 version is kept ⟨historical⟩ · no page needed`;
     const r = state.recovered;
     if (!r) {
       els.recovLine.textContent = "no route fired";
@@ -164,7 +183,7 @@ export function mountAperture(): void {
         els.recovQuote.append(document.createTextNode(part.text));
       }
     }
-    els.recovMeta.textContent = `trigger ${r.trigger} · exact span · paged before the model answered · ${nf.format(state.lossRows)} ledger entries recorded, none removed`;
+    els.recovMeta.textContent = `“${clip(r.query)}” · trigger ${r.trigger} · exact span · paged before the model answered · ${nf.format(state.lossRows)} ledger entries recorded, none removed`;
     els.recovery.dataset.on = "true";
   }
 
@@ -194,9 +213,10 @@ export function mountAperture(): void {
   function finish(state: RunState, elapsed: number): void {
     playing = false;
     reveal(state);
+    askConsole?.setState(state, "live");
     els.replay.disabled = false;
     els.replay.textContent = "Replay";
-    els.status.textContent = `Measured in this browser · ${nf.format(state.turn)} turns in ${(elapsed / 1000).toFixed(1)}s · packet ${nf.format(state.packet.tokens)}/${nf.format(state.packet.budget)} · ledger ${nf.format(state.lossRows)} · seed 0x50594C4F`;
+    els.status.textContent = `Measured in this browser · ${nf.format(state.turn)} turns in ${(elapsed / 1000).toFixed(1)}s · packet ${nf.format(state.packet.tokens)}/${nf.format(state.packet.budget)} · ledger ${nf.format(state.lossRows)} · seed ${SEED}`;
     const view = `${nf.format(state.turn)} turns archived, the model's view held at ${nf.format(state.packet.tokens)} of ${nf.format(state.packet.budget)} tokens`;
     els.live.textContent =
       state.recovered === null
@@ -209,6 +229,7 @@ export function mountAperture(): void {
     lastSlow = 0;
     lastCanvas = 0;
     els.strip.replaceChildren();
+    els.resident.textContent = "";
     els.recovery.dataset.on = "false";
   }
 
@@ -224,7 +245,7 @@ export function mountAperture(): void {
     playing = true;
     els.replay.disabled = true;
     els.replay.textContent = "Running";
-    els.status.textContent = "Streaming · 32-episode capsules, fan-out 8 · seed 0x50594C4F";
+    els.status.textContent = `Streaming · 32-episode capsules, fan-out 8 · seed ${SEED}`;
     els.live.textContent = "Streaming one million turns through the compiler.";
     driver.run(DURATION_MS);
   }
@@ -238,7 +259,8 @@ export function mountAperture(): void {
         drawTimeline(els.canvas, snap);
         pushChips(snap.strip, MAX_CHIPS);
         reveal(snap);
-        els.status.textContent = `Finished run, precomputed from the same seed · ${nf.format(snap.turn)} turns · packet ${nf.format(snap.packet.tokens)}/${nf.format(snap.packet.budget)} · ledger ${nf.format(snap.lossRows)} · seed 0x50594C4F`;
+        askConsole?.setState(snap, "live");
+        els.status.textContent = `Finished run, precomputed from the same seed · ${nf.format(snap.turn)} turns · packet ${nf.format(snap.packet.tokens)}/${nf.format(snap.packet.budget)} · ledger ${nf.format(snap.lossRows)} · seed ${SEED}`;
       } else {
         driver.end();
       }
@@ -360,8 +382,12 @@ function drawTimeline(canvas: HTMLCanvasElement, state: RunState): void {
     ctx.globalAlpha = 1;
   }
 
-  if (state.turn >= REVISION_SEQ) {
-    const x = Math.round(w * (REVISION_SEQ / state.total)) + 0.5;
+  const marks = [
+    ...(state.turn >= REVISION_SEQ ? [REVISION_SEQ] : []),
+    ...(state.recovered === null ? [] : [state.recovered.seq]),
+  ];
+  for (const mark of marks) {
+    const x = Math.round(w * (mark / state.total)) + 0.5;
     ctx.strokeStyle = ember;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -394,6 +420,11 @@ function span(cls: string, text: string): HTMLElement {
   el.className = cls;
   el.textContent = text;
   return el;
+}
+
+/** Questions are sentences; receipts are one line. */
+function clip(text: string, max = 64): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
 function bytes(n: number): string {

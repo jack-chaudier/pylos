@@ -18,6 +18,7 @@ import { deriveLedger, type SourceName, sourceNamesOfEpisode } from "./ledger.ts
 import { KIND_PRIORITY, names, normalizeName } from "./names.ts";
 import {
   type CapsuleView,
+  epistemicOfRole,
   type PagedBlock,
   renderCapsules,
   renderFrontier,
@@ -241,6 +242,7 @@ export function aperture(episodes: readonly ApertureEpisode[], options: Aperture
       role: episode.role,
       trigger: `ledger:${hit.name}`,
       text: episode.content,
+      epistemic: epistemicOfRole(episode.role),
     });
   }
   const paged = renderPaged(blocks, allocation.paged, tokenizer);

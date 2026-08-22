@@ -107,7 +107,8 @@ export function classify(name: string): LossKind {
 
 export interface Episode {
   seq: number;
-  role: "user" | "assistant";
+  /** The corpus also emits `system` (a resumed session) and `handoff` turns. */
+  role: "user" | "assistant" | "system" | "handoff";
   content: string;
   tokens: number;
 }

@@ -15,10 +15,9 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { atomize, compact, compile, type EpisodeInput, openVault, type Provider, recall } from "@pylos/core";
-import { RECALL_TOOL, retained } from "@pylos/core/pure";
+import { createCorpus, RECALL_TOOL, retained } from "@pylos/core/pure";
 import type { ChatMessage } from "@pylos/protocol";
 import { RollingSummary } from "./baseline.ts";
-import { buildCorpus } from "./corpus.ts";
 
 export interface LiveOptions {
   model: string;
@@ -95,9 +94,7 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
   rmSync(home, { recursive: true, force: true });
   const vault = openVault({ home, fast: true });
   const thread = vault.threads.create(`live-${options.seed}`, { budget: options.budget });
-  const corpus = buildCorpus({
-    seed: options.seed,
-    n: options.turns,
+  const corpus = createCorpus(options.seed, options.turns, {
     plants: options.turns < 100_000 ? { facts: 40, quotes: 10, numbers: 10 } : undefined,
   });
   const rolling = new RollingSummary(options.budget);

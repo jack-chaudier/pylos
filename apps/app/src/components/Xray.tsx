@@ -1,4 +1,13 @@
-import type { Atom, ChatMessage, Packet, ResidentItem, ResidentType, ThreadStats } from "@pylos/protocol";
+import type {
+  Atom,
+  ChatMessage,
+  Epistemic,
+  Packet,
+  RequestRound,
+  ResidentItem,
+  ResidentType,
+  ThreadStats,
+} from "@pylos/protocol";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.ts";
 import { groupedNumber, shortHash, tokenCount } from "../format.ts";
@@ -28,6 +37,14 @@ const RESIDENT_LABEL: Record<ResidentType, string> = {
   paged: "paged",
   recent: "recent",
   query: "query",
+};
+
+/** KERNEL A10.1: presence is not support. Packets written before 1.2 say nothing. */
+const EPISTEMIC_LABEL: Record<Epistemic, string> = {
+  SUPPORTED: "supported",
+  PROPOSED: "proposed",
+  HISTORICAL: "historical",
+  NON_AUTHORITATIVE: "—",
 };
 
 export function Xray(props: XrayProps): React.JSX.Element {
@@ -91,13 +108,14 @@ export function Xray(props: XrayProps): React.JSX.Element {
 
   const reconstructed =
     packet !== undefined && (packet.reconstructed === true || packet.messages.length === 0);
+  const rounds = packet?.rounds ?? [];
 
   return (
     <>
       <div className="drawer-backdrop" onClick={props.onClose} role="presentation" aria-hidden="true" />
       <aside className="drawer" aria-label="X-ray">
         <div className="drawer-head">
-          <h2>What the model saw</h2>
+          <h2>What the model saw{rounds.length > 1 ? ` — ${rounds.length} rounds` : ""}</h2>
           {packet?.status === "pending" ? (
             <span className="badge" data-tone="oxblood">
               pending
@@ -159,6 +177,12 @@ export function Xray(props: XrayProps): React.JSX.Element {
                   ) : null}
                 </dl>
               </Section>
+
+              {rounds.length > 0 ? (
+                <Section title="Rounds" count={String(rounds.length)} defaultOpen>
+                  <RoundList rounds={rounds} />
+                </Section>
+              ) : null}
 
               <Section title="Messages sent" count={String(packet.messages.length)} defaultOpen={false}>
                 {reconstructed ? (
@@ -334,28 +358,67 @@ function AtomRow({ atom }: { atom: Atom }): React.JSX.Element {
   );
 }
 
+interface ResidentGroup {
+  type: ResidentType;
+  epistemic: Epistemic | undefined;
+  list: ResidentItem[];
+}
+
+/**
+ * Grouped by slot *and* by what the slot is allowed to support: one `recent`
+ * window holds the user's word and a previous model's, and only the first is
+ * evidence (KERNEL A10.1).
+ */
 function ResidentList({ items }: { items: ResidentItem[] }): React.JSX.Element {
-  const groups = new Map<ResidentType, ResidentItem[]>();
+  const groups = new Map<string, ResidentGroup>();
   for (const item of items) {
-    const list = groups.get(item.type) ?? [];
-    list.push(item);
-    groups.set(item.type, list);
+    const key = `${item.type}|${item.epistemic ?? ""}`;
+    const group = groups.get(key) ?? { type: item.type, epistemic: item.epistemic, list: [] };
+    group.list.push(item);
+    groups.set(key, group);
   }
   return (
     <>
-      {[...groups.entries()].map(([type, list]) => (
-        <div key={type} className="page-row">
-          <span className="trigger" style={{ color: RESIDENT_COLOR[type] }}>
-            {RESIDENT_LABEL[type]}
+      <div className="empty">Only supported spans count as evidence.</div>
+      {[...groups.entries()].map(([key, group]) => (
+        <div key={key} className="page-row">
+          <span className="trigger" style={{ color: RESIDENT_COLOR[group.type] }}>
+            {RESIDENT_LABEL[group.type]}
           </span>
           <span>
-            {list
+            <b className="epistemic" data-supported={group.epistemic === "SUPPORTED"}>
+              {group.epistemic === undefined ? "—" : EPISTEMIC_LABEL[group.epistemic]}
+            </b>
+            {group.list
               .slice(0, 8)
               .map((item) => item.ref ?? (item.seq === undefined ? "—" : `#${item.seq}`))
               .join(", ")}
-            {list.length > 8 ? ` … +${list.length - 8}` : ""}
+            {group.list.length > 8 ? ` … +${group.list.length - 8}` : ""}
           </span>
-          <span className="latency">{groupedNumber(list.reduce((sum, item) => sum + item.tokens, 0))}t</span>
+          <span className="latency">
+            {groupedNumber(group.list.reduce((sum, item) => sum + item.tokens, 0))}t
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** One row per provider request of the turn, ordinal 0 being the compiled packet (KERNEL A10.3). */
+function RoundList({ rounds }: { rounds: RequestRound[] }): React.JSX.Element {
+  return (
+    <>
+      {rounds.map((round) => (
+        <div key={round.ordinal} className="page-row">
+          <span className="trigger" data-resolved={round.status === "done"}>
+            {round.ordinal === 0 ? "packet" : `round ${round.ordinal}`}
+          </span>
+          <span>
+            {tokenCount(round.tokens)} / {tokenCount(round.budget)}
+            {round.pages.length > 0 ? ` · ${round.pages.length} paged` : ""} ·{" "}
+            <span className="hash">{shortHash(round.messagesDigest)}</span>
+          </span>
+          <span className="latency">{round.status}</span>
         </div>
       ))}
     </>

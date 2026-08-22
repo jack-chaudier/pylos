@@ -214,7 +214,13 @@ export function compile(input: CompileInput): Packet {
   const capsules = Math.min(rendered.tokens, caps.capsules);
 
   const pagedRender = renderPaged(
-    input.paged.map((text, i) => ({ seq: i, role: "user", trigger: "ledger", text })),
+    input.paged.map((text, i) => ({
+      seq: i,
+      role: "user",
+      trigger: "ledger",
+      text,
+      epistemic: "SUPPORTED" as const,
+    })),
     caps.paged,
   );
   const paged = pagedRender.tokens;

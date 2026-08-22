@@ -32,7 +32,12 @@ frontier. A proposal is never frontier-resident and never enters capsule text �
 the one place it can surface is a single routing line, `key ≈ value ⟨proposed by
 <authority> #seq · unconfirmed⟩`, marked with `≈` rather than `=` and served
 only when nothing authoritative holds the key, so the packet can show that a
-claim exists without ever presenting it as support.
+claim exists without ever presenting it as support. KERNEL A10.2 moves the
+authoring further upstream than the ledger: the user's rule atomization now
+runs before the packet is even compiled (tx A), so a correction made this turn
+is a certificate in the very first request the model sees, and a provider
+failure after that point still leaves the user's word committed — the archive
+does not need a reply to be true.
 
 **Oracle.** For every frontier line in `K_t`, `episodes.get(seq).content` contains
 `value` (string-presence after the same normalization as `names()`). For every
@@ -234,11 +239,30 @@ discussed Y") is answered by a page, with both intervals in `ledger.historical`.
 transition it out of OPEN"). Not an empirical result.
 
 **Mechanism.** `loss` rows are append-only; the only transition is `resolved_by =
-tombstone`; export carries them; import verifies counts.
+tombstone`; export carries them; import verifies counts. KERNEL A10.6 gives
+forgetting the same shape at the level of the chain itself: `forget` never
+deletes a `loss` row or rewrites `capsule.dropped` — a redacted capsule's text
+is re-derived and any newly absent name is *appended* to the ledger with a
+locator outside the removed material — and the removal itself is a chain event,
+not a database edit: one `system` episode, `⟦removed #a, #b · <tombstone>⟧`,
+is appended and its seq recorded on the tombstone, so `verify()` can require a
+tombstone and a later removal episode for every `meta.removed = true` row and
+fail a hand-set flag instead of skipping the content-hash check. KERNEL A10.7
+gives export the matching shape on the object side: the bundle's `objects/`
+set is a reachability closure over the exported episodes' own `meta.blob`
+references, not the profile's whole object store, so exporting one thread
+never ships another thread's attachments and a partial export ships only what
+its range reaches; `packets.jsonl` is restored on import so the X-ray survives
+transport, not just the ledger.
 
 **Oracle.** Row count of `loss` is monotone across any sequence of `compact()`
-calls; conservation + completeness (§3) hold for every parent; after
-export→import, `count(loss)` and every `(name, seq, span)` are identical.
+calls, including `forget`; conservation + completeness (§3) hold for every
+parent after a redaction, recomputed over the surviving source. After
+export→import, `count(loss)` and every `(name, seq, span)` are identical, the
+restored `packets` count matches `manifest.counts.packets`, and the object set
+on disk is exactly the removed-episode-excluding closure the manifest declares
+— nothing more, nothing less. A `removed = true` episode with no matching
+tombstone-and-removal-episode pair fails `verify()`.
 
 ## 11. Decision-relative soundness `Dep(d) ∩ L_t = ∅`
 
@@ -250,9 +274,32 @@ PROPOSED atom cannot satisfy a dependency: it is not in `SUPPORTED`, so nothing
 downstream may treat `Dep(d) ∩ {proposals}` as if it were `Dep(d) ∩ L_t = ∅`
 (KERNEL A9.1 — models may propose, never authorize).
 
-**Oracle.** The `⟨lost: …⟩` digest never lists a name present in the packet's
-frontier, paged, or recent slots; every ledger page served is recorded with its
-trigger in `packet.pages` before the provider call is made.
+**KERNEL A10.1 sharpens `names(K_t)` to `Support(K_t)`.** Being *in* the packet
+and being *evidence* are different things: a name surviving in a capsule's
+prose is a mention, the current user turn is not a witness for itself, and a
+value resident only in an assistant episode is not support just because it is
+resident. `Support(K) := names(SUPPORTED spans)` — the frontier certificates
+of `user`-authority atoms and the `user`/`tool`/`attachment` episodes in the
+paged and recent slots, never capsule prose, `PROPOSED` lines, `HISTORICAL`
+certificates, or the header. Every dependent rule reads `Support`, not
+`packetText`:
+
+```
+page(n)  ⇔  n ∈ names(q) ∧ n ∈ L ∧ n ∉ Support(K)          -- ledger routing (§5, A4)
+check(c) ⇔  Dependencies(c) ⊄ Support(K)                    -- the verification round (§6, A9.5)
+```
+
+The consequence for `Dep(d) ∩ L_t = ∅` above: `L_t` is decided against
+`Support(K_t)`, not `names(K_t)`, so a value the model stated only because an
+earlier turn of its own said so is treated exactly as if the packet had never
+carried it — the archive, not the model's own prior word, is what discharges
+the dependency.
+
+**Oracle.** The `⟨lost: …⟩` digest never lists a name present in `Support(K_t)`;
+every ledger page served is recorded with its trigger in `packet.pages` before
+the provider call is made; a fixture where a name is resident only in an
+assistant episode or only in capsule prose still pages on request and still
+fires the check round if the final draft restates it unconfirmed.
 
 ## 12. Semantic frontier width `W_t ≤ B`
 
@@ -268,6 +315,23 @@ kind `atom` so the overflow is pageable, never silent.
 **Oracle.** When `|SUPPORTED atoms| × line tokens > frontier slot`, every
 non-resident SUPPORTED atom key appears in the unresolved ledger; a query naming
 it pages it.
+
+**KERNEL A10.3 extends the bound past the compiled packet.** `W_t ≤ B` held only
+for the first message the provider saw; a `recall` result or the check prompt
+(A9.5) could grow a later request in the same turn without limit. Every
+provider request of a turn is now measured by the kernel's own count over
+`packetText(messages)` and fit to the same `B` by `fitRound`: a pure function
+that keeps the system header and the final prompt, drops from the front of the
+recent window first — recoverable by sequence, unlike the material the round
+is about — and never separates a tool result from the call that asked for it.
+Ordinal 0 is the compiled packet (`rounds[0].messagesDigest = packet.digest`);
+each later round records `{messagesDigest, tokens, budget, pages,
+responseDigest, usage, status}` in `Packet.rounds`, and
+`roundsDigest = sha256(concat(rounds[i].messagesDigest))` is inside the hash
+chain (A5) via the assistant episode's `meta`. **Oracle.** For every round in
+every recorded turn, `tokens ≤ budget`; `rounds[0].messagesDigest ==
+packet.digest`; recomputing `roundsDigest` from the stored rounds matches
+`meta.roundsDigest`.
 
 ## 13. Supporting results used implicitly
 
@@ -304,11 +368,19 @@ it pages it.
 - That succession across vendors preserves behaviour; it preserves the packet.
 - That a reply has been fact-checked. The verification round (KERNEL A9.5)
   pages only the names the ledger recorded as dropped when a draft states them
-  — presence against the archive, not truth of the claim.
+  — presence against the archive, not truth of the claim. When the check round
+  itself cannot be completed, `meta.check.status = check-failed` (KERNEL
+  A10.4), the draft is kept as before, and the kernel appends one line naming
+  what could not be re-checked rather than presenting it as confirmed.
 - That an assistant cannot mislead a later model. A proposal (KERNEL A9.1) is
   shown unconfirmed, `key ≈ value ⟨proposed by assistant #seq · unconfirmed⟩`,
   not hidden or suppressed; nothing stops a later model from reading it and
   restating it.
+- That only the compiled packet is bounded and only it is receipted. Recall
+  results and the check prompt used to be appended to a request with neither
+  cap nor record; every provider request of a turn is now `≤ B` by
+  construction (`fitRound`) and receipted in `Packet.rounds`, chained into the
+  assistant episode's `meta.roundsDigest` (KERNEL A10.3).
 
 ## 15. Where the mechanism exceeds the evidence
 
@@ -340,7 +412,17 @@ it pages it.
    route at the 1,000,000-turn checkpoint; paraphrase without lexical overlap
    is still not found deterministically, and precision on real conversation is
    unmeasured.
-9. **The verification round (KERNEL A9.5) fires only for names the ledger
-   recorded as dropped.** Its effect on answers is unmeasured: row 12 shows
-   reader-facing manifests help some models and not others, and that is the
-   closest evidence we have to how a model treats a `⟨pylos check⟩` prompt.
+9. **The verification round (KERNEL A9.5, A10.1, A10.4) fires only for names
+   the ledger recorded as dropped from `Support(K_t)`.** Its effect on answers
+   is unmeasured: whether the reissued round actually corrects a stated value,
+   how often `status` lands on `confirmed` vs `revised` on natural text, and
+   how a model treats a `⟨pylos check⟩` prompt at all are not in any bench
+   result — row 12 (reader-facing manifests help some models, not others) is
+   the closest evidence we have, and it is about a different manifest.
+10. **Support vs presence (KERNEL A10.1) is unmeasured on natural language.**
+    The bench plants poison at the atom level (A9.1) and checks the frontier
+    slot mechanically; it does not measure how often a natural draft restates
+    a value it only saw in capsule prose or in its own earlier turn, nor the
+    precision of the check round's page selection outside the synthetic
+    corpus. The mechanism is exact by construction; its natural-language
+    precision is not measured.
