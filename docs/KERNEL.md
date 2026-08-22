@@ -302,3 +302,73 @@ landing page renders the same numbers. A live variant (`--live --model grok-4.3
 --turns 2000`) then asks the trap question through two packet builders —
 rolling-summary baseline vs Pylos — against the real provider and records both
 answers. The claim the landing page makes must be the claim the bench proves.
+
+---
+
+# Amendments v1.1 — binding (adopted from `docs/KERNEL_REVIEW.md`)
+
+Where an amendment conflicts with the text above, the amendment wins.
+
+## A1. `names(x)` is defined exactly (§2, §3)
+
+* **number**: `-?\d[\d,]*(?:\.\d+)?` → strip commas and trailing zeros; keep a following alphabetic unit token ≤ 6 chars (`"483112"`, `"3.2 ms"`). Ignore bare integers < 32 and 4-digit years (dates).
+* **date**: ISO `YYYY-MM-DD`, `Month D, YYYY`, `D Month YYYY`, `MM/DD/YYYY` → `YYYY-MM-DD`; month+year → `YYYY-MM`.
+* **quote**: text inside `"…"`, `“…”`, `'…'` with ≥ 3 words → name = first six words, NFKC, case-folded, punctuation stripped (the quote-head).
+* **code**: backticked spans; tokens matching `[A-Za-z_]\w*(\.\w+)+`, `snake_case` with ≥ 1 `_`, `camelCase` with an internal capital, filenames with an extension.
+* **entity**: runs of capitalized tokens not at sentence start (or ≥ 2 consecutive anywhere); NFKC, case-fold, strip possessive `'s`, collapse whitespace; max 6 tokens / 64 chars. No stemming.
+* **atom**: every atom key and its value (value normalized as above).
+* Stoplist of ~200 capitalized function words (I, The, Monday, June, English …). Cap 64 names per episode by kind priority `quote > number > code > date > atom > entity`. A name present in > 2% of the last 10,000 episodes becomes a **stop-name**: still recorded, never auto-routed (routable by explicit `recall`).
+
+## A2. Ledger completeness, and `loss` as a range query (§3)
+
+Conservation alone is satisfied by an empty ledger. The load-bearing invariant is **completeness**:
+
+```
+for every capsule c:  names(episodes[c.from..c.to]) ⊆ names(c.text) ∪ ledger(c)
+ledger(c) := { loss rows with seq ∈ [c.from, c.to] and resolved_by IS NULL }
+```
+
+`loss` rows are written once, at the deepest drop (the first capsule whose text no longer contains the name), so the table is O(names), not O(names·levels). `carried(c)` is implicit (the range query); `capsule.carried_count` is a cached count. Tests check both conservation and completeness by recomputation from episodes.
+
+## A3. Residency is decoupled from the hierarchy (§4)
+
+The hierarchy (leaf 32, fan-out 8) remains for ledger construction and the timeline rail, but the **resident capsule set is fixed-size**: one **rolling root** covering `[1, a)`, the ≤ 2 most recent level-1 capsules, and the ≤ 2 most recent level-0 capsules. When a capsule leaves the window, the root is recompacted: `root := writer(root.text ‖ leaving.text)` truncated to `rootTokens`; its dropped names are written to `loss` like any capsule (rows 18/37/38 license this: loss is contraction-gated and conserved). Capsule token budgets derive from `B`: leaf `max(150, B/40)`, mid `max(200, B/32)`, root `max(300, B/16)` ⇒ resident capsule tokens ≤ 18% of `B` by construction. A level-k capsule seals in the same transaction as the episode with `seq mod (32·8^k) = 0`.
+
+The header's turn count grows by digits; nothing else in the packet grows with archive size.
+
+## A4. The routing rule (§5.1), search trigger (§5.3), and caps
+
+Page `n` iff `n ∈ names(q_t) ∪ names(previous assistant turn)` ∧ `n` has an unresolved `loss` row ∧ `n ∉ names(resident part of K_t)` ∧ `n` is not a stop-name. Numbers match exact, or within 1% relative, or equal after rounding to 0/1 dp; everything else exact normalized string. Rank by kind priority, then most recent locator; dedupe by seq; skip names whose locator seq is already resident. Serve at most `P_max = floor(pagedSlot / 450)` pages (3 at 8k, 13 at 32k); neighbours ±1 only while budget remains. Record per-kind precision in `packet.pages`.
+
+Lexical search fires only when the query contains a question mark or interrogative **and** ≥ 1 name that is neither resident nor in the ledger; `k = 2`; trigger `search`; counted against `P_max`.
+
+HISTORICAL atoms are **never** resident by default (row 41: all-as-of state is identity-like); only the §5.2 trigger brings them in. The header shows `historical: n`; the ledger digest lists ≤ 3 most recently changed keys. Frontier eviction order: pinned → kind priority (rule/preference, decision, identity, task, fact, promise, hypothesis) → recency; each eviction writes a `loss` row of kind `atom`. Token counting applies to the rendered packet string. For models with `supportsTools=false`, the view contract says "say you would need to check" instead of "call `recall`" and `P_max` is raised by one.
+
+## A5. Hash chain canonicalization and `forget` (§1, §8)
+
+```
+hash_i = sha256(hash_{i-1} ‖ cjson({v:1, seq, ts, role, model, provider, content_hash, meta_hash}))
+cjson  = UTF-8, byte-sorted keys, no whitespace, integers only, strings as-is (no NFC)
+content_hash = sha256(utf8(content))                      -- stored column
+meta_hash    = sha256(cjson(pick(meta, blob, mime, name, size, from, to)))   -- immutable meta only
+```
+
+`forget` replaces `content` (and deletes the FTS row via the external-content delete trigger first) but keeps `content_hash`; `verify()` checks the chain over stored hashes and, for non-removed rows, `sha256(content) == content_hash`. Checkpoints every 4,096 store `(seq, hash)`.
+
+## A6. Transactions per turn (§6)
+
+* **tx A**: user/attachment episodes + packet row with `status='pending'`.
+* **tx B**: assistant episode + rule atoms + any capsules sealed + packet `status='done'` (+ pages).
+* **tx C** (async, optional): model-extracted atoms, frontier-only; sealed capsules are never rewritten.
+
+`PRAGMA journal_mode=WAL; synchronous=FULL` for A/B (NORMAL allowed in bench). A dangling `pending` packet after restart renders as *no reply* and the user turn is retried on the next send.
+
+## A7. Packet retention and export (§7)
+
+`packet.messages` is kept only for the most recent 1,000 packets; every packet keeps `digest`, `resident[]`, `pages`, `ledger`, `compilerVersion`. The X-ray re-renders older packets from `resident[]` and asserts the digest (or labels the view "reconstructed").
+
+Export: AES-256-GCM over a 1 MiB chunked stream (per-chunk nonce = base ‖ counter; AAD = cleartext header `{v, kdf, salt, params, threadId, headSeq, headHash, partial?:{from,to,prevHash}}`), scrypt `N=2^17, r=8, p=1` preferred (PBKDF2-SHA256 ≥ 600k fallback), so import can stream-verify a million-episode bundle. `manifest.json` carries per-file sha256 and the `loss` row count; import recomputes `dropped()` on a sample of capsules and refuses on disagreement.
+
+## A8. Wording
+
+"Recall 1.00" means *recall 1.00 by construction for names the extractor recognizes* (THEORY §15). Corrections whose key matches nothing create a new fact (never silently dropped); correction key = `slug(kind + subject)`. Index `atom(thread_id, phase, kind, valid_from_seq)`.
