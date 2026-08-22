@@ -6,7 +6,7 @@
     <title>Pylos — one conversation, every model, nothing forgotten silently</title>
     <meta
       name="description"
-      content="Pylos is a desktop chat that never has to end. It keeps the exact, hash-chained archive of every turn, compiles a bounded view for whatever model you are using now, and records what each compaction lost so it can page the exact material back before the model answers."
+      content="Pylos is a chat that never has to end — in the browser or on your desktop. It keeps the exact, hash-chained archive of every turn, compiles a bounded view for whatever model you are using now, and records what each compaction lost so it can page the exact material back before the model answers."
     />
     <link rel="canonical" href="https://pylos.vercel.app/" />
     <meta name="theme-color" content="#F4F1EA" media="(prefers-color-scheme: light)" />
@@ -70,9 +70,10 @@
           pylos
         </a>
         <nav class="nav__links" aria-label="Primary">
-          <a href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
-          <a href="https://github.com/jack-chaudier/pylos">GitHub</a>
-          <a class="is-accent" href="#download">Download</a>
+          <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
+          <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos">GitHub</a>
+          <a href="#download">Download</a>
+          <a class="is-accent" href="/app/" data-app-url>Open app</a>
         </nav>
       </div>
     </header>
@@ -81,7 +82,7 @@
       <!-- ── hero ─────────────────────────────────────────────────────── -->
       <section class="hero">
         <div class="wrap">
-          <p class="mono hero__overline">Open source · Apache-2.0 · Mac + Linux</p>
+          <p class="mono hero__overline">Open source · Apache-2.0 · Web · Mac + Linux</p>
           <h1 class="hero__title">Talk forever.</h1>
           <p class="hero__lede">
             A conversation that outlives every model. Pylos keeps the exact record, compiles only
@@ -89,10 +90,11 @@
             invention.
           </p>
           <div class="hero__cta">
-            <button class="btn btn--primary" type="button" data-play-aperture>
+            <a class="btn btn--primary" href="/app/" data-app-url>Open Pylos →</a>
+            <a class="btn btn--ghost" href="#download">Download</a>
+            <button class="btn btn--quiet" type="button" data-play-aperture>
               Watch turn 1,000,000
             </button>
-            <a class="btn btn--ghost" href="#download">Download</a>
           </div>
           <p class="mono hero__line">One conversation · Every model · Nothing forgotten silently</p>
         </div>
@@ -169,9 +171,14 @@
             <button class="btn btn--quiet" type="button" data-ap-replay>Replay</button>
           </div>
           <p class="ap__note">
-            Everything above is computed in this tab from seed <code>0x50594C4F</code> — the same
-            compiler the desktop app runs, over a synthetic thread rather than a real one. How long
-            it takes and how fast it goes depend on your machine. The size of the packet does not.
+            This is an exhibit, not the proof: the browser-safe subset of the compiler
+            (<code>@pylos/core/pure</code> — no vault, no chain, no index) run in this tab from seed
+            <code>0x50594C4F</code> over a synthetic thread. It computes real capsules, a real
+            ledger and a real packet; if the ledger does not route, it says so. The proof is the
+            deterministic million-turn bench artifact in
+            <a class="link" href="https://github.com/jack-chaudier/pylos/tree/main/bench/results"
+              >bench/results</a
+            >. How long the run takes depends on your machine; the size of the packet does not.
             Archive bytes are the text of the episodes plus their chain records; nothing is written
             to disk.
           </p>
@@ -293,15 +300,20 @@
       <section class="download" id="download" tabindex="-1" aria-labelledby="dl-title">
         <div class="wrap">
           <div class="sec__head">
-            <p class="mono">Download · v1.0.0 · Apache-2.0</p>
+            <p class="mono">Download · v1.1.0 · Apache-2.0</p>
             <h2 class="sec__title" id="dl-title">One window. One composer. No vocabulary.</h2>
+            <p class="sec__lede">
+              <a class="link" href="/app/" data-app-url>Open Pylos in the browser</a> — sign in with
+              xAI and the thread is there. The desktop app is the local-first way in: the same
+              vault format, the same kernel, running entirely on your machine.
+            </p>
           </div>
 
           <div class="dl__grid">
             <article class="card" data-os="mac">
               <p class="card__meta">macOS 13+ · Apple silicon &amp; Intel</p>
               <h3 class="card__os">macOS</h3>
-              <p class="card__meta">pylos-1.0.0.dmg</p>
+              <p class="card__meta">pylos-1.1.0.dmg</p>
               <a
                 class="btn btn--primary"
                 href="https://github.com/jack-chaudier/pylos/releases"
@@ -311,7 +323,7 @@
             <article class="card" data-os="linux">
               <p class="card__meta">Debian / Ubuntu · .deb (AppImage soon)</p>
               <h3 class="card__os">Linux</h3>
-              <p class="card__meta">pylos-1.0.0.deb</p>
+              <p class="card__meta">pylos-1.1.0.deb</p>
               <a
                 class="btn btn--primary"
                 href="https://github.com/jack-chaudier/pylos/releases"
@@ -334,8 +346,9 @@
             </button>
           </div>
           <p class="dl__note">
-            Builds are unsigned for now; on macOS, right-click → Open the first time. Source, checksums
-            and every release live on
+            A thread exported from the browser imports into the desktop app and back; the
+            <code>.pylos</code> bundle is the same either way. Builds are unsigned for now; on
+            macOS, right-click → Open the first time. Source, checksums and every release live on
             <a class="link" href="https://github.com/jack-chaudier/pylos/releases">GitHub</a>.
           </p>
         </div>
@@ -347,7 +360,7 @@
       <div class="wrap">
         <p class="footer__line">The tablets survived because the palace burned.</p>
         <ul class="footer__meta">
-          <li>Pylos v1.0.0</li>
+          <li>Pylos v1.1.0</li>
           <li>Apache-2.0</li>
           <li><a href="https://github.com/jack-chaudier/pylos">GitHub</a></li>
           <li>

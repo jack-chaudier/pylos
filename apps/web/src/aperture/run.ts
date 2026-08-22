@@ -48,7 +48,10 @@ export interface RunState {
   packet: Packet;
   /** Names pushed into the ledger by the most recent seals, newest first. */
   strip: StripEntry[];
+  /** Null once `routed` is true means: nothing in the ledger matched the question. */
   recovered: Recovered | null;
+  /** True once the trap question has been put to the ledger. */
+  routed: boolean;
   done: boolean;
 }
 
@@ -81,6 +84,7 @@ export class ApertureRun {
   private pageIndex = new Map<string, LossEntry>();
   private watched: Set<string>;
   private recovered: Recovered | null = null;
+  private routed = false;
   private revisionText = "";
 
   constructor() {
@@ -107,6 +111,7 @@ export class ApertureRun {
     this.sealsSinceCompile = 0;
     this.pageIndex = new Map();
     this.recovered = null;
+    this.routed = false;
     this.revisionText = "";
     this.frontierCache = null;
     this.packet = this.compile();
@@ -138,14 +143,14 @@ export class ApertureRun {
       }
       if (performance.now() - start >= msBudget) break;
     }
-    if (this.seq >= this.total && !this.recovered) this.trap();
+    if (this.seq >= this.total && !this.routed) this.trap();
     return appended;
   }
 
   /** Run to completion with no pacing — used for reduced motion and for the build-time snapshot. */
   runToEnd(): RunState {
     while (this.seq < this.total) this.append();
-    if (!this.recovered) this.trap();
+    if (!this.routed) this.trap();
     return this.state();
   }
 
@@ -273,15 +278,21 @@ export class ApertureRun {
   /**
    * Turn 1,000,000. The question names things the capsules no longer contain,
    * so ledger routing (§5.1) pages the exact span back before the model answers.
+   *
+   * A recovery is only ever shown when the ledger actually routed to the
+   * revision *and* that turn really went through this run. Anything else is a
+   * run that did not recover, and the page says so — a page about not
+   * inventing recall does not get to invent a recall.
    */
   private trap(): void {
+    this.routed = true;
     const records: PageRecord[] = K.routeByLedger({
       query: TRAP_QUESTION,
       index: this.pageIndex,
     });
-    const hit = records.find((r) => r.seq === REVISION_SEQ) ?? records[0];
-    const text = this.revisionText || REVISION_TEXT;
-    if (hit) {
+    const hit = records.find((r) => r.seq === REVISION_SEQ);
+    if (hit && this.revisionText) {
+      const text = this.revisionText;
       const span = hit.span;
       const quote = span ? text.slice(span[0], Math.min(text.length, span[1])) : hit.name;
       this.recovered = {
@@ -291,7 +302,7 @@ export class ApertureRun {
         quote: quote || hit.name,
       };
     } else {
-      this.recovered = { seq: REVISION_SEQ, text, trigger: "ledger", quote: "additive-only" };
+      this.recovered = null;
     }
     this.packet = this.compile();
   }
@@ -309,6 +320,7 @@ export class ApertureRun {
       packet: this.packet,
       strip: this.strip.slice().reverse(),
       recovered: this.recovered,
+      routed: this.routed,
       done: this.seq >= this.total,
     };
   }

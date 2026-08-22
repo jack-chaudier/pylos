@@ -4,9 +4,15 @@
   "installCommand": "",
   "outputDirectory": "dist",
   "framework": null,
+  "rewrites": [
+    { "source": "/app", "destination": "https://pylos-backend.invalid/app/" },
+    { "source": "/app/:path*", "destination": "https://pylos-backend.invalid/app/:path*" },
+    { "source": "/api/:path*", "destination": "https://pylos-backend.invalid/api/:path*" },
+    { "source": "/v1/:path*", "destination": "https://pylos-backend.invalid/v1/:path*" }
+  ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/((?!app(?:/|$)|api/|v1/).*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
