@@ -62,7 +62,7 @@ jobs:
           mkdir -p stage && cp apps/desktop/src-tauri/binaries/pylos-server-${{ matrix.target }} stage/pylos && chmod +x stage/pylos
           tar -C stage -czf out/pylos-$plat-$arch.tar.gz pylos
           find apps/desktop/src-tauri/target -path '*bundle*' \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
-          cd out && for f in *; do mv "$f" "$(echo "$f" | sed -E 's/^Pylos_?/pylos-/; s/_aarch64|_amd64|_x86_64//')"; done; ls -la; shasum -a 256 * > SHA256SUMS-${{ matrix.target }}.txt
+          cd out && for f in *; do n="$(echo "$f" | sed -E 's/^Pylos_?/pylos-/; s/_aarch64|_amd64|_x86_64//')"; [ "$f" = "$n" ] || mv "$f" "$n"; done; ls -la; shasum -a 256 * > SHA256SUMS-${{ matrix.target }}.txt
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
