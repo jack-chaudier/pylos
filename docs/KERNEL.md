@@ -506,7 +506,7 @@ turn, at most.
 
 ## A10. v1.2 amendments
 
-Five changes adopted after the v1.1 product audit. Each subsection names the
+Seven changes adopted after the v1.1 product audit. Each subsection names the
 earlier text it amends; where they conflict, A10 wins.
 
 ### A10.1 Presence is not support (§4, §5, A4, A9.5)
@@ -652,3 +652,68 @@ as lost stays pageable, and a capsule's text is not authority.
 The replay is `O(archive)`, once, on the first open of an affected vault; a vault
 with no tell pays one indexed query. Vaults created by this version or later are
 marked at creation and never replay.
+### A10.6 Forgetting is complete and chain-bound (§8, A5)
+
+`forget(target)` removes the targeted episodes' text and everything derived from
+it that still carries that text.
+
+* **Capsules.** Every capsule whose range contains a removed seq has its text
+  re-derived over the surviving source: each line the extractive writer emitted
+  from a removed episode — its `⟨#seq⟩` locator says which — is deleted, as is
+  any unlocated line (only a model writer produces those) that carries a name of
+  the removed text. The capsule's `kept` index loses the entries whose locator is
+  a removed episode, so a later compaction cannot resurrect a pointer into
+  forgotten material. Names that leave the text this way are re-accounted against
+  the capsule's *surviving* source vocabulary — level 0: the surviving episodes
+  in the range and the atoms whose validity starts there; above level 0: the
+  surviving `kept` of the capsule's children, or its own `kept` for the rolling
+  root — and the resulting `dropped` entries the ledger does not already hold are
+  appended, never with a locator in removed material. The `capsule.dropped`
+  column and existing `loss` rows are not rewritten: the ledger only ever gains
+  rows and `resolved_by` marks.
+* **Packets.** A packet loses its `messages` when they could still carry the
+  removed material: its `turn_seq` is a removed seq, its `resident[]` names one
+  or a capsule whose text just changed, its `pages[]` names one, or its rendered
+  text still contains a routing name of the removed material — a frontier
+  certificate read from the removed sentence leaves no structural trace, so the
+  text is the last check, and the error is in the safe direction. `digest`,
+  `resident`, `ledger`, `pages` and `compilerVersion` stay, and the X-ray labels
+  the packet reconstructed — the treatment A7 already gives packets past the
+  retention window.
+* **Blobs.** An attachment's bytes are deleted from `objects/` and its `blob` row
+  dropped once no episode that is not itself removed references its hash;
+  reference counting is over `meta.blob` across the whole vault, not one thread.
+  `meta.blob` stays on the removed episode — it is inside `meta_hash`, and the
+  chain is immutable — so the archive still proves an attachment was there.
+* **Assistant echoes are not guessed at.** An assistant turn that restated the
+  forgotten text is an episode of its own, and it is removed only when the user
+  targets it. What `forget` does instead is name the candidates: the tombstone
+  records `echoes`, the seqs of assistant episodes that carry any routing name of
+  the removed text, so the interface can ask ("this reply quoted it — forget it
+  too?"). Silence would be worse than a question.
+
+Removal is an **append-only event**. After the redaction, `forget` appends one
+`system` episode, `⟦removed #a, #b · <tombstone>⟧`, and records its seq on the
+tombstone; the chain therefore records that a removal happened, when, and against
+which tombstone. `verify()` requires, for every episode with `meta.removed =
+true`: a `tombstone` row whose id is the one in `meta.tombstone`, and a later
+`system` episode at that tombstone's `removal_seq` whose content — which is
+covered by `content_hash`, and so by the chain — names both that seq and that
+tombstone. A `removed` flag set by hand in the database fails verification
+instead of skipping the `content_hash` check. Tombstones written before this
+amendment carry `removal_seq = 0` and are accepted as legacy: a chain event
+cannot be minted retroactively without rewriting the chain.
+
+### A10.7 Export is a reachability closure; import restores receipts (§7, A7)
+
+A bundle carries the blobs its own episodes reach, not the vault's: the object
+set is `{meta.blob of the exported episodes that are not removed}`. A profile
+holds one thread today but is not required to; exporting thread A must never ship
+thread B's attachments, and a partial export ships only what its range reaches.
+
+`packets.jsonl` is restored on import — `digest`, `resident`, `ledger`, `pages`,
+`status`, `compilerVersion`, and `messages` when the export carried them — so the
+X-ray survives a Laptop Funeral: an imported thread can still show what each turn
+was compiled from, and re-render older packets from `resident[]` (A7). Import
+checks the restored packet count against `manifest.counts.packets` and refuses on
+disagreement, as it does for the per-file digests.

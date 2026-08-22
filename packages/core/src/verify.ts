@@ -10,6 +10,7 @@
  */
 
 import type { EpisodeMeta, Seq } from "@pylos/protocol";
+import { removalRecord } from "./forget.ts";
 import { chainHash, genesisHash, sha256 } from "./hash.ts";
 import { CHECKPOINT_EVERY, chainRecord, metaHashOf, type Vault, VaultError } from "./vault.ts";
 
@@ -96,7 +97,19 @@ export function verify(vault: Vault, threadId: string, options: { full?: boolean
         reason: "hash mismatch",
       };
     }
-    if (meta.removed !== true && sha256(row.content) !== row.content_hash) {
+    if (meta.removed === true) {
+      const problem = removalProblem(vault, threadId, row.seq, meta.tombstone);
+      if (problem !== null) {
+        return {
+          ok: false,
+          headHash: thread.headHash,
+          checkedTo,
+          checkedFrom: startSeq,
+          failedAt: row.seq,
+          reason: problem,
+        };
+      }
+    } else if (sha256(row.content) !== row.content_hash) {
       return {
         ok: false,
         headHash: thread.headHash,
@@ -122,4 +135,35 @@ export function verify(vault: Vault, threadId: string, options: { full?: boolean
     };
   }
   return { ok: true, headHash: thread.headHash, checkedTo, checkedFrom: startSeq };
+}
+
+/**
+ * Why this episode's `removed` flag is not backed by a removal (KERNEL A10.6),
+ * or `null` if it is.
+ *
+ * `meta.removed` is outside `meta_hash` — it has to be, since the chain is
+ * immutable — so on its own it is a way to skip the `content_hash` check by
+ * editing the database. It is backed instead by two records the chain does
+ * cover: a tombstone, and a later `system` episode whose content names both this
+ * seq and that tombstone.
+ */
+function removalProblem(vault: Vault, threadId: string, seq: Seq, tombstoneId: unknown): string | null {
+  if (typeof tombstoneId !== "string" || tombstoneId.length === 0) return "removed without a tombstone";
+  const tombstone = vault.db
+    .query("SELECT removal_seq FROM tombstone WHERE id = ? AND thread_id = ?")
+    .get(tombstoneId, threadId) as { removal_seq: number | null } | undefined;
+  if (tombstone == null) return "removed without a tombstone";
+  // Removals from before the amendment have no chain event and cannot be given
+  // one retroactively; the migration marks them, and nothing else may be 0.
+  if (tombstone.removal_seq === 0) return null;
+  if (tombstone.removal_seq === null || tombstone.removal_seq <= seq) {
+    return "removed without a chain-bound removal record";
+  }
+  const record = vault.db
+    .query("SELECT role, content FROM episode WHERE thread_id = ? AND seq = ?")
+    .get(threadId, tombstone.removal_seq) as { role: string; content: string } | undefined;
+  if (record == null || record.role !== "system" || !removalRecord(record.content, tombstoneId).has(seq)) {
+    return "removed without a chain-bound removal record";
+  }
+  return null;
 }

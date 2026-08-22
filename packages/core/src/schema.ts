@@ -187,10 +187,25 @@ INSERT INTO episode_fts(episode_fts) VALUES('rebuild');
 ALTER TABLE packet ADD COLUMN rounds TEXT;
 `,
   },
+  {
+    name: "008-removal-record",
+    sql: `
+-- KERNEL A10.6: removal is an append-only event. \`removal_seq\` is the seq of the
+-- \`system\` episode that records the removal in the chain, and \`echoes\` the
+-- assistant turns that carry a routing name of the removed text.
+ALTER TABLE tombstone ADD COLUMN removal_seq INTEGER;
+ALTER TABLE tombstone ADD COLUMN echoes TEXT;
+
+-- Tombstones written before this amendment are legacy: their removal predates the
+-- chain event, and a chain event cannot be minted retroactively. \`verify\` accepts
+-- 0 and rejects NULL, so a row inserted by hand cannot pass as one of these.
+UPDATE tombstone SET removal_seq = 0 WHERE removal_seq IS NULL;
+`,
+  },
 ];
 
 /** The code migration that replays derived atom state under v1.1 rules (KERNEL A10.5). */
-export const AUTHORITY_REPLAY = "008-authority-replay";
+export const AUTHORITY_REPLAY = "009-authority-replay";
 
 /** Counter keys maintained incrementally (see `counter`). */
 export const COUNTERS = {

@@ -17,10 +17,11 @@ import type {
   Packet,
   PacketStatus,
   Role,
+  Seq,
   Thread,
   ThreadSettings,
 } from "@pylos/protocol";
-import type { StoredCapsule } from "./vault.ts";
+import type { StoredCapsule, Tombstone } from "./vault.ts";
 
 export interface EpisodeRow {
   seq: number;
@@ -107,6 +108,29 @@ export interface ThreadRow {
   head_seq: number;
   head_hash: string;
   settings: string;
+}
+
+export interface TombstoneRow {
+  id: string;
+  thread_id: string;
+  target: string;
+  reason: string;
+  created_at: number;
+  /** NULL only on a row no `forget` wrote; 0 means legacy (KERNEL A10.6). */
+  removal_seq: number | null;
+  echoes: string | null;
+}
+
+export function toTombstone(row: TombstoneRow): Tombstone {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    target: row.target,
+    reason: row.reason,
+    createdAt: row.created_at,
+    removalSeq: row.removal_seq ?? 0,
+    echoes: row.echoes === null ? [] : (JSON.parse(row.echoes) as Seq[]),
+  };
 }
 
 export function toThread(row: ThreadRow): Thread {

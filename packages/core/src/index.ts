@@ -86,6 +86,7 @@ export {
   phaseCounter,
   pylosHome,
   type StoredCapsule,
+  type Tombstone,
   Vault,
   VaultError,
   type VaultOptions,
