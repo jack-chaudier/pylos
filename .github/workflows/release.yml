@@ -52,6 +52,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
+          # headless server/CLI binary (kernel + server in one file) for install.sh
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin) plat=macos; arch=arm64 ;;
+            x86_64-apple-darwin) plat=macos; arch=x64 ;;
+            x86_64-unknown-linux-gnu) plat=linux; arch=x64 ;;
+            *) plat=unknown; arch=unknown ;;
+          esac
+          mkdir -p stage && cp apps/desktop/src-tauri/binaries/pylos-server-${{ matrix.target }} stage/pylos && chmod +x stage/pylos
+          tar -C stage -czf out/pylos-$plat-$arch.tar.gz pylos
           find apps/desktop/src-tauri/target -path '*bundle*' \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
           cd out && for f in *; do mv "$f" "$(echo "$f" | sed -E 's/^Pylos_?/pylos-/; s/_aarch64|_amd64|_x86_64//')"; done; ls -la; shasum -a 256 * > SHA256SUMS-${{ matrix.target }}.txt
       - uses: softprops/action-gh-release@v2
