@@ -30,13 +30,24 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libssl-dev libfuse2 file
       - run: bun install --frozen-lockfile
       - run: bun run test
       - name: Build sidecar (kernel + server, single binary)
         run: PYLOS_TARGET_TRIPLE=${{ matrix.target }} bun run --cwd packages/server build:sidecar
-      - name: Build desktop
-        run: bun run --cwd apps/desktop tauri build --bundles ${{ matrix.bundles }} --target ${{ matrix.target }}
+      - name: Build desktop (macOS)
+        if: runner.os == 'macOS'
+        run: bun run --cwd apps/desktop tauri build --bundles dmg --target ${{ matrix.target }}
+      - name: Build desktop (Linux deb)
+        if: runner.os == 'Linux'
+        run: bun run --cwd apps/desktop tauri build --bundles deb --target ${{ matrix.target }}
+      - name: Build desktop (Linux AppImage)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        env:
+          NO_STRIP: "true"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: bun run --cwd apps/desktop tauri build --bundles appimage --target ${{ matrix.target }}
       - name: Collect artifacts
         shell: bash
         run: |
