@@ -42,7 +42,7 @@ export {
   residentLeafCount,
   sourceNamesForRange,
 } from "./compact.ts";
-export { type CompileOptions, compile, packetText } from "./compile.ts";
+export { type Compilation, type CompileOptions, compile, compileView } from "./compile.ts";
 export { type ForgetResult, type ForgetTarget, forget } from "./forget.ts";
 export { canonicalHash, chainHash, genesisHash, newId, sha256 } from "./hash.ts";
 export {
@@ -61,8 +61,9 @@ export {
 // The pure layer is re-exported for convenience; `@pylos/core/pure` is the
 // browser-safe entry point that carries no Bun or SQLite import.
 export * from "./pure/index.ts";
+export { needsAuthorityReplay, replayAtoms } from "./replay.ts";
 export { ftsQuery, ftsTerms } from "./rows.ts";
-export { COUNTERS, MIGRATIONS } from "./schema.ts";
+export { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
 export { stats } from "./stats.ts";
 export {
   handoff,
@@ -70,13 +71,16 @@ export {
   type ProviderEvent,
   type ProviderRequest,
   type RunTurnOptions,
+  roundsDigest,
   runTurn,
   type TurnResult,
 } from "./turn.ts";
 export {
   CHECKPOINT_EVERY,
   COMPILER_VERSION,
+  chainRecord,
   type EpisodeInput,
+  metaHashOf,
   openVault,
   PACKET_MESSAGE_RETENTION,
   phaseCounter,

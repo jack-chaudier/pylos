@@ -9,9 +9,9 @@
  * is what the tamper tests use.
  */
 
-import type { Seq } from "@pylos/protocol";
-import { canonicalHash, chainHash, genesisHash, sha256 } from "./hash.ts";
-import { CHECKPOINT_EVERY, chainRecord, type Vault, VaultError } from "./vault.ts";
+import type { EpisodeMeta, Seq } from "@pylos/protocol";
+import { chainHash, genesisHash, sha256 } from "./hash.ts";
+import { CHECKPOINT_EVERY, chainRecord, metaHashOf, type Vault, VaultError } from "./vault.ts";
 
 export interface VerifyResult {
   ok: boolean;
@@ -24,8 +24,6 @@ export interface VerifyResult {
   failedAt?: Seq;
   reason?: string;
 }
-
-const IMMUTABLE_META = ["blob", "mime", "name", "size", "from", "to"] as const;
 
 interface Row {
   seq: number;
@@ -75,11 +73,7 @@ export function verify(vault: Vault, threadId: string, options: { full?: boolean
         reason: "prev_hash mismatch",
       };
     }
-    const meta = JSON.parse(row.meta) as Record<string, unknown>;
-    const picked: Record<string, unknown> = {};
-    for (const key of IMMUTABLE_META) {
-      if (meta[key] !== undefined) picked[key] = meta[key];
-    }
+    const meta = JSON.parse(row.meta) as EpisodeMeta;
     const expected = chainHash(
       prevHash,
       chainRecord({
@@ -89,7 +83,7 @@ export function verify(vault: Vault, threadId: string, options: { full?: boolean
         ...(row.model === null ? {} : { model: row.model }),
         ...(row.provider === null ? {} : { provider: row.provider }),
         contentHash: row.content_hash,
-        metaHash: canonicalHash(picked),
+        metaHash: metaHashOf(meta),
       }),
     );
     if (expected !== row.hash) {

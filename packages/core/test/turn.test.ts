@@ -1,6 +1,19 @@
 import { afterAll, expect, test } from "bun:test";
 import type { ChatMessage, TurnEvent } from "@pylos/protocol";
-import { compact, handoff, type Provider, runTurn, sha256, stats, verify } from "../src/index.ts";
+import {
+  approxTokens,
+  atomize,
+  compact,
+  fitRound,
+  handoff,
+  type Provider,
+  packetText,
+  roundsDigest,
+  runTurn,
+  sha256,
+  stats,
+  verify,
+} from "../src/index.ts";
 import { cleanup, rng, syntheticTurn, tempVault } from "./helpers.ts";
 
 afterAll(cleanup);
@@ -213,7 +226,7 @@ test("a draft that states a lost value is checked against the archive (KERNEL A9
   expect(result.text).toBe(result.assistantEpisode.content);
   expect(result.assistantEpisode.meta.check).toEqual({
     names: ["48250 usd"],
-    revised: true,
+    status: "revised",
     draftSha256: sha256("The amount was 48250 usd."),
   });
   expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
@@ -237,7 +250,9 @@ test("a draft that stays inside the view costs exactly one provider round", asyn
   });
   expect(rounds).toBe(1);
   expect(events.some((e) => e.type === "check")).toBe(false);
-  expect(result.assistantEpisode.meta.check).toBeUndefined();
+  // The check ran and had nothing to check; the receipt says so (KERNEL A10.4).
+  expect(result.assistantEpisode.meta.check?.status).toBe("none");
+  expect(result.assistantEpisode.meta.check?.names).toEqual([]);
 });
 
 test("a failed check round keeps the draft: a reply is never lost to the check", async () => {
@@ -259,12 +274,32 @@ test("a failed check round keeps the draft: a reply is never lost to the check",
     budget: 8192,
   });
   expect(rounds).toBe(2);
-  expect(result.assistantEpisode.content).toBe("The amount was 48250 usd.");
+  // The draft stands — and says, in one kernel line, that it could not be checked.
+  expect(result.assistantEpisode.content).toBe(
+    "The amount was 48250 usd.\n\n" +
+      "⟨pylos: the archive could not be re-read for: 48250 usd — treat these values as unverified⟩",
+  );
   expect(result.assistantEpisode.meta.check).toEqual({
     names: ["48250 usd"],
-    revised: false,
+    status: "check-failed",
     draftSha256: sha256("The amount was 48250 usd."),
   });
+});
+
+test("a check round that reissues the same text is recorded as confirmed", async () => {
+  const { vault, thread } = threadWithLostNumber();
+  const steady: Provider = async function* () {
+    yield { type: "delta", text: "The amount was 48250 usd." };
+    yield { type: "done" };
+  };
+  const result = await runTurn(vault, thread.id, {
+    text: "Tell me the number again.",
+    model: "m",
+    provider: steady,
+    budget: 8192,
+  });
+  expect(result.assistantEpisode.content).toBe("The amount was 48250 usd.");
+  expect(result.assistantEpisode.meta.check?.status).toBe("confirmed");
 });
 
 test("the check serves the user's turn before the model's own earlier turn", async () => {
@@ -323,4 +358,217 @@ test("the check round can be switched off", async () => {
     check: false,
   });
   expect(rounds).toBe(1);
+});
+
+/** An archive where an exact line has been compacted out and lives in the ledger. */
+function threadWithLostLine(line: string, seed = 71) {
+  const { vault, thread } = tempVault();
+  vault.episodes.append(thread.id, { role: "user", content: line });
+  const next = rng(seed);
+  for (let i = 0; i < 300; i += 1) {
+    vault.episodes.append(thread.id, { role: "user", content: syntheticTurn(next, i) });
+  }
+  compact(vault, thread.id, { budget: 8192 });
+  return { vault, thread };
+}
+
+/** A provider that answers `reply` and remembers every request it was sent. */
+function recorder(reply: string): { provider: Provider; seen: ChatMessage[][] } {
+  const seen: ChatMessage[][] = [];
+  const provider: Provider = async function* (request) {
+    seen.push(request.messages);
+    yield { type: "delta", text: reply };
+    yield { type: "done" };
+  };
+  return { provider, seen };
+}
+
+test("the question is not its own witness: the page it names is served (KERNEL A10.1)", async () => {
+  const line = "Kestrel Systems signed the Valletta contract for 48250 usd.";
+  const { vault, thread } = threadWithLostLine(line);
+  const { provider, seen } = recorder("Checking.");
+  const result = await runTurn(vault, thread.id, {
+    text: "Was the contract 48,250 USD?",
+    model: "m",
+    provider,
+    budget: 8192,
+  });
+  // The first request the provider ever sees already contains the exact turn —
+  // recovered by the ledger route, not by the lexical fallback.
+  expect(packetText(seen[0] as ChatMessage[])).toContain(line);
+  expect(result.pages.some((p) => p.trigger === "ledger" && p.resolved && p.seqs.includes(1))).toBe(true);
+  // The current turn is the `query` span, once, and never part of the window.
+  const query = result.packet.resident.filter((r) => r.type === "query");
+  expect(query.map((r) => r.seq)).toEqual([result.userEpisode.seq]);
+  expect(query[0]?.epistemic).toBe("NON_AUTHORITATIVE");
+  expect(result.packet.resident.some((r) => r.type === "recent" && r.seq === result.userEpisode.seq)).toBe(
+    false,
+  );
+});
+
+test("a subject named in the turn is paged from the archive by name", async () => {
+  const line = "Kestrel Systems signed the Valletta contract for 48250 usd.";
+  const { vault, thread } = threadWithLostLine(line, 72);
+  const { provider, seen } = recorder("Looking.");
+  const result = await runTurn(vault, thread.id, {
+    text: "Please recall Kestrel Systems.",
+    model: "m",
+    provider,
+    budget: 8192,
+  });
+  expect(packetText(seen[0] as ChatMessage[])).toContain(line);
+  expect(result.pages.some((p) => p.trigger === "ledger" && p.resolved && p.name === "kestrel systems")).toBe(
+    true,
+  );
+});
+
+test("presence in an assistant turn is not support; presence in a user turn is (KERNEL A10.1)", async () => {
+  const run = async (role: "assistant" | "user") => {
+    const { vault, thread } = threadWithLostLine(
+      "Kestrel Systems signed the Valletta contract for 48250 usd.",
+      role === "assistant" ? 73 : 74,
+    );
+    // Said again, recently, so it is verbatim in the recent window either way.
+    vault.episodes.append(thread.id, { role, content: "The Valletta contract came to 48250 usd." });
+    // A later, empty assistant turn, so the §5.1 route reads that one instead and
+    // the only thing under test is what the resident claim is allowed to support.
+    vault.episodes.append(thread.id, { role: "assistant", content: "Noted." });
+    const { provider } = recorder("The amount was 48250 usd.");
+    return runTurn(vault, thread.id, {
+      text: "Tell me the number again.",
+      model: "m",
+      provider,
+      budget: 8192,
+    });
+  };
+  expect((await run("assistant")).assistantEpisode.meta.check?.status).not.toBe("none");
+  expect((await run("user")).assistantEpisode.meta.check?.status).toBe("none");
+});
+
+test("a leading question the model then echoes is checked against the archive", async () => {
+  const { vault, thread } = tempVault();
+  // The only mention in the archive is the model's own earlier turn.
+  vault.episodes.append(thread.id, {
+    role: "assistant",
+    content: "I believe the Valletta contract came to 48250 usd.",
+  });
+  const next = rng(75);
+  for (let i = 0; i < 300; i += 1) {
+    vault.episodes.append(thread.id, { role: "user", content: syntheticTurn(next, i) });
+  }
+  compact(vault, thread.id, { budget: 8192 });
+  const seen: ChatMessage[][] = [];
+  const drafter: Provider = async function* (request) {
+    seen.push(request.messages);
+    yield { type: "delta", text: "Yes — 48250 usd." };
+    yield { type: "done" };
+  };
+  const result = await runTurn(vault, thread.id, {
+    text: "Was the contract 48,250 USD?",
+    model: "m",
+    provider: drafter,
+    budget: 8192,
+  });
+  expect(result.assistantEpisode.meta.check?.names).toEqual(["48250 usd"]);
+  expect(seen).toHaveLength(2);
+  // The question paged the archive's only mention — the model's own earlier turn,
+  // labelled as such — and a labelled proposal is not support, so the check ran.
+  expect(packetText(seen[0] as ChatMessage[])).toContain("⟦recovered #1 · assistant · ledger:48250 usd⟧");
+  expect(result.packet.resident.find((r) => r.type === "paged" && r.seq === 1)?.epistemic).toBe("PROPOSED");
+});
+
+test("the user's correction is a certificate in the first request (KERNEL A10.2)", async () => {
+  const { vault, thread } = tempVault();
+  const first = vault.episodes.append(thread.id, { role: "user", content: "I live in Lisbon." });
+  atomize(vault, thread.id, [first.seq]);
+  const { provider, seen } = recorder("Noted.");
+  await runTurn(vault, thread.id, { text: "I moved to Porto.", model: "m", provider, budget: 8192 });
+  const sent = packetText(seen[0] as ChatMessage[]);
+  expect(sent).toContain("user.location = Porto");
+  expect(sent).not.toContain("user.location = Lisbon ⟨#1⟩");
+  expect(vault.atoms.byKey(thread.id, "user.location", "HISTORICAL")[0]?.value).toBe("Lisbon");
+});
+
+test("a provider failure keeps the user's word: the atom is committed (KERNEL A10.2)", async () => {
+  const { vault, thread } = tempVault();
+  const broken: Provider = async function* () {
+    yield { type: "error", message: "provider exploded" };
+  };
+  await expect(
+    runTurn(vault, thread.id, { text: "I live in Porto.", model: "m", provider: broken, budget: 8192 }),
+  ).rejects.toThrow("provider exploded");
+  expect(vault.atoms.byKey(thread.id, "user.location")[0]?.value).toBe("Porto");
+  const { provider, seen } = recorder("Understood.");
+  await runTurn(vault, thread.id, { text: "Where do I live?", model: "m", provider, budget: 8192 });
+  expect(packetText(seen[0] as ChatMessage[])).toContain("user.location = Porto");
+});
+
+test("every provider request of a turn is bounded and receipted (KERNEL A10.3)", async () => {
+  const { vault, thread } = threadWithLostLine(
+    "Kestrel Systems signed the Valletta contract for 48250 usd.",
+    76,
+  );
+  let round = 0;
+  const provider: Provider = async function* () {
+    round += 1;
+    if (round === 1) {
+      yield { type: "tool_call", id: "c1", name: "recall", arguments: JSON.stringify({ seq: 5 }) };
+      yield { type: "done", usage: { inputTokens: 100, outputTokens: 4 } };
+      return;
+    }
+    yield {
+      type: "delta",
+      text: round === 2 ? "The amount was 48250 usd." : "The amount was 48250 usd (checked).",
+    };
+    yield { type: "done", usage: { inputTokens: 200, outputTokens: 8 } };
+  };
+  const result = await runTurn(vault, thread.id, {
+    text: "Tell me the number again.",
+    model: "m",
+    provider,
+    budget: 8192,
+  });
+
+  const rounds = result.packet.rounds ?? [];
+  expect(rounds.map((r) => r.ordinal)).toEqual([0, 1, 2]);
+  // Ordinal 0 is the compiled packet itself.
+  expect(rounds[0]?.messagesDigest).toBe(result.packet.digest);
+  for (const entry of rounds) {
+    expect(entry.tokens).toBeLessThanOrEqual(8192);
+    expect(entry.budget).toBe(8192);
+    expect(entry.status).toBe("done");
+    expect(entry.messagesDigest.length).toBe(64);
+    expect(entry.responseDigest?.length).toBe(64);
+  }
+  // The recall round carries the page it was built from; the check round its own.
+  expect(rounds[1]?.pages.some((p) => p.trigger === "model")).toBe(true);
+  expect(rounds[2]?.pages.some((p) => p.trigger === "check")).toBe(true);
+  // Usage is the turn's, summed across rounds.
+  expect(result.usage).toEqual({ inputTokens: 500, outputTokens: 20 });
+  expect(result.assistantEpisode.meta.roundsDigest).toBe(roundsDigest(rounds));
+  // The receipts are durable, and the digests are stable.
+  const stored = vault.packets.get(thread.id, result.packet.turnSeq);
+  expect(stored?.rounds?.map((r) => r.messagesDigest)).toEqual(rounds.map((r) => r.messagesDigest));
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+});
+
+test("fitRound displaces the oldest window spans, never the header or the prompt", () => {
+  const messages: ChatMessage[] = [
+    { role: "system", content: "H".repeat(400) },
+    { role: "user", content: "oldest ".repeat(60) },
+    { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "recall", args: "{}" }] },
+    { role: "tool", content: "recalled ".repeat(60), toolCallId: "c1", name: "recall" },
+    { role: "user", content: "the prompt this round is about" },
+  ];
+  const budget = 260;
+  const fitted = fitRound(messages, budget);
+  expect(approxTokens(packetText(fitted))).toBeLessThanOrEqual(budget);
+  expect(fitted[0]).toBe(messages[0] as ChatMessage);
+  expect(fitted.at(-1)).toBe(messages.at(-1) as ChatMessage);
+  // The tool result never outlives the call that asked for it.
+  const calls = fitted.filter((m) => m.toolCalls !== undefined).length;
+  expect(fitted.filter((m) => m.role === "tool").length).toBeLessThanOrEqual(calls);
+  // Nothing to give: a single oversized prompt is returned as it is, not truncated.
+  const only: ChatMessage[] = [{ role: "user", content: "x".repeat(4000) }];
+  expect(fitRound(only, 10)).toEqual(only);
 });

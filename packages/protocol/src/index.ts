@@ -55,6 +55,8 @@ export interface EpisodeMeta {
   pages?: PageRecord[];
   from?: string; // handoff: previous model
   to?: string; // handoff: next model
+  check?: { names: string[]; status: CheckStatus; draftSha256: Sha256 }; // assistant: the verification round
+  roundsDigest?: Sha256; // assistant: sha256 over the turn's RequestRound digests (what the model saw, all rounds)
   removed?: boolean; // tombstoned content
   [k: string]: unknown;
 }
@@ -132,12 +134,41 @@ export interface Capsule {
 // ---------- packets (the bounded view) ----------
 export type ResidentType = "header" | "frontier" | "capsule" | "paged" | "recent" | "query";
 
+/**
+ * What a resident span is allowed to support (KERNEL A10). Presence is not support:
+ * only SUPPORTED spans count as evidence for paging decisions and the check round.
+ * SUPPORTED — a user/tool episode or a current user-authority certificate;
+ * PROPOSED — assistant/model prose or an unconfirmed proposal; HISTORICAL — a superseded
+ * value with its interval; NON_AUTHORITATIVE — capsule gist, the header, the current query.
+ */
+export type Epistemic = "SUPPORTED" | "PROPOSED" | "HISTORICAL" | "NON_AUTHORITATIVE";
+
 export interface ResidentItem {
   type: ResidentType;
   ref?: string; // atom id | capsule id | "ep:<seq>"
   seq?: Seq;
   tokens: number;
+  epistemic: Epistemic;
 }
+
+/** One provider request inside a turn (KERNEL A10.3): bounded by the same budget, receipted. */
+export interface RequestRound {
+  ordinal: number; // 0 = the compiled packet
+  messagesDigest: Sha256; // sha256(canonical(messages)) exactly as sent
+  tokens: number; // kernel count of the rendered request
+  budget: number;
+  pages: PageRecord[]; // pages served to build this round (recall, check)
+  responseDigest?: Sha256; // sha256 of the text the provider returned
+  usage?: Usage;
+  status: "done" | "failed";
+}
+
+/** Outcome of the verification round (KERNEL A9.5 / A10.4). */
+export type CheckStatus =
+  | "revised" // the reissued answer differed from the draft
+  | "confirmed" // the check round ran and the draft stood
+  | "none" // nothing to check: every named value in the draft was supported
+  | "check-failed"; // the provider failed during the check round; the draft was kept, qualified
 
 export type PageTrigger = "sequence" | "ledger" | "historical" | "search" | "model" | "explicit" | "check";
 
@@ -191,6 +222,7 @@ export interface Packet {
   resident: ResidentItem[];
   ledger: LedgerDigest;
   pages: PageRecord[];
+  rounds?: RequestRound[]; // KERNEL A10.3: every provider request of the turn, in order
   createdAt: number;
   status?: PacketStatus; // KERNEL A6: `pending` until the assistant episode commits
   compilerVersion?: string;
@@ -278,6 +310,11 @@ export interface AuthStatus {
 // POST /api/login/xai/poll {handle}         → { pending: true } | { session, me: Me }
 // POST /api/logout                          → { ok }
 // POST /v1/chat/completions                 → OpenAI-compatible gateway; header X-Pylos-Thread: <id>
+//   A check round that replaces the draft is signalled in the stream as a chunk carrying
+//   `x_pylos: { event: "check", names, retract: true }` before the replacement deltas; the
+//   non-streaming response carries only the final text. Clients that ignore `x_pylos` must
+//   not treat the stream as append-only when that chunk appears.
+// POST /api/threads/:id/demo                → ThreadStats   (seeds "The proof thread": a deterministic synthetic archive the user can interrogate at once)
 
 export interface TurnRequest {
   text: string;

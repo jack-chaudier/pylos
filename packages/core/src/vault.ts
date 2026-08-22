@@ -33,6 +33,7 @@ import { canonicalHash, chainHash, genesisHash, newId, sha256 } from "./hash.ts"
 import { canonicalJson } from "./pure/canonical.ts";
 import { names } from "./pure/names.ts";
 import { approxTokens } from "./pure/tokens.ts";
+import { needsAuthorityReplay, replayAtoms } from "./replay.ts";
 import {
   type AtomRow,
   type CapsuleRow,
@@ -48,7 +49,7 @@ import {
   toPacket,
   toThread,
 } from "./rows.ts";
-import { COUNTERS, MIGRATIONS } from "./schema.ts";
+import { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
 
 /** Chain checkpoint interval (KERNEL §1). */
 export const CHECKPOINT_EVERY = 4096;
@@ -77,12 +78,23 @@ export interface EpisodeInput {
   blob?: { bytes: Uint8Array; mime?: string; name?: string };
 }
 
-/** Immutable meta keys — the only ones covered by the chain (KERNEL A5). */
-const IMMUTABLE_META = ["blob", "mime", "name", "size", "from", "to"] as const;
+/** Immutable meta keys the chain has always covered (KERNEL A5). */
+const CHAINED_META = ["blob", "mime", "name", "size", "from", "to"] as const;
+/** The turn's receipts, chained since KERNEL A10.3. */
+const CHAINED_RECEIPTS = ["packetId", "check", "roundsDigest"] as const;
 
-function metaHashOf(meta: EpisodeMeta): string {
+/**
+ * `meta_hash` (KERNEL A5, A10.3). `usage` and `pages` are never picked: they are
+ * provider-reported and may be back-filled. The receipt keys are picked only for
+ * episodes that carry a `roundsDigest` — the marker of an episode written under
+ * A10.3 — so an archive written before this amendment hashes exactly as it did
+ * and existing chains still verify.
+ */
+export function metaHashOf(meta: EpisodeMeta): string {
+  const keys: readonly string[] =
+    meta.roundsDigest === undefined ? CHAINED_META : [...CHAINED_META, ...CHAINED_RECEIPTS];
   const picked: Record<string, unknown> = {};
-  for (const key of IMMUTABLE_META) {
+  for (const key of keys) {
     const value = meta[key];
     if (value !== undefined) picked[key] = value;
   }
@@ -183,6 +195,20 @@ export class Vault {
           .run(migration.name, Date.now());
       })();
     }
+    if (!applied.has(AUTHORITY_REPLAY)) this.replayAuthority();
+  }
+
+  /**
+   * KERNEL A10.5. Not expressible in SQL: what an atom is allowed to do depends
+   * on the rules, so the repair is to run them again over the exact episodes. A
+   * vault without the tell — every vault this version created — is marked done
+   * after one indexed query.
+   */
+  private replayAuthority(): void {
+    for (const thread of this.threads.list()) {
+      if (needsAuthorityReplay(this, thread.id)) replayAtoms(this, thread.id);
+    }
+    this.db.query("INSERT INTO migration (name, applied_at) VALUES (?, ?)").run(AUTHORITY_REPLAY, Date.now());
   }
 
   /** Cached prepared statement. */
@@ -822,8 +848,8 @@ export class Vault {
     insert: (packet: Packet, status: PacketStatus = "done"): void => {
       this.stmt(
         "INSERT OR REPLACE INTO packet (id, thread_id, turn_seq, model, budget, tokens, digest, status, " +
-          "compiler_version, messages, resident, ledger, pages, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "compiler_version, messages, resident, ledger, pages, rounds, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         packet.id,
         packet.threadId,
@@ -838,13 +864,16 @@ export class Vault {
         JSON.stringify(packet.resident),
         JSON.stringify(packet.ledger),
         JSON.stringify(packet.pages),
+        JSON.stringify(packet.rounds ?? []),
         packet.createdAt,
       );
     },
 
-    finish: (packetId: string, pages: unknown[]): void => {
-      this.stmt("UPDATE packet SET status = 'done', pages = ? WHERE id = ?").run(
+    /** Close the packet with what was served and what was sent (KERNEL A10.3). */
+    finish: (packetId: string, pages: unknown[], rounds: unknown[] = []): void => {
+      this.stmt("UPDATE packet SET status = 'done', pages = ?, rounds = ? WHERE id = ?").run(
         JSON.stringify(pages),
+        JSON.stringify(rounds),
         packetId,
       );
     },

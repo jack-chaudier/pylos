@@ -503,3 +503,152 @@ where `revised` is `final ≠ draft` and `draftSha256 = sha256(draft)`, so the
 receipt proves what the check changed. If the check round fails, the draft stands
 and `revised` is false: a reply is never lost to the check. One extra round per
 turn, at most.
+
+## A10. v1.2 amendments
+
+Five changes adopted after the v1.1 product audit. Each subsection names the
+earlier text it amends; where they conflict, A10 wins.
+
+### A10.1 Presence is not support (§4, §5, A4, A9.5)
+
+Being *in* the packet and being *evidence* are different things. Every
+`ResidentItem` therefore carries an `epistemic` label:
+
+| resident span | `epistemic` |
+| --- | --- |
+| a frontier certificate of a `SUPPORTED` atom whose authority is `user` | `SUPPORTED` |
+| a recent or paged episode with role `user`, `tool` or `attachment` | `SUPPORTED` |
+| a recent or paged episode with role `assistant`; a `≈ … ⟨proposed by …⟩` line | `PROPOSED` |
+| a `⟨historical …⟩` certificate block, the `⟦changed⟧` line | `HISTORICAL` |
+| the header, capsule blocks, the `⟨lost: …⟩` digest, a handoff or system note, the current query | `NON_AUTHORITATIVE` |
+
+`support(K_t)` is the text of the `SUPPORTED` spans, and it is `support`, not
+`packetText(K_t)`, that the kernel reads as "already in the view":
+
+* ledger routing (A4) skips a name iff `n ∈ names(support)`;
+* numeric presence (A9.2) is decided against `support`;
+* the verification round (A9.5) checks a draft against `support` plus the
+  `SUPPORTED` material paged mid-turn.
+
+`names(packetText(K_t))` still filters the `⟨lost: …⟩` digest (THEORY §11): what
+the model can read is not a *loss* of this view. Legibility and support are
+separate questions and the packet answers both.
+
+Three consequences, each a mirage this closes:
+
+* **The question is not its own witness.** The current user turn is rendered as
+  resident type `query`, once, at the end of the messages array; the recent
+  window covers episodes with `seq < turnSeq` and stops before it. A leading
+  question — *"was the contract 48,250 USD?"* — no longer suppresses the ledger
+  route for the value it names, so the exact turn is paged back before the model
+  answers instead of after.
+* **Capsule gist cannot suppress an exact page.** A name surviving in a capsule's
+  prose is a mention, not the value; the page is served anyway.
+* **The model's own earlier word cannot authorize.** A value that is resident only
+  in an assistant episode is not support, so a draft restating it is checked
+  against the archive (A9.5) exactly as if the view had never contained it.
+
+`turnSeq` is the sequence of the user turn the packet answers. When no such
+episode has been appended — the bench, an X-ray re-render, a baseline
+comparison — it defaults to `headSeq + 1`: the recent window then covers the
+whole archive tail and the packet carries no `query` span.
+
+A ledger route whose every locator is already resident in the view records no
+page: material the packet already holds is not `UNKNOWN`.
+
+### A10.2 The user's word is authoritative before the model speaks (§6, A6)
+
+The atomizer ran over the user and the assistant turn together, in tx B — after
+the reply. A correction made this turn (*"I moved to Porto"*) therefore reached
+the model as an ordinary recent line while the frontier still certified the old
+value. The transactions are now:
+
+* **tx A**: attachment episodes, the user episode, **rule atomization of the user
+  episode** (authority `user`, superseding as A9.1 requires), `compile()`, then
+  the `pending` packet row.
+* **tx B**: tool episodes, the assistant episode, rule atomization of the
+  assistant episode (authority `assistant` ⇒ `PROPOSED`), compaction, packet
+  `done`.
+
+Compaction stays in tx B: sealing is by sequence, and the user episode of the
+current turn seals nothing that the assistant episode will not seal a moment
+later. A provider failure after tx A leaves the user's atom committed — the user
+said it, so it is true of the archive whether or not a model ever replied.
+
+### A10.3 Every provider request is bounded and receipted (§4, §6, A5, A7)
+
+Only the compiled packet was bounded; recall results and the check prompt were
+appended to the messages array without a cap and without a receipt.
+
+* **Bounded.** Every provider request of a turn is measured by the kernel's own
+  count over `packetText(messages)` and must be `≤ B`. Recall and check material
+  shares the turn's paged slot; when a round would still exceed `B`, the oldest
+  spans of the recent window are displaced — they are recoverable by sequence,
+  the material this round is about is not. This is `fitRound(messages, budget)`:
+  a pure function that keeps the system header and the final prompt, drops from
+  the front, and never separates a tool result from the call that asked for it.
+* **Receipted.** `Packet.rounds: RequestRound[]` records one entry per provider
+  request, in order. Ordinal 0 is the compiled packet, so
+  `rounds[0].messagesDigest = packet.digest`. Each round carries
+  `{messagesDigest, tokens, budget, pages, responseDigest, usage, status}`, where
+  `pages` are the pages served to build *that* round. `Usage` on the episode is
+  the sum across rounds. `vault.packets.finish()` stores the rounds with the
+  packet.
+* **Chained.** `roundsDigest = sha256(concat of the rounds' messagesDigest)` goes
+  into the assistant episode's meta, and the chain covers it: the A5 pick grows to
+
+```
+meta_hash = sha256(cjson(pick(meta, blob, mime, name, size, from, to)))                            -- meta.roundsDigest absent
+meta_hash = sha256(cjson(pick(meta, blob, mime, name, size, from, to, packetId, check, roundsDigest)))  -- present
+```
+
+  so the receipt of *what the model saw, across every round* is inside the hash
+  chain, and so is the packet it answered and the check it ran. `roundsDigest`
+  selects the pick because v1.1 wrote `packetId` and `check` into meta *outside*
+  it: an episode that carries no `roundsDigest` was written before this
+  amendment and hashes exactly as it did, so existing vaults still verify.
+  `usage` and `pages` stay outside both picks — they are provider-reported and
+  may be back-filled.
+
+### A10.4 The check has a status, and a failed check is never silent (A9.5)
+
+`meta.check = {names, status, draftSha256}` with
+`status ∈ {revised, confirmed, none, check-failed}`:
+
+* `revised` — the reissued answer differed from the draft;
+* `confirmed` — the check round ran and the draft stood;
+* `none` — nothing to check: every name the draft stated was already supported;
+* `check-failed` — no reissued answer was obtained (the provider errored, or
+  returned nothing). The draft is kept, as before, and suffixed with exactly one
+  kernel line:
+
+```
+⟨pylos: the archive could not be re-read for: <names> — treat these values as unverified⟩
+```
+
+`meta.check` is written for every turn on which the check was enabled; its
+absence means the check was switched off. `draftSha256` is the hash of the draft
+before any of this, so the receipt proves what the check changed.
+`TurnEvent{type:"check"}` is unchanged.
+
+### A10.5 Authority is migrated by replay, not by assumption (A9.1)
+
+Migration `005-authority` set `authority = 'user'` on every existing atom, on the
+reading that everything before it came from a user turn. That reading was wrong:
+v1.0 atomized assistant turns too, so an assistant's claim could cross the
+migration wearing the user's authority — and, once `SUPPORTED`, hold the slot
+against the user's own word.
+
+A vault is repaired by **replay**, not by patching: atoms are derived state, and
+the episodes are exact. On open, if the code migration `008-authority-replay` has
+not been applied and the vault shows the tell — an atom with authority `user`
+whose source episode's role is `assistant` or `tool` — the kernel, in one
+transaction per thread, clears `atom` and `atom_name`, resets the atom counters,
+and replays `atomize` over every episode of the thread in sequence order under
+the current rules. `pinned` is restored by key wherever the key still exists.
+Capsules and `loss` rows are left alone: they are conservative — a name recorded
+as lost stays pageable, and a capsule's text is not authority.
+
+The replay is `O(archive)`, once, on the first open of an affected vault; a vault
+with no tell pays one indexed query. Vaults created by this version or later are
+marked at creation and never replay.

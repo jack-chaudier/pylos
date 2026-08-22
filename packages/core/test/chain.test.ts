@@ -1,5 +1,14 @@
 import { afterAll, expect, test } from "bun:test";
-import { genesisHash, verify } from "../src/index.ts";
+import {
+  canonicalHash,
+  chainHash,
+  chainRecord,
+  genesisHash,
+  type Provider,
+  runTurn,
+  sha256,
+  verify,
+} from "../src/index.ts";
 import { cleanup, tempVault } from "./helpers.ts";
 
 afterAll(cleanup);
@@ -80,4 +89,59 @@ test("checkpoints let verification start mid-chain", () => {
   expect(incremental.ok).toBe(true);
   expect(incremental.checkedFrom).toBe(4096);
   expect(verify(vault, thread.id, { full: true }).checkedFrom).toBe(0);
+});
+
+test("the receipts of a turn are inside the chain (KERNEL A10.3)", async () => {
+  const { vault, thread } = tempVault();
+  const provider: Provider = async function* () {
+    yield { type: "delta", text: "done." };
+    yield { type: "done" };
+  };
+  const result = await runTurn(vault, thread.id, { text: "hello", model: "m", provider, budget: 8192 });
+  expect(result.assistantEpisode.meta.roundsDigest?.length).toBe(64);
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+
+  // Rewriting what the check said, or which packet answered, breaks the chain.
+  const meta = {
+    ...result.assistantEpisode.meta,
+    check: { names: ["x"], status: "confirmed", draftSha256: "" },
+  };
+  vault.db
+    .query("UPDATE episode SET meta = ? WHERE thread_id = ? AND seq = ?")
+    .run(JSON.stringify(meta), thread.id, result.assistantEpisode.seq);
+  const tampered = verify(vault, thread.id, { full: true });
+  expect(tampered.ok).toBe(false);
+  expect(tampered.failedAt).toBe(result.assistantEpisode.seq);
+});
+
+test("an episode written before the receipts were chained still verifies (KERNEL A10.3)", () => {
+  const { vault, thread } = tempVault();
+  // v1.1 shape: `packetId` and `check` in meta, no `roundsDigest`.
+  const episode = vault.episodes.append(thread.id, {
+    role: "assistant",
+    content: "an answer from before the amendment",
+    model: "m",
+    meta: { packetId: "pk_old", usage: { inputTokens: 1, outputTokens: 1 } },
+  });
+  // Hashed exactly as v1.1 hashed it: the receipts are not in the pick.
+  const v11Pick = ["blob", "mime", "name", "size", "from", "to"] as const;
+  const picked: Record<string, unknown> = {};
+  for (const key of v11Pick) {
+    const value = episode.meta[key];
+    if (value !== undefined) picked[key] = value;
+  }
+  expect(episode.hash).toBe(
+    chainHash(
+      episode.prevHash,
+      chainRecord({
+        seq: episode.seq,
+        ts: episode.ts,
+        role: "assistant",
+        model: "m",
+        contentHash: sha256(episode.content),
+        metaHash: canonicalHash(picked),
+      }),
+    ),
+  );
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
 });

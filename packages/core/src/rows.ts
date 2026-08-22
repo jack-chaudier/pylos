@@ -96,6 +96,7 @@ export interface PacketRow {
   resident: string;
   ledger: string;
   pages: string;
+  rounds: string | null;
   created_at: number;
 }
 
@@ -201,6 +202,7 @@ export function toPacket(row: PacketRow): Packet {
     resident: JSON.parse(row.resident) as Packet["resident"],
     ledger: JSON.parse(row.ledger) as Packet["ledger"],
     pages: JSON.parse(row.pages) as Packet["pages"],
+    ...(row.rounds === null ? {} : { rounds: JSON.parse(row.rounds) as Packet["rounds"] }),
     createdAt: row.created_at,
   };
 }

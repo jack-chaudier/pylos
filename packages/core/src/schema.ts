@@ -178,7 +178,19 @@ CREATE VIRTUAL TABLE episode_fts
 INSERT INTO episode_fts(episode_fts) VALUES('rebuild');
 `,
   },
+  {
+    name: "007-packet-rounds",
+    sql: `
+-- KERNEL A10.3: every provider request of a turn, in order, with its digest,
+-- its token count and the pages served to build it. Existing packets read as
+-- NULL — they were compiled before rounds were receipted.
+ALTER TABLE packet ADD COLUMN rounds TEXT;
+`,
+  },
 ];
+
+/** The code migration that replays derived atom state under v1.1 rules (KERNEL A10.5). */
+export const AUTHORITY_REPLAY = "008-authority-replay";
 
 /** Counter keys maintained incrementally (see `counter`). */
 export const COUNTERS = {

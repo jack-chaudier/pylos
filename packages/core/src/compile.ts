@@ -30,7 +30,9 @@ import { names } from "./pure/names.ts";
 import {
   atomCertificate,
   type CapsuleView,
+  epistemicOfRole,
   type PagedBlock,
+  packetText,
   renderCapsules,
   renderFrontier,
   renderHeader,
@@ -71,12 +73,23 @@ const KIND_ORDER: Record<AtomKind, number> = {
   hypothesis: 7,
 };
 
-/** The exact string the kernel counts tokens over (KERNEL A4). */
-export function packetText(messages: readonly ChatMessage[]): string {
-  return messages.map((m) => `${m.role}\n${m.content}`).join("\n\n");
+/** A compiled packet and the text of its SUPPORTED spans (KERNEL A10.1). */
+export interface Compilation {
+  packet: Packet;
+  /**
+   * Everything the packet presents as evidence: user-authority certificates,
+   * exact user/tool episodes, and the supported material paged for this turn.
+   * This — never the whole packet — is what routing, the numeric presence test
+   * and the verification round read as "already in the view".
+   */
+  support: string;
 }
 
 export function compile(vault: Vault, threadId: string, options: CompileOptions = {}): Packet {
+  return compileView(vault, threadId, options).packet;
+}
+
+export function compileView(vault: Vault, threadId: string, options: CompileOptions = {}): Compilation {
   const thread = vault.threads.get(threadId);
   if (thread === null) throw new VaultError(`unknown thread ${threadId}`);
   const tokenizer = options.tokenizer ?? approxTokens;
@@ -86,7 +99,11 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
   const model = options.model ?? (thread.settings.model as string | undefined) ?? "unknown";
   const supportsTools = options.supportsTools !== false;
   const query = options.query ?? "";
-  const turnSeq = options.turnSeq ?? thread.headSeq;
+  // The turn this packet answers. When no episode has been appended for it — the
+  // bench, an X-ray re-render — it is the turn that would come next, so the
+  // recent window covers the whole archive tail (KERNEL A10.1).
+  const turnSeq = options.turnSeq ?? thread.headSeq + 1;
+  const queryEpisode = vault.episodes.get(threadId, turnSeq);
 
   // ---- frontier: SUPPORTED atoms only (KERNEL A4; HISTORICAL is never resident)
   // Two reads, so that a standing rule from turn 1 cannot be pushed out of the
@@ -112,6 +129,10 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
   });
   const frontier = renderFrontier(ordered, allocation.frontier, tokenizer);
   const includedAtoms = new Set(frontier.included);
+  // Only the user's own current certificates are support (KERNEL A10.1).
+  const frontierSupport = ordered
+    .filter((atom) => includedAtoms.has(atom.id) && atom.authority === "user")
+    .map(atomCertificate);
   const evicted = ordered.filter((a) => !includedAtoms.has(a.id));
   if (options.record === true) {
     for (const atom of evicted.slice(0, 32)) {
@@ -138,18 +159,20 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
   }));
   const coveredTo = stored.length === 0 ? 0 : Math.max(...stored.map((c) => c.toSeq));
 
-  // ---- recent window: the most recent episodes verbatim, newest-first fill
-  let recent = fillRecent(vault, threadId, thread.headSeq, allocation.recent, tokenizer);
+  // ---- recent window: the episodes before this turn, verbatim, newest-first fill
+  let recent = fillRecent(vault, threadId, turnSeq, allocation.recent, tokenizer);
 
-  // ---- paging (KERNEL §5): what is resident is never paged again
-  const preResidentText = [
-    frontier.text,
-    ...capsuleViews.map((c) => c.text),
-    ...recent.map((e) => e.content),
-  ].join("\n");
+  // ---- paging (KERNEL §5): what the view *supports* is never paged again
+  //
+  // Presence is not support (KERNEL A10.1). The header, the capsule gist and the
+  // question being asked are all in the packet and none of them is evidence, so
+  // the routing test reads the supported spans only — otherwise the question
+  // would suppress the page that answers it.
+  const preSupport = [...frontierSupport, ...supportedEpisodes(recent)].join("\n");
   const residentNames = new Set<string>();
-  for (const hit of names(preResidentText, { max: 4096 })) residentNames.add(hit.name);
+  for (const hit of names(preSupport, { max: 4096 })) residentNames.add(hit.name);
   const residentSeqs = new Set<Seq>(recent.map((e) => e.seq));
+  residentSeqs.add(turnSeq);
 
   const prevAssistant = findPreviousAssistant(vault, threadId, turnSeq);
   const maxPages = Math.max(1, Math.floor(allocation.paged / TOKENS_PER_PAGE)) + (supportsTools ? 0 : 1);
@@ -163,7 +186,7 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
           maxPages,
           residentNames,
           residentSeqs,
-          residentText: preResidentText,
+          residentText: preSupport,
           tokenizer,
         });
 
@@ -183,11 +206,15 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
     supportsTools,
     historical: countHistorical(vault, threadId),
   });
-  const fixed = tokenizer(headerText) + frontier.tokens + pagedRender.tokens;
+  // The current turn is rendered once, at the end, as the `query` span — never as
+  // part of the recent window, so it can never stand as its own witness.
+  const queryMessages = queryEpisode === null ? [] : renderRecent([queryEpisode]);
+  const queryTokens = queryMessages.length === 0 ? 0 : tokenizer(packetText(queryMessages));
+  const fixed = tokenizer(headerText) + frontier.tokens + pagedRender.tokens + queryTokens;
   const capsuleBudget = Math.min(allocation.capsules, Math.max(0, budget - fixed - 200));
   const capsules = renderCapsules(capsuleViews, capsuleBudget, tokenizer);
   const recentBudget = Math.max(0, budget - fixed - capsules.tokens - 64);
-  recent = fillRecent(vault, threadId, thread.headSeq, recentBudget, tokenizer);
+  recent = fillRecent(vault, threadId, turnSeq, recentBudget, tokenizer);
 
   // ---- ledger digest: L_t := ledger ∖ names(K_t) (THEORY §11)
   //
@@ -233,6 +260,7 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
     ledger: probeLedger,
     coveredTo,
     recent,
+    query: queryMessages,
   });
   const packetNames = namesOfPacket(packetText(probe));
   const digestNames: string[] = [];
@@ -264,6 +292,7 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
       ledger,
       coveredTo,
       recent: window,
+      query: queryMessages,
     });
 
   let messages = build(recent, true);
@@ -279,28 +308,69 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
   }
 
   const resident: ResidentItem[] = [
-    { type: "header", tokens: tokenizer(headerText) },
-    { type: "frontier", tokens: frontier.tokens },
-    ...capsules2.included.map((id) => ({ type: "capsule" as const, ref: id, tokens: 0 })),
-    ...pagedRender.included.map((seq) => ({ type: "paged" as const, seq, tokens: 0 })),
-    ...recent.map((e) => ({ type: "recent" as const, ref: `ep:${e.seq}`, seq: e.seq, tokens: e.tokens })),
+    { type: "header", tokens: tokenizer(headerText), epistemic: "NON_AUTHORITATIVE" },
+    { type: "frontier", tokens: frontier.tokens, epistemic: "SUPPORTED" },
+    ...capsules2.included.map((id) => ({
+      type: "capsule" as const,
+      ref: id,
+      tokens: 0,
+      epistemic: "NON_AUTHORITATIVE" as const,
+    })),
+    ...pagedRender.included.map((block) => ({
+      type: "paged" as const,
+      seq: block.seq,
+      tokens: 0,
+      epistemic: block.epistemic,
+    })),
+    ...recent.map((e) => ({
+      type: "recent" as const,
+      ref: `ep:${e.seq}`,
+      seq: e.seq,
+      tokens: e.tokens,
+      epistemic: epistemicOfRole(e.role),
+    })),
+    ...(queryEpisode === null
+      ? []
+      : [
+          {
+            type: "query" as const,
+            ref: `ep:${queryEpisode.seq}`,
+            seq: queryEpisode.seq,
+            tokens: queryTokens,
+            epistemic: "NON_AUTHORITATIVE" as const,
+          },
+        ]),
   ];
 
+  const support = [
+    ...frontierSupport,
+    ...pagedRender.included.filter((b) => b.epistemic === "SUPPORTED").map((b) => b.text),
+    ...supportedEpisodes(recent),
+  ].join("\n");
+
   return {
-    id: newId("pk"),
-    threadId,
-    turnSeq,
-    model,
-    budget,
-    tokens,
-    digest: canonicalHash(messages),
-    compilerVersion: COMPILER_VERSION,
-    messages,
-    resident,
-    ledger,
-    pages: paged.records,
-    createdAt: Date.now(),
+    packet: {
+      id: newId("pk"),
+      threadId,
+      turnSeq,
+      model,
+      budget,
+      tokens,
+      digest: canonicalHash(messages),
+      compilerVersion: COMPILER_VERSION,
+      messages,
+      resident,
+      ledger,
+      pages: paged.records,
+      createdAt: Date.now(),
+    },
+    support,
   };
+}
+
+/** The exact text of the episodes in a window that count as support (KERNEL A10.1). */
+function supportedEpisodes(episodes: readonly Episode[]): string[] {
+  return episodes.filter((e) => epistemicOfRole(e.role) === "SUPPORTED").map((e) => e.content);
 }
 
 interface AssembleInput {
@@ -312,6 +382,8 @@ interface AssembleInput {
   ledger: LedgerDigest;
   coveredTo: Seq;
   recent: Episode[];
+  /** The current turn, rendered last and outside the recent window (KERNEL A10.1). */
+  query: ChatMessage[];
 }
 
 function assemble(input: AssembleInput): ChatMessage[] {
@@ -341,19 +413,20 @@ function assemble(input: AssembleInput): ChatMessage[] {
   }
   if (input.paged.length > 0) parts.push(input.paged);
   if (input.unknown.length > 0) parts.push(input.unknown);
-  return [{ role: "system", content: parts.join("\n\n") }, ...renderRecent(input.recent)];
+  return [{ role: "system", content: parts.join("\n\n") }, ...renderRecent(input.recent), ...input.query];
 }
 
+/** The episodes immediately before `turnSeq`, newest-first fill (KERNEL §4, A10.1). */
 function fillRecent(
   vault: Vault,
   threadId: string,
-  headSeq: Seq,
+  turnSeq: Seq,
   maxTokens: number,
   tokenizer: Tokenizer,
 ): Episode[] {
-  if (maxTokens <= 0 || headSeq === 0) return [];
+  if (maxTokens <= 0 || turnSeq <= 1) return [];
   const estimate = Math.max(4, Math.min(400, Math.ceil(maxTokens / 20)));
-  const candidates = vault.episodes.tail(threadId, estimate);
+  const candidates = vault.episodes.list(threadId, { before: turnSeq, limit: estimate });
   const out: Episode[] = [];
   let used = 0;
   for (let i = candidates.length - 1; i >= 0; i -= 1) {

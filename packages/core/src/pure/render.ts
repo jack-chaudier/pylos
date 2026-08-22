@@ -6,9 +6,45 @@
  * hands it already-selected material.
  */
 
-import type { Atom, ChatMessage, Episode, PageRecord, Seq, ToolDef } from "@pylos/protocol";
+import type { Atom, ChatMessage, Episode, Epistemic, PageRecord, Role, Seq, ToolDef } from "@pylos/protocol";
 import { renderLedgerDigest } from "./ledger.ts";
 import { approxTokens, type Tokenizer, truncateLines } from "./tokens.ts";
+
+/** The exact string the kernel counts tokens over (KERNEL §4, A4). */
+export function packetText(messages: readonly ChatMessage[]): string {
+  return messages.map((m) => `${m.role}\n${m.content}`).join("\n\n");
+}
+
+/**
+ * Bound one provider request to `budget` (KERNEL A10.3). The system header states
+ * the view contract and the last message is what this round is about, so both
+ * stay; everything else gives ground from the front, oldest first, because the
+ * recent window is recoverable by sequence and the material of this round is not.
+ * A tool result never outlives the call that asked for it — providers reject that.
+ */
+export function fitRound(
+  messages: readonly ChatMessage[],
+  budget: number,
+  tokenizer: Tokenizer = approxTokens,
+): ChatMessage[] {
+  const out = [...messages];
+  const first = out[0]?.role === "system" ? 1 : 0;
+  while (tokenizer(packetText(out)) > budget && out.length > first + 1) {
+    let end = first + 1;
+    if (out[first]?.toolCalls !== undefined) {
+      while (end < out.length - 1 && out[end]?.role === "tool") end += 1;
+    }
+    out.splice(first, end - first);
+  }
+  return out;
+}
+
+/** What a paged span is allowed to support (KERNEL A10.1). */
+export function epistemicOfRole(role: Role | string): Epistemic {
+  if (role === "assistant") return "PROPOSED";
+  if (role === "user" || role === "tool" || role === "attachment") return "SUPPORTED";
+  return "NON_AUTHORITATIVE";
+}
 
 /** The view contract, rendered verbatim into every system header (KERNEL §4). */
 /** The view contract, rendered verbatim into every system header (KERNEL §4). */
@@ -202,6 +238,8 @@ export interface PagedBlock {
   role: string;
   trigger: string;
   text: string;
+  /** What this block may support (KERNEL A10.1). */
+  epistemic: Epistemic;
 }
 
 /** Exact episodes recovered for this turn, each prefixed `⟦recovered #seq · trigger⟧`. */
@@ -209,18 +247,18 @@ export function renderPaged(
   blocks: readonly PagedBlock[],
   maxTokens: number,
   tokenizer: Tokenizer = approxTokens,
-): { text: string; tokens: number; included: Seq[] } {
+): { text: string; tokens: number; included: PagedBlock[] } {
   if (blocks.length === 0 || maxTokens <= 0) return { text: "", tokens: 0, included: [] };
   const head = "⟦recovered from the archive for this turn · exact text⟧";
   const parts: string[] = [head];
-  const included: Seq[] = [];
+  const included: PagedBlock[] = [];
   let used = tokenizer(head);
   for (const block of blocks) {
     const rendered = `⟦recovered #${block.seq} · ${block.role} · ${block.trigger}⟧\n${block.text}`;
     const cost = tokenizer(rendered) + 2;
     if (used + cost > maxTokens) break;
     parts.push(rendered);
-    included.push(block.seq);
+    included.push(block);
     used += cost;
   }
   return { text: parts.join("\n\n"), tokens: used, included };

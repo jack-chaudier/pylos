@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { approxTokens, atomize, compact, compile, nameSet, packetText } from "../src/index.ts";
+import { approxTokens, atomize, compact, compile, compileView, nameSet, packetText } from "../src/index.ts";
 import { cleanup, rng, syntheticTurn, tempVault } from "./helpers.ts";
 
 afterAll(cleanup);
@@ -221,4 +221,50 @@ test("older packets keep their receipts but drop their message bodies", () => {
   expect(old?.digest.length).toBe(64);
   expect((old?.resident.length ?? 0) > 0).toBe(true);
   expect((recent?.messages.length ?? 0) > 0).toBe(true);
+});
+
+test("resident spans are labelled by what they may support (KERNEL A10.1)", () => {
+  const { vault, thread } = build(31, 400);
+  const said = vault.episodes.append(thread.id, {
+    role: "user",
+    content: "The Ostend depot holds 4200 crates.",
+  });
+  const echoed = vault.episodes.append(thread.id, {
+    role: "assistant",
+    content: "Noted: the Ostend depot holds 4200 crates.",
+  });
+  const asked = vault.episodes.append(thread.id, { role: "user", content: "How many crates again?" });
+  const compiled = compileView(vault, thread.id, {
+    query: asked.content,
+    turnSeq: asked.seq,
+    budget: 8192,
+  });
+  const byType = (type: string) => compiled.packet.resident.filter((r) => r.type === type);
+  expect(byType("header")[0]?.epistemic).toBe("NON_AUTHORITATIVE");
+  for (const capsule of byType("capsule")) expect(capsule.epistemic).toBe("NON_AUTHORITATIVE");
+  expect(compiled.packet.resident.find((r) => r.seq === said.seq)?.epistemic).toBe("SUPPORTED");
+  expect(compiled.packet.resident.find((r) => r.seq === echoed.seq)?.epistemic).toBe("PROPOSED");
+  expect(byType("query").map((r) => r.seq)).toEqual([asked.seq]);
+
+  // The support text is the evidence, and it is a strict part of the packet.
+  const text = packetText(compiled.packet.messages);
+  expect(text).toContain(asked.content);
+  expect(compiled.support).toContain(said.content);
+  expect(compiled.support).not.toContain(echoed.content);
+  expect(compiled.support).not.toContain(asked.content);
+  expect(compiled.support.length).toBeLessThan(text.length);
+});
+
+test("the turn being answered is rendered once, at the end, outside the window", () => {
+  const { vault, thread } = build(32, 60);
+  const asked = vault.episodes.append(thread.id, { role: "user", content: "and the deploy window?" });
+  const packet = compile(vault, thread.id, { query: asked.content, turnSeq: asked.seq, budget: 8192 });
+  expect(packet.messages.at(-1)).toEqual({ role: "user", content: asked.content });
+  expect(packet.messages.filter((m) => m.content === asked.content)).toHaveLength(1);
+  expect(packet.resident.some((r) => r.type === "recent" && r.seq === asked.seq)).toBe(false);
+  // With no episode appended for it, the packet answers the turn that comes next.
+  const cold = compile(vault, thread.id, { query: "same question, no episode", budget: 8192 });
+  expect(cold.turnSeq).toBe(asked.seq + 1);
+  expect(cold.resident.some((r) => r.type === "query")).toBe(false);
+  expect(cold.resident.some((r) => r.type === "recent" && r.seq === asked.seq)).toBe(true);
 });
