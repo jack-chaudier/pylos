@@ -1,0 +1,146 @@
+{
+  "engine": "core",
+  "seed": 1348029519,
+  "generatedAt": "2026-08-22",
+  "runtimeMs": 14460,
+  "ruleSeq": 1,
+  "revisionSeq": 483112,
+  "question": "The change is additive-only and the on-call lead skipped the dry-run — can I send the production migration?",
+  "turn": 1000000,
+  "total": 1000000,
+  "archiveBytes": 173235075,
+  "lossRows": 1412239,
+  "capsules": 35712,
+  "levelCounts": [
+    31250,
+    3906,
+    488,
+    61,
+    7
+  ],
+  "packet": {
+    "budget": 8192,
+    "tokens": 6551,
+    "slots": {
+      "header": 151,
+      "frontier": 1633,
+      "capsules": 1414,
+      "paged": 78,
+      "recent": 3275
+    },
+    "caps": {
+      "header": 327,
+      "frontier": 1638,
+      "capsules": 1474,
+      "paged": 1474,
+      "recent": 3279
+    },
+    "ledgerCount": 1412239,
+    "pagedCount": 1,
+    "capsuleCount": 5
+  },
+  "strip": [
+    {
+      "name": "tessera",
+      "kind": "entity",
+      "seq": 999984,
+      "id": 250015
+    },
+    {
+      "name": "lisbon",
+      "kind": "entity",
+      "seq": 999984,
+      "id": 250014
+    },
+    {
+      "name": "api.rate_limit",
+      "kind": "code",
+      "seq": 999982,
+      "id": 250013
+    },
+    {
+      "name": "the tessera",
+      "kind": "entity",
+      "seq": 999981,
+      "id": 250012
+    },
+    {
+      "name": "97",
+      "kind": "number",
+      "seq": 999981,
+      "id": 250011
+    },
+    {
+      "name": "trondheim",
+      "kind": "entity",
+      "seq": 999973,
+      "id": 250010
+    },
+    {
+      "name": "2026-04-24",
+      "kind": "date",
+      "seq": 999973,
+      "id": 250009
+    },
+    {
+      "name": "2024-09-18",
+      "kind": "date",
+      "seq": 999970,
+      "id": 250008
+    },
+    {
+      "name": "the harbour",
+      "kind": "entity",
+      "seq": 999945,
+      "id": 250007
+    },
+    {
+      "name": "2025-01-12",
+      "kind": "date",
+      "seq": 999945,
+      "id": 250006
+    },
+    {
+      "name": "1984 ms",
+      "kind": "number",
+      "seq": 999945,
+      "id": 250005
+    },
+    {
+      "name": "bergen",
+      "kind": "entity",
+      "seq": 999941,
+      "id": 250004
+    },
+    {
+      "name": "2024-07-24",
+      "kind": "date",
+      "seq": 999941,
+      "id": 250003
+    },
+    {
+      "name": "reykjavik",
+      "kind": "entity",
+      "seq": 999940,
+      "id": 250002
+    },
+    {
+      "name": "2024-01-16",
+      "kind": "date",
+      "seq": 999940,
+      "id": 250001
+    },
+    {
+      "name": "40",
+      "kind": "number",
+      "seq": 999937,
+      "id": 250000
+    }
+  ],
+  "recovered": {
+    "seq": 483112,
+    "text": "Correction to the migration rule: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead.",
+    "trigger": "ledger · \"additive-only\"",
+    "quote": "additive-only"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "placeholder": true,
+  "note": "Illustrative. Replaced by the output of `pylos bench million --live` before launch; nothing here is a measured model response.",
+  "seed": "0x50594C4F",
+  "turns": 1000000,
+  "budget": 8192,
+  "model": "grok-4.6",
+  "rule": {
+    "seq": 1,
+    "text": "Never send a production migration before the dry-run database is verified."
+  },
+  "revision": {
+    "seq": 483112,
+    "text": "Correction to the migration rule: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead."
+  },
+  "question": "The change is additive-only and the on-call lead skipped the dry-run — can I send the production migration?",
+  "baseline": {
+    "label": "Rolling summary",
+    "answer": "No — you set the rule yourself: never send a production migration before the dry-run database is verified. The dry-run was skipped, so the migration should not go out. Run the dry-run against a verified copy first, then send it.",
+    "usedStale": true,
+    "note": "The summary that survives at turn 1,000,000 still carries the original rule and no trace of the correction. The model answers from it with the confidence it had when it could see the source."
+  },
+  "pylos": {
+    "label": "Pylos",
+    "answer": "Yes, under the exception you added later. The rule from turn 1 was corrected on turn 483,112: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead. Both conditions hold here, so the migration is allowed — the original blanket rule is historical as of that turn.",
+    "usedStale": false,
+    "pages": [
+      { "seq": 483112, "trigger": "ledger · \"additive-only\"" },
+      { "seq": 483112, "trigger": "ledger · \"dry-run\"" }
+    ]
+  },
+  "hashes": {
+    "archiveHead": "0000000000000000000000000000000000000000000000000000000000000000",
+    "packet": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

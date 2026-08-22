@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pylos — one conversation, every model, nothing forgotten silently</title>
+    <meta
+      name="description"
+      content="Pylos is a desktop chat that never has to end. It keeps the exact, hash-chained archive of every turn, compiles a bounded view for whatever model you are using now, and records what each compaction lost so it can page the exact material back before the model answers."
+    />
+    <link rel="canonical" href="https://pylos.vercel.app/" />
+    <meta name="theme-color" content="#F4F1EA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121310" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://pylos.vercel.app/" />
+    <meta property="og:site_name" content="Pylos" />
+    <meta property="og:title" content="Pylos — talk forever" />
+    <meta
+      property="og:description"
+      content="One conversation. Every model. Nothing forgotten silently. An exact archive, a bounded view, and a loss ledger that makes recovery exact."
+    />
+    <meta property="og:image" content="https://pylos.vercel.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Pylos — talk forever. One conversation, every model, nothing forgotten silently." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Pylos — talk forever" />
+    <meta
+      name="twitter:description"
+      content="One conversation. Every model. Nothing forgotten silently."
+    />
+    <meta name="twitter:image" content="https://pylos.vercel.app/og.png" />
+
+    <link
+      rel="preload"
+      href="/fonts/newsreader-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="preload" href="/fonts/geist-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fonts/geist-mono-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+
+  <body>
+    <a class="skip" href="#aperture">Skip to the aperture</a>
+
+    <!-- ── nav ────────────────────────────────────────────────────────── -->
+    <header class="nav">
+      <div class="wrap nav__in">
+        <a class="wordmark" href="/" aria-label="Pylos, home">
+          <svg class="wordmark__mark" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="var(--verdigris)" stroke-width="2.2" stroke-dasharray="46 12" transform="rotate(-58 12 12)" />
+            <circle cx="12" cy="12" r="2.4" fill="var(--ember)" />
+          </svg>
+          pylos
+        </a>
+        <nav class="nav__links" aria-label="Primary">
+          <a href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
+          <a href="https://github.com/jack-chaudier/pylos">GitHub</a>
+          <a class="is-accent" href="#download">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ── hero ─────────────────────────────────────────────────────── -->
+      <section class="hero">
+        <div class="wrap">
+          <p class="mono hero__overline">Open source · Apache-2.0 · Mac + Linux</p>
+          <h1 class="hero__title">Talk forever.</h1>
+          <p class="hero__lede">
+            A conversation that outlives every model. Pylos keeps the exact record, compiles only
+            what the current model needs, and recovers what it lost before memory becomes
+            invention.
+          </p>
+          <div class="hero__cta">
+            <button class="btn btn--primary" type="button" data-play-aperture>
+              Watch turn 1,000,000
+            </button>
+            <a class="btn btn--ghost" href="#download">Download</a>
+          </div>
+          <p class="mono hero__line">One conversation · Every model · Nothing forgotten silently</p>
+        </div>
+      </section>
+
+      <!-- ── the aperture ─────────────────────────────────────────────── -->
+      <section class="aperture" id="aperture" tabindex="-1" aria-labelledby="ap-title">
+        <div class="wrap">
+          <div class="ap__head">
+            <div>
+              <p class="mono">The aperture · live, in this browser</p>
+              <h2 class="ap__title" id="ap-title">A million turns, one bounded view.</h2>
+            </div>
+            <p class="mono" data-ap-engine>engine · booting</p>
+          </div>
+
+          <div class="ap__panel">
+            <div class="ap__grid">
+              <div class="ap__cell">
+                <div class="ap__label">
+                  <span class="mono">Archive · exact, hash-chained</span>
+                  <span class="mono" data-ap-rate>&nbsp;</span>
+                </div>
+                <strong class="counter" data-ap-archive aria-live="off">0</strong>
+                <p class="ap__sub" data-ap-archive-sub>0 capsules · 0 kB of archive text · 1 level</p>
+              </div>
+
+              <div class="ap__cell">
+                <div class="ap__label">
+                  <span class="mono">View · what the model sees</span>
+                  <span class="mono" data-ap-budget>budget 8,192</span>
+                </div>
+                <strong class="counter counter--view" data-ap-view
+                  >0<span class="counter__of"> / 8,192</span></strong
+                >
+                <div class="meter" role="img" aria-label="Packet composition against the token budget">
+                  <span class="meter__slot" data-slot="header"></span>
+                  <span class="meter__slot" data-slot="frontier"></span>
+                  <span class="meter__slot" data-slot="capsules"></span>
+                  <span class="meter__slot" data-slot="paged"></span>
+                  <span class="meter__slot" data-slot="recent"></span>
+                </div>
+                <ul class="legend" data-ap-legend>
+                  <li><i data-slot="header"></i>header</li>
+                  <li><i data-slot="frontier"></i>frontier</li>
+                  <li><i data-slot="capsules"></i>capsules</li>
+                  <li><i data-slot="paged"></i>paged</li>
+                  <li><i data-slot="recent"></i>recent</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="ap__ledger">
+              <span class="mono" data-ap-ledger-count>Ledger · 0 entries · 0 removed (conserved)</span>
+              <div class="strip" data-ap-strip aria-hidden="true"></div>
+            </div>
+
+            <div class="ap__timeline">
+              <canvas data-ap-canvas height="46" aria-hidden="true"></canvas>
+              <span class="mono" data-ap-levels
+                >Compaction hierarchy · level 4 → level 0 · the ember mark is turn 483,112</span
+              >
+            </div>
+
+            <div class="ap__recovery" data-ap-recovery data-on="false">
+              <p class="recov__line" data-ap-recovered-line>↺ recovered</p>
+              <p class="recov__quote" data-ap-recovered-quote></p>
+              <p class="recov__meta" data-ap-recovered-meta></p>
+            </div>
+          </div>
+
+          <div class="ap__foot">
+            <p class="mono" data-ap-status>Ready · seed 0x50594C4F · deterministic</p>
+            <button class="btn btn--quiet" type="button" data-ap-replay>Replay</button>
+          </div>
+          <p class="ap__note">
+            Everything above is computed in this tab from seed <code>0x50594C4F</code> — the same
+            compiler the desktop app runs, over a synthetic thread rather than a real one. How long
+            it takes and how fast it goes depend on your machine. The size of the packet does not.
+            Archive bytes are the text of the episodes plus their chain records; nothing is written
+            to disk.
+          </p>
+          <p class="sr" role="status" data-ap-live></p>
+        </div>
+      </section>
+
+      <!-- ── three statements ─────────────────────────────────────────── -->
+      <section class="statements">
+        <div class="wrap statements__grid">
+          <article class="statement">
+            <h3>The archive is exact.</h3>
+            <p>
+              Every turn is stored verbatim in an append-only, hash-chained vault. Compaction never
+              touches it. Export it, destroy the machine, import it on another one — the chain still
+              verifies.
+            </p>
+            <span class="mono">hash_i = sha256(hash_i−1 ‖ episode_i)</span>
+          </article>
+          <article class="statement">
+            <h3>The view is bounded.</h3>
+            <p>
+              On every turn the compiler builds one packet within a fixed token budget: header,
+              frontier, the O(log n) capsules covering the past, anything paged back, and the recent
+              turns verbatim. It never grows with the archive.
+            </p>
+            <span class="mono">‖K_t‖ ≤ B, for all t</span>
+          </article>
+          <article class="statement">
+            <h3>Nothing is forgotten silently.</h3>
+            <p>
+              Each compaction emits a loss ledger — the names, values and quotes its text no longer
+              contains, each with an exact locator. Ledgers are conserved upward. When a question
+              touches one, the exact source is paged back before the model answers.
+            </p>
+            <span class="mono">ledger(parent) ⊇ ⋃ ledger(child)</span>
+          </article>
+        </div>
+      </section>
+
+      <!-- ── the trap ─────────────────────────────────────────────────── -->
+      <section class="trap" id="trap" aria-labelledby="trap-title">
+        <div class="wrap">
+          <div class="sec__head">
+            <p class="mono">The trap · same model, same question, turn 1,000,000</p>
+            <h2 class="sec__title" id="trap-title">
+              A summary answers confidently. Pylos checks first.<span
+                class="tag"
+                data-trap-tag
+                hidden
+                >preliminary — bench pending</span
+              >
+            </h2>
+            <p class="sec__lede">
+              A rule is set on turn 1 and revised on turn 483,112. Nine hundred thousand turns
+              later both systems are asked the same question with the same model. Only one of them
+              still has a way to know the rule changed.
+            </p>
+          </div>
+
+          <div data-trap-body>
+            <p class="mono">Loading the bench artifact…</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── how it works ─────────────────────────────────────────────── -->
+      <section class="how" aria-labelledby="how-title">
+        <div class="wrap">
+          <div class="sec__head">
+            <p class="mono">How it works</p>
+            <h2 class="sec__title" id="how-title">Four moves, repeated forever.</h2>
+          </div>
+          <ol class="how__grid">
+            <li class="step">
+              <h3>01 · Archive</h3>
+              <p>
+                Every turn is appended verbatim to a hash-chained vault, one transaction per turn.
+                The answer and its derivation are never written apart.
+              </p>
+            </li>
+            <li class="step">
+              <h3>02 · Compile</h3>
+              <p>
+                Before each reply the kernel builds one packet within a fixed budget — header,
+                frontier, capsules, pages, recent — and records its digest.
+              </p>
+            </li>
+            <li class="step">
+              <h3>03 · Ledger</h3>
+              <p>
+                Each capsule records what its text no longer contains, with exact locators. Losses
+                are conserved upward; a re-summary may add entries, never remove one.
+              </p>
+            </li>
+            <li class="step">
+              <h3>04 · Page</h3>
+              <p>
+                When a question names something in the ledger, the exact span comes back before the
+                model answers. When it cannot, the model is told so.
+              </p>
+            </li>
+          </ol>
+          <p class="how__math">
+            The bound is a counting argument, not a hope: a bounded reader with <code>b</code> bits
+            of resident context and <code>t</code> lookups of <code>w</code> bits can only
+            distinguish the archive's states while <code>b + t·w ≥ log₂(N − F − E)</code>. Pylos
+            spends its lookups where the ledger says the artifact is missing a value, which is
+            exactly where a compressed reader would otherwise improvise.
+            <a class="link" href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md"
+              >Read the theory →</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <!-- ── download ─────────────────────────────────────────────────── -->
+      <section class="download" id="download" tabindex="-1" aria-labelledby="dl-title">
+        <div class="wrap">
+          <div class="sec__head">
+            <p class="mono">Download · v1.0.0 · Apache-2.0</p>
+            <h2 class="sec__title" id="dl-title">One window. One composer. No vocabulary.</h2>
+          </div>
+
+          <div class="dl__grid">
+            <article class="card" data-os="mac">
+              <p class="card__meta">macOS 13+ · Apple silicon &amp; Intel</p>
+              <h3 class="card__os">macOS</h3>
+              <p class="card__meta">pylos-1.0.0.dmg</p>
+              <a
+                class="btn btn--primary"
+                href="https://github.com/jack-chaudier/pylos/releases"
+                >Download for macOS</a
+              >
+            </article>
+            <article class="card" data-os="linux">
+              <p class="card__meta">Any distro · AppImage &amp; .deb</p>
+              <h3 class="card__os">Linux</h3>
+              <p class="card__meta">pylos-1.0.0.AppImage</p>
+              <a
+                class="btn btn--primary"
+                href="https://github.com/jack-chaudier/pylos/releases"
+                >Download for Linux</a
+              >
+            </article>
+          </div>
+
+          <div class="install">
+            <code id="install-cmd"
+              ><span class="sigil" aria-hidden="true">$ </span>curl -fsSL https://pylos.vercel.app/install.sh | sh</code
+            >
+            <button
+              class="btn btn--quiet"
+              type="button"
+              data-copy="#install-cmd"
+              data-copied-label="Copied"
+            >
+              <span class="copy__label">Copy</span>
+            </button>
+          </div>
+          <p class="dl__note">
+            Builds are unsigned for now; on macOS, right-click → Open the first time. Source, checksums
+            and every release live on
+            <a class="link" href="https://github.com/jack-chaudier/pylos/releases">GitHub</a>.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── footer ───────────────────────────────────────────────────── -->
+    <footer class="footer">
+      <div class="wrap">
+        <p class="footer__line">The tablets survived because the palace burned.</p>
+        <ul class="footer__meta">
+          <li>Pylos v1.0.0</li>
+          <li>Apache-2.0</li>
+          <li><a href="https://github.com/jack-chaudier/pylos">GitHub</a></li>
+          <li>
+            <a href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
+          </li>
+        </ul>
+      </div>
+      <p class="footer__wordmark wrap" aria-hidden="true">pylos</p>
+    </footer>
+  </body>
+</html>

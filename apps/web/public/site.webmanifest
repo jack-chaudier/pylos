@@ -1,0 +1,21 @@
+{
+  "name": "Pylos",
+  "short_name": "Pylos",
+  "description": "One conversation. Every model. Nothing forgotten silently.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#F4F1EA",
+  "theme_color": "#F4F1EA",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
