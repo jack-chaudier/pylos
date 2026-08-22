@@ -203,7 +203,10 @@ export function compile(vault: Vault, threadId: string, options: CompileOptions 
   const firstPass = namesOfPacket(
     [headerText, frontier.text, capsules.text, pagedRender.text, ...recent.map((e) => e.content)].join("\n"),
   );
-  const historicalDigest = [...paged.historical, ...recentHistorical(vault, threadId)].slice(0, 3);
+  const seenHistoricalKeys = new Set<string>();
+  const historicalDigest = [...paged.historical, ...recentHistorical(vault, threadId)]
+    .filter((h) => (seenHistoricalKeys.has(h.key) ? false : (seenHistoricalKeys.add(h.key), true)))
+    .slice(0, 3);
   const filteredViews = capsuleViews.map((view) => ({
     ...view,
     lossNames: view.lossNames.filter((name) => !firstPass.has(name)),
