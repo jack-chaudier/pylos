@@ -1,6 +1,6 @@
 {
   "name": "@pylos/web",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "pylos.dev \u2014 the landing page, and the aperture that runs the compiler in your browser.",

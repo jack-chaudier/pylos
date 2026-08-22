@@ -303,7 +303,7 @@ export type TurnEvent =
   | { type: "done"; episode: Episode; usage?: Usage }
   | { type: "error"; message: string; code?: string };
 
-export const PYLOS_VERSION = "1.1.0";
+export const PYLOS_VERSION = "1.1.1";
 export const DEFAULT_BUDGET = 32_768;
 export const DEMO_BUDGET = 8_192;
 export const LEAF_CAPSULE_EPISODES = 32;

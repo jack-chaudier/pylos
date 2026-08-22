@@ -1,6 +1,6 @@
 {
   "name": "pylos",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "The forever chat. One conversation, every model, nothing forgotten silently.",
   "license": "Apache-2.0",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-08-22
+
+* **Release**: the headless tarball now ships the hosted build of the app (`/app/` base); 1.1.0 packaged the desktop variant, so `pylos serve` served an app whose assets resolved to `/assets/` and did not load. Landing rewrites point `/app/`, `/api/*`, `/v1/*` at the hosted backend.
+
 ## 1.1.0 — 2026-08-22
 
 * **Protocol** (`@pylos/protocol`): additive types for the above — `AtomAuthority`, the `PROPOSED` atom phase, `Me`, `TurnEvent` gains `check`, `PageTrigger` gains `sequence` and `check`. `@pylos/core/pure` renames `numbersIn`/`numericValue` to `numberOccurrences`/`parseNumberName` to match the rounding-equivalence rule they now implement. Vault migrations 005 (`atom.authority` column, existing atoms read as `user`) and 006 (`episode_fts` rebuilt with porter stemming on first open) run automatically; nothing else in the schema moves.
