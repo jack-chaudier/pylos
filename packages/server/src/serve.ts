@@ -1,15 +1,19 @@
 import {
   type AtomPhase,
   DEFAULT_BUDGET,
+  type Me,
   type ModelInfo,
   type ProviderId,
   PYLOS_VERSION,
   type Seq,
   type TurnRequest,
 } from "@pylos/protocol";
-import { AuthError, AuthService } from "./auth/xai.ts";
+import type { AuthService } from "./auth/xai.ts";
+import { AuthError } from "./auth/xai.ts";
+import { createContext, type ServerContext } from "./context.ts";
 import { handleGatewayCompletions, handleGatewayModels } from "./gateway.ts";
 import { pylosHome } from "./home.ts";
+import { bearerToken, HostedRegistry, me } from "./hosted.ts";
 import {
   corsHeaders,
   errorResponse,
@@ -23,78 +27,142 @@ import {
   requireString,
   SseStream,
 } from "./http.ts";
-import { type Kernel, openKernel } from "./kernel.ts";
-import { DEFAULT_MODEL, ProviderRegistry } from "./providers/registry.ts";
+import type { Kernel } from "./kernel.ts";
+import {
+  clientKey,
+  declaredLength,
+  LOGINS_PER_MINUTE,
+  MAX_UPLOAD_BYTES,
+  type RequestServer,
+  TokenBucket,
+  TURNS_PER_MINUTE,
+} from "./limits.ts";
+import type { ProviderRegistry } from "./providers/registry.ts";
+import { DEFAULT_MODEL } from "./providers/registry.ts";
 import { ProviderError } from "./providers/types.ts";
+import { defaultWebDir, type StaticSite, staticSite } from "./static.ts";
 
 export interface ServeOptions {
   port?: number;
   home?: string;
+  /** Multi-user: one vault per signed-in xAI subject, sessions instead of loopback trust. */
+  hosted?: boolean;
+  host?: string;
+  /** Directory of the built single-page app, served under `/app/`. */
+  web?: string;
+  /** Browser origins allowed to make state-changing requests in hosted mode. */
+  origins?: readonly string[];
   kernel?: Kernel;
   auth?: AuthService;
   registry?: ProviderRegistry;
 }
 
+export type Handler = (request: Request, server?: RequestServer) => Promise<Response>;
+
 export interface PylosServer {
   port: number;
   url: string;
-  kernel: Kernel;
-  auth: AuthService;
-  registry: ProviderRegistry;
-  fetch(request: Request): Promise<Response>;
+  hosted: boolean;
+  /** The built app being served at `/app/`, if one was given or found. */
+  web?: string;
+  /** Local mode only; hosted mode holds one context per signed-in user. */
+  context?: ServerContext;
+  fetch: Handler;
   stop(): Promise<void>;
-}
-
-export interface ServerContext {
-  kernel: Kernel;
-  auth: AuthService;
-  registry: ProviderRegistry;
 }
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export async function createContext(options: ServeOptions = {}): Promise<ServerContext> {
-  const auth = options.auth ?? new AuthService();
-  const kernel =
-    options.kernel ??
-    (await openKernel(options.home === undefined ? {} : { home: options.home }));
-  const registry = options.registry ?? new ProviderRegistry(auth);
-  return { kernel, auth, registry };
+interface HostedMode {
+  kind: "hosted";
+  registry: HostedRegistry;
+  origins: readonly string[];
+  turns: TokenBucket;
+  logins: TokenBucket;
 }
 
-export function createFetch(context: ServerContext): (request: Request) => Promise<Response> {
-  return async (request: Request): Promise<Response> => {
+type Mode = { kind: "local"; context: ServerContext } | HostedMode;
+
+interface Gate {
+  mode: Mode;
+  site: StaticSite | undefined;
+}
+
+export function createFetch(context: ServerContext, options: { site?: StaticSite } = {}): Handler {
+  return makeHandler({ mode: { kind: "local", context }, site: options.site });
+}
+
+export function createHostedFetch(options: {
+  registry: HostedRegistry;
+  origins?: readonly string[];
+  site?: StaticSite;
+}): Handler {
+  return makeHandler({
+    mode: {
+      kind: "hosted",
+      registry: options.registry,
+      origins: options.origins ?? [],
+      turns: new TokenBucket(TURNS_PER_MINUTE),
+      logins: new TokenBucket(LOGINS_PER_MINUTE),
+    },
+    site: options.site,
+  });
+}
+
+function makeHandler(gate: Gate): Handler {
+  const origins = gate.mode.kind === "hosted" ? gate.mode.origins : undefined;
+  return async (request: Request, server?: RequestServer): Promise<Response> => {
     const url = new URL(request.url);
     const origin = request.headers.get("origin");
-    const cors = corsHeaders(origin);
+    const cors = corsHeaders(origin, origins);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: cors });
     }
-    if (!isLoopbackHost(request.headers.get("host"))) {
-      return json(
-        { error: "Pylos serves loopback clients only.", code: "not_loopback" },
-        {
-          status: 403,
-        },
-      );
+    // Hosted mode is reached through a proxy or a public address; only the local
+    // server can insist the client is talking to a loopback name.
+    if (gate.mode.kind === "local" && !isLoopbackHost(request.headers.get("host"))) {
+      return json({ error: "Pylos serves loopback clients only.", code: "not_loopback" }, { status: 403 });
     }
-    if (MUTATING.has(request.method) && !originAllowed(origin)) {
+    if (!originPermitted(request, origin, origins)) {
       return json({ error: "Origin is not allowed.", code: "origin_denied" }, { status: 403 });
     }
 
     try {
-      const response = await route(context, request, url);
-      if (Object.keys(cors).length > 0) {
-        for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
+      if (gate.site !== undefined) {
+        const asset = await gate.site.handle(url, request.method);
+        if (asset !== undefined) return withHeaders(asset, cors);
       }
-      return response;
+      const response =
+        gate.mode.kind === "hosted"
+          ? await hostedRoute(gate.mode, request, url, server)
+          : await localRoute(gate.mode.context, request, url);
+      return withHeaders(response, cors);
     } catch (error) {
-      const response = errorResponse(normalizeError(error));
-      for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
-      return response;
+      return withHeaders(errorResponse(normalizeError(error)), cors);
     }
   };
+}
+
+/**
+ * Mutations must prove they were not forged by another site. Hosted mode also
+ * serves non-browser clients, which send no `Origin` at all; those must carry a
+ * session bearer instead.
+ */
+function originPermitted(
+  request: Request,
+  origin: string | null,
+  origins: readonly string[] | undefined,
+): boolean {
+  if (!MUTATING.has(request.method)) return true;
+  if (origins === undefined) return originAllowed(origin);
+  if (origin === null || origin === "null") return bearerToken(request) !== undefined;
+  return origins.includes(origin);
+}
+
+function withHeaders(response: Response, extra: Record<string, string>): Response {
+  for (const [key, value] of Object.entries(extra)) response.headers.set(key, value);
+  return response;
 }
 
 function normalizeError(error: unknown): unknown {
@@ -103,7 +171,105 @@ function normalizeError(error: unknown): unknown {
   return error;
 }
 
-async function route(context: ServerContext, request: Request, url: URL): Promise<Response> {
+// ---------- hosted ----------
+
+async function hostedRoute(
+  mode: HostedMode,
+  request: Request,
+  url: URL,
+  server: RequestServer | undefined,
+): Promise<Response> {
+  const segments = url.pathname.split("/").filter((part) => part.length > 0);
+  const method = request.method;
+
+  if (segments[0] === "api" && segments[1] === "health" && segments.length === 2 && method === "GET") {
+    return json({ ok: true, version: PYLOS_VERSION, hosted: true });
+  }
+  if (segments[0] === "api" && segments[1] === "login") {
+    return loginRoutes(mode, request, segments, method, server);
+  }
+
+  const token = bearerToken(request);
+  if (token === undefined) {
+    throw new HttpError(401, "no_session", "Sign in with your xAI account first.");
+  }
+  const user = mode.registry.resolve(token);
+  if (user === undefined) {
+    throw new HttpError(401, "invalid_session", "This session has expired. Sign in again.");
+  }
+
+  if (segments[0] === "api" && segments.length === 2 && segments[1] === "me" && method === "GET") {
+    return json(me(user));
+  }
+  if (segments[0] === "api" && segments.length === 2 && segments[1] === "logout" && method === "POST") {
+    mode.registry.revoke(token);
+    return json({ ok: true });
+  }
+
+  if (isTurn(segments, method) && !mode.turns.take(user.sub)) {
+    throw new HttpError(429, "rate_limited", "Too many turns in a minute. Try again shortly.");
+  }
+
+  const lease = await mode.registry.acquire(user);
+  let response: Response;
+  try {
+    response = await localRoute(lease.context, request, url);
+  } catch (error) {
+    lease.release();
+    throw error;
+  }
+  return retain(response, request, lease.release);
+}
+
+async function loginRoutes(
+  mode: HostedMode,
+  request: Request,
+  segments: string[],
+  method: string,
+  server: RequestServer | undefined,
+): Promise<Response> {
+  if (segments[2] !== "xai" || method !== "POST") {
+    throw new HttpError(404, "not_found", "No such login route.");
+  }
+  if (!mode.logins.take(clientKey(request, server))) {
+    throw new HttpError(429, "rate_limited", "Too many sign-in attempts. Try again shortly.");
+  }
+  if (segments[3] === "start" && segments.length === 4) {
+    return json(await mode.registry.startLogin());
+  }
+  if (segments[3] === "poll" && segments.length === 4) {
+    const body = await readJson<{ handle?: string }>(request);
+    return json(await mode.registry.pollLogin(requireString(body.handle, "handle")));
+  }
+  throw new HttpError(404, "not_found", "No such login route.");
+}
+
+function isTurn(segments: string[], method: string): boolean {
+  if (method !== "POST") return false;
+  if (segments[0] === "v1" && segments[1] === "chat" && segments[2] === "completions") return true;
+  return (
+    segments[0] === "api" && segments[1] === "threads" && segments.length === 4 && segments[3] === "turn"
+  );
+}
+
+/**
+ * A turn stream outlives the handler that returned it, so the user's kernel has
+ * to stay open until the last byte (or until the client goes away).
+ */
+function retain(response: Response, request: Request, release: () => void): Response {
+  const body = response.body;
+  if (body === null || !(response.headers.get("content-type") ?? "").startsWith("text/event-stream")) {
+    release();
+    return response;
+  }
+  request.signal.addEventListener("abort", release, { once: true });
+  const held = body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({ flush: release }));
+  return new Response(held, { status: response.status, headers: response.headers });
+}
+
+// ---------- routes ----------
+
+async function localRoute(context: ServerContext, request: Request, url: URL): Promise<Response> {
   const segments = url.pathname.split("/").filter((part) => part.length > 0);
   const method = request.method;
 
@@ -127,6 +293,12 @@ async function route(context: ServerContext, request: Request, url: URL): Promis
     });
   }
 
+  // ---------- identity ----------
+  if (segments[1] === "me" && segments.length === 2 && method === "GET") {
+    const identity: Me = { hosted: false };
+    return json(identity);
+  }
+
   // ---------- models ----------
   if (segments[1] === "models" && segments.length === 2 && method === "GET") {
     const force = url.searchParams.get("refresh") === "1";
@@ -139,6 +311,7 @@ async function route(context: ServerContext, request: Request, url: URL): Promis
 
   // ---------- import ----------
   if (segments[1] === "import" && segments.length === 2 && method === "POST") {
+    checkUpload(request);
     const form = await request.formData();
     const file = asFile(form.get("file"));
     const passphrase = form.get("passphrase");
@@ -248,6 +421,7 @@ async function route(context: ServerContext, request: Request, url: URL): Promis
   }
 
   if (action === "attach" && method === "POST") {
+    checkUpload(request);
     const form = await request.formData();
     const files: Array<{ name: string; mime: string; bytes: Uint8Array }> = [];
     for (const [, value] of form.entries()) {
@@ -309,6 +483,12 @@ async function route(context: ServerContext, request: Request, url: URL): Promis
   throw new HttpError(404, "not_found", "No such route.");
 }
 
+function checkUpload(request: Request): void {
+  if (declaredLength(request) > MAX_UPLOAD_BYTES) {
+    throw new HttpError(413, "payload_too_large", "That upload is too large.");
+  }
+}
+
 // ---------- the turn ----------
 
 async function turnRoute(context: ServerContext, request: Request, threadId: string): Promise<Response> {
@@ -324,8 +504,7 @@ async function turnRoute(context: ServerContext, request: Request, threadId: str
   }
   const bound = await context.registry.providerFn(model);
   const catalogue = await context.registry.models();
-  const supportsTools =
-    catalogue.find((entry) => entry.id === bound.model)?.supportsTools !== false;
+  const supportsTools = catalogue.find((entry) => entry.id === bound.model)?.supportsTools !== false;
   await context.kernel.setSettings(threadId, { model: bound.model, budget });
 
   const stream = new SseStream();
@@ -461,28 +640,63 @@ function sortModels(models: ModelInfo[]): ModelInfo[] {
 // ---------- entry ----------
 
 export async function serve(options: ServeOptions = {}): Promise<PylosServer> {
-  const context = await createContext(options);
-  const handler = createFetch(context);
+  const hosted = options.hosted ?? process.env.PYLOS_HOSTED === "1";
+  const home = options.home ?? pylosHome();
+  const web = options.web ?? nonEmpty(process.env.PYLOS_WEB) ?? defaultWebDir();
+  const site = web === undefined ? undefined : staticSite(web);
   const port = options.port ?? Number(process.env.PYLOS_PORT ?? 7334);
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port,
-    idleTimeout: 0,
-    fetch: handler,
-  });
+  const hostname = options.host ?? nonEmpty(process.env.PYLOS_HOST) ?? (hosted ? "0.0.0.0" : "127.0.0.1");
+
+  let handler: Handler;
+  let context: ServerContext | undefined;
+  let shutdown: () => Promise<void>;
+
+  if (hosted) {
+    const registry = new HostedRegistry({ home });
+    handler = createHostedFetch({
+      registry,
+      origins: options.origins ?? splitOrigins(process.env.PYLOS_ORIGIN),
+      ...(site === undefined ? {} : { site }),
+    });
+    shutdown = () => registry.close();
+  } else {
+    context = await createContext({
+      ...(options.home === undefined ? {} : { home: options.home }),
+      ...(options.kernel === undefined ? {} : { kernel: options.kernel }),
+      ...(options.auth === undefined ? {} : { auth: options.auth }),
+      ...(options.registry === undefined ? {} : { registry: options.registry }),
+    });
+    const single = context;
+    handler = createFetch(single, site === undefined ? {} : { site });
+    shutdown = () => single.kernel.close();
+  }
+
+  const server = Bun.serve({ hostname, port, idleTimeout: 0, fetch: handler });
   const bound = server.port ?? port;
   return {
     port: bound,
-    url: `http://127.0.0.1:${bound}`,
-    kernel: context.kernel,
-    auth: context.auth,
-    registry: context.registry,
+    url: `http://${hostname}:${bound}`,
+    hosted,
+    ...(web === undefined ? {} : { web }),
+    ...(context === undefined ? {} : { context }),
     fetch: handler,
     stop: async () => {
       server.stop(true);
-      await context.kernel.close();
+      await shutdown();
     },
   };
+}
+
+export function splitOrigins(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim().replace(/\/+$/, ""))
+    .filter((entry) => entry.length > 0);
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
 }
 
 export { pylosHome };

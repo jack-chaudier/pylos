@@ -1,4 +1,4 @@
-import type { ProviderId } from "@pylos/protocol";
+import type { PageRecord, ProviderId } from "@pylos/protocol";
 
 export function compactNumber(value: number): string {
   if (value < 1000) return String(value);
@@ -78,6 +78,27 @@ export function spelled(count: number): string {
 
 export function bytesLabel(size: number): string {
   if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1024 ** 2) return `${Math.round(size / 1024)} KiB`;
+  if (size < 1024 ** 3) return `${(size / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(size / 1024 ** 3).toFixed(2)} GiB`;
+}
+
+/** Why a span came back, in the reader's words rather than the kernel's. */
+export function pageLabel(page: PageRecord): string {
+  switch (page.trigger) {
+    case "sequence":
+      return `turn ${groupedNumber(page.seqs[0] ?? 0)}`;
+    case "check":
+      return "checked";
+    case "ledger":
+      return page.name ?? "ledger";
+    case "historical":
+      return page.name === undefined ? "changed" : `changed · ${page.name}`;
+    case "search":
+      return page.query ?? "search";
+    case "model":
+      return "recall";
+    case "explicit":
+      return "asked for";
+  }
 }

@@ -21,6 +21,13 @@ export class AuthError extends Error {
   }
 }
 
+/** The OpenID fields xAI returns for a signed-in account. All optional. */
+export interface XaiProfile {
+  name?: string;
+  email?: string;
+  picture?: string;
+}
+
 export interface DeviceStart {
   handle: string;
   userCode: string;
@@ -197,6 +204,18 @@ export class AuthService {
 
   /** Never returns a token; the caller sees only `pending` or the masked status. */
   async pollDevice(handle: string): Promise<{ pending: true } | AuthStatus> {
+    const result = await this.pollDeviceCredential(handle);
+    if ("pending" in result) return result;
+    await this.store.set("xai", result);
+    return this.status("xai");
+  }
+
+  /**
+   * The device grant without custody: the credential is handed back so the
+   * caller can put it in the right store. Hosted mode has one auth.json per
+   * signed-in subject, so the login flow cannot use this service's own store.
+   */
+  async pollDeviceCredential(handle: string): Promise<{ pending: true } | OauthCredential> {
     const entry = this.pending.get(handle);
     if (entry === undefined) {
       throw new AuthError("auth_expired", "This sign-in request expired.", 410);
@@ -215,8 +234,7 @@ export class AuthService {
     const value = await json(response);
     if (response.ok) {
       this.pending.delete(handle);
-      await this.store.set("xai", this.oauthFrom(value, undefined, "device"));
-      return this.status("xai");
+      return this.oauthFrom(value, undefined, "device");
     }
     const error = optionalString(value.error);
     if (error === "authorization_pending") {
@@ -233,6 +251,33 @@ export class AuthService {
       throw new AuthError("auth_denied", "The sign-in request was denied.", 401);
     }
     throw new AuthError("auth_expired", "The sign-in code expired.", 410);
+  }
+
+  /**
+   * The OpenID profile behind an xAI access token. Best effort: a 401, a body
+   * that is not a profile, or a network failure all mean "fewer fields", never
+   * a failed sign-in.
+   */
+  async userInfo(accessToken: string): Promise<XaiProfile> {
+    let value: unknown;
+    try {
+      const response = await this.fetcher(`${XAI_AUTH_BASE}/oauth2/userinfo`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      });
+      if (!response.ok) return {};
+      value = await response.json();
+    } catch {
+      return {};
+    }
+    if (!isRecord(value)) return {};
+    const name = optionalString(value.name) ?? optionalString(value.preferred_username);
+    const email = optionalString(value.email);
+    const picture = optionalString(value.picture);
+    return {
+      ...(name === undefined ? {} : { name }),
+      ...(email === undefined ? {} : { email }),
+      ...(picture === undefined ? {} : { picture }),
+    };
   }
 
   // ---------- Grok CLI import ----------
@@ -389,7 +434,8 @@ function identityFromToken(token: string | undefined): string {
   return "xAI account";
 }
 
-function jwtClaims(token: string): Record<string, unknown> | undefined {
+/** The payload of a JWT, unverified — only ever read from a token we just fetched over TLS. */
+export function jwtClaims(token: string): Record<string, unknown> | undefined {
   const payload = token.split(".")[1];
   if (payload === undefined) return undefined;
   try {

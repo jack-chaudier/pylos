@@ -694,6 +694,151 @@ export const rare = [
   "zonule",
 ];
 
+/**
+ * The name-free memory vocabulary (`bench/CORPUS.md` §3.7).
+ *
+ * Four lists that together build a sentence carrying no routing key at all:
+ * every word is lowercase, so `names()` finds no entity; no word is a number, a
+ * date, a quote or an identifier. A memory built from them is invisible to the
+ * ledger by construction, which is the point — it can only be recovered by
+ * lexical search.
+ *
+ * The generator asserts, every run, that these words are disjoint from every
+ * word in the lists above, that each survives `ftsTerms()` (≥ 3 characters, not
+ * stoplisted), and that `names(sentence)` is empty. Verbs are regular: the
+ * memory writes `<verb>ed`, the question writes `<verb>`, and the porter
+ * tokenizer has to bridge the two.
+ */
+export const memNoun = [
+  "barnacle",
+  "cauldron",
+  "dovecote",
+  "escarpment",
+  "farrier",
+  "gasket",
+  "haversack",
+  "inkhorn",
+  "jetty",
+  "kiln",
+  "limpet",
+  "mangrove",
+  "nutmeg",
+  "oarlock",
+  "pergola",
+  "quagmire",
+  "rickshaw",
+  "samovar",
+  "thimble",
+  "urchin",
+  "wheelbarrow",
+  "yurt",
+  "zither",
+  "abacus",
+  "culvert",
+  "dredger",
+  "eelgrass",
+  "flagon",
+  "grotto",
+  "hammock",
+  "jackdaw",
+  "kettle",
+  "lichen",
+  "mandolin",
+  "plinth",
+  "rudder",
+  "sextant",
+  "tureen",
+  "viaduct",
+  "wainscot",
+  "zeppelin",
+  "cornice",
+  "gargoyle",
+  "hayrick",
+  "ironwork",
+  "lampstand",
+  "millrace",
+  "paddock",
+];
+
+/** Regular verbs: `<verb>ed` is the past tense, no doubling, no dropped `e`. */
+export const memVerb = [
+  "wander",
+  "hover",
+  "linger",
+  "flicker",
+  "glimmer",
+  "shimmer",
+  "splinter",
+  "clatter",
+  "wallow",
+  "billow",
+  "furrow",
+  "burrow",
+  "blossom",
+  "ripen",
+  "dampen",
+  "sharpen",
+  "loosen",
+  "weather",
+  "tether",
+  "smother",
+  "muster",
+  "falter",
+  "totter",
+  "shudder",
+  "slither",
+  "swelter",
+  "simmer",
+  "quiver",
+  "whimper",
+  "scamper",
+  "clamber",
+  "meander",
+];
+
+/** Withheld from the question, so the answer cannot be echoed back from it. */
+export const memAdj = [
+  "musty",
+  "brackish",
+  "sallow",
+  "wizened",
+  "gaunt",
+  "sinewy",
+  "russet",
+  "dappled",
+  "mottled",
+  "craggy",
+  "spongy",
+  "waxen",
+  "brittle",
+  "syrupy",
+  "tepid",
+  "murky",
+  "pallid",
+  "grimy",
+  "downy",
+  "silty",
+  "briny",
+  "feral",
+  "lanky",
+  "gnarled",
+];
+
+export const memPrep = [
+  "beneath",
+  "beside",
+  "behind",
+  "above",
+  "below",
+  "atop",
+  "around",
+  "beyond",
+  "inside",
+  "outside",
+  "underneath",
+  "alongside",
+];
+
 export const vocab = {
   first,
   last,
@@ -714,4 +859,8 @@ export const vocab = {
   task,
   rare,
   noiseLast,
+  memNoun,
+  memVerb,
+  memAdj,
+  memPrep,
 };

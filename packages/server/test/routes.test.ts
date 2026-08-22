@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { Capsule, Episode, ModelInfo, Packet, ThreadStats, TurnEvent } from "@pylos/protocol";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Capsule, Episode, Me, ModelInfo, Packet, ThreadStats, TurnEvent } from "@pylos/protocol";
 import { FakeProvider } from "./fake-provider.ts";
 import { type Harness, harness, jsonPost } from "./harness.ts";
 
@@ -21,9 +24,7 @@ async function newThread(): Promise<ThreadStats> {
 
 describe("guards", () => {
   test("health reports the backend", async () => {
-    const body = await h.json<{ ok: boolean; version: string; home: string; backend: string }>(
-      "/api/health",
-    );
+    const body = await h.json<{ ok: boolean; version: string; home: string; backend: string }>("/api/health");
     expect(body.ok).toBe(true);
     expect(body.backend).toBe("core");
     expect(body.home).toBe(h.home);
@@ -52,6 +53,46 @@ describe("guards", () => {
     const response = await h.fetch("/api/nope");
     expect(response.status).toBe(404);
     expect(response.headers.get("content-type")).toContain("application/json");
+  });
+
+  test("the local server has no login and no session", async () => {
+    expect(await h.json<Me>("/api/me")).toEqual({ hosted: false });
+    expect((await h.fetch("/api/login/xai/start", jsonPost({}))).status).toBe(404);
+    expect((await h.fetch("/api/logout", jsonPost({}))).status).toBe(404);
+  });
+
+  test("without a built app there are no static routes", async () => {
+    expect((await h.fetch("/")).status).toBe(404);
+    expect((await h.fetch("/app/")).status).toBe(404);
+  });
+});
+
+describe("the app, served locally", () => {
+  let base: string;
+  let local: Harness;
+
+  beforeAll(async () => {
+    base = await mkdtemp(join(tmpdir(), "pylos-local-web-"));
+    await writeFile(join(base, "index.html"), "<!doctype html><title>Pylos</title>");
+    local = await harness({ web: base });
+  });
+
+  afterAll(async () => {
+    await local.dispose();
+    await rm(base, { recursive: true, force: true });
+  });
+
+  test("a headless server hands the UI to the browser at /app/", async () => {
+    const root = await local.fetch("/");
+    expect(root.status).toBe(302);
+    expect(root.headers.get("location")).toBe("/app/");
+
+    const shell = await local.fetch("/app/");
+    expect(shell.status).toBe(200);
+    expect(await shell.text()).toContain("Pylos");
+    expect(shell.headers.get("content-security-policy")).toContain("default-src 'none'");
+
+    expect((await local.fetch("/api/health")).status).toBe(200);
   });
 });
 
@@ -331,9 +372,7 @@ describe("compaction surfaces", () => {
     const thread = await newThread();
     provider.reply("ok");
     await h.sse(`/api/threads/${thread.threadId}/turn`, { text: "the palace of Pylos burned" });
-    const found = await h.json<{ episodes: Episode[] }>(
-      `/api/threads/${thread.threadId}/search?q=palace`,
-    );
+    const found = await h.json<{ episodes: Episode[] }>(`/api/threads/${thread.threadId}/search?q=palace`);
     expect(found.episodes[0]?.content).toContain("palace");
   });
 });
@@ -424,6 +463,7 @@ describe("errors", () => {
     const thread = await newThread();
     const failing = new FakeProvider();
     // biome-ignore lint/suspicious/noExplicitAny: deliberate failure injection
+    // biome-ignore lint/correctness/useYield: it fails before the first event
     (failing as any).stream = async function* (): AsyncGenerator<never> {
       throw Object.assign(new Error("xAI is rate limiting this request."), {
         status: 429,

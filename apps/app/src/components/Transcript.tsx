@@ -1,12 +1,14 @@
 import type { Capsule, Episode, PageRecord } from "@pylos/protocol";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.ts";
-import { bytesLabel, fullStamp, groupedNumber, shortTime, spelled } from "../format.ts";
+import { bytesLabel, fullStamp, groupedNumber, pageLabel, shortTime, spelled } from "../format.ts";
 
 export interface StreamingTurn {
   text: string;
   model: string;
   pages: PageRecord[];
+  /** KERNEL A9.5: the draft named lost values, so the text so far is provisional. */
+  check?: { names: string[] };
   error?: string;
 }
 
@@ -172,6 +174,9 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
           {streaming.pages.length > 0 ? (
             <RecoveryLine threadId={props.threadId} pages={streaming.pages} />
           ) : null}
+          {streaming.check !== undefined ? (
+            <div className="checked">↺ verified against the archive · {streaming.check.names.join(", ")}</div>
+          ) : null}
           <div className="row row-assistant">
             <div className="row-text">
               {streaming.text}
@@ -307,12 +312,14 @@ function RecoveryLine({
 
   const resolved = pages.filter((page) => page.resolved).length;
   const unresolved = pages.length - resolved;
+  const why = useMemo(() => [...new Set(pages.map(pageLabel))].slice(0, 3).join(" · "), [pages]);
   if (seqs.length === 0 && unresolved === 0) return null;
 
   return (
     <>
       <button type="button" className="recovery" onClick={() => setOpen((value) => !value)}>
         ↺ recovered {spelled(seqs.length)} earlier {seqs.length === 1 ? "moment" : "moments"}
+        {why.length > 0 ? ` · ${why}` : ""}
         {unresolved > 0 ? ` · ${unresolved} unknown` : ""}
       </button>
       {open ? (

@@ -9,6 +9,7 @@
 
 import type {
   Atom,
+  AtomAuthority,
   AtomPhase,
   Episode,
   EpisodeMeta,
@@ -49,6 +50,7 @@ export interface AtomRow {
   valid_to_seq: number | null;
   superseded_by: string | null;
   phase: string;
+  authority: string;
   scope: string;
   pinned: number;
   confidence: number;
@@ -147,6 +149,7 @@ export function toAtom(row: AtomRow): Atom {
     ...(row.valid_to_seq === null ? {} : { validToSeq: row.valid_to_seq }),
     ...(row.superseded_by === null ? {} : { supersededBy: row.superseded_by }),
     phase: row.phase as AtomPhase,
+    authority: row.authority as AtomAuthority,
     scope: row.scope,
     pinned: row.pinned === 1,
     confidence: row.confidence,
@@ -214,23 +217,32 @@ const FTS_STOP = new Set(
   (
     "the and for that with this from what where when who which why how does did was were are you your " +
     "our their his her its not but all any can could will would should about into onto over under " +
-    "have has had been being remind tell give show much many some other than then there here now"
+    "have has had been being remind tell give show much many some other than then there here now " +
+    "like after before earlier said back again still yet"
   ).split(" "),
 );
 
-export function ftsQuery(query: string, mode: "and" | "or" = "and"): string | null {
+/**
+ * The searchable terms of a query: ≥ 3 characters (KERNEL A9.4 — "tea" and
+ * "rain" are addresses), stoplisted, deduplicated, capped at 6.
+ */
+export function ftsTerms(query: string): string[] {
   const terms = query
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s.-]/gu, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 3 && t.length < 40 && !FTS_STOP.has(t));
-  const unique = [...new Set(terms)].slice(0, 6);
+    .filter((t) => t.length >= 3 && t.length < 40 && !FTS_STOP.has(t));
+  return [...new Set(terms)].slice(0, 6);
+}
+
+export function ftsQuery(query: string, mode: "and" | "or" = "and"): string | null {
+  const unique = ftsTerms(query);
   if (unique.length === 0) return null;
   if (mode === "and") return unique.map((t) => `"${t.replace(/"/g, "")}"`).join(" AND ");
   // Fallback: the rarest-looking terms only, so an OR cannot match the archive.
   const rare = [...unique]
     .sort((a, b) => b.length - a.length)
-    .filter((t) => t.length >= 6)
+    .filter((t) => t.length >= 5)
     .slice(0, 3);
   if (rare.length === 0) return null;
   return rare.map((t) => `"${t.replace(/"/g, "")}"`).join(" OR ");

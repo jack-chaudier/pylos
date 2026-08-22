@@ -39,6 +39,7 @@ const payload = {
   packet: state.packet,
   strip: state.strip,
   recovered: state.recovered,
+  routed: state.routed,
 };
 
 await mkdir(dirname(out), { recursive: true });

@@ -301,7 +301,9 @@ export function useDismiss(onClose: () => void): void {
     };
     const onClick = (event: MouseEvent): void => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest(".menu, .popover, .model-chip, .icon-button") === null) onClose();
+      if (target?.closest(".menu, .popover, .model-chip, .icon-button, .thread-title, .account") === null) {
+        onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClick);

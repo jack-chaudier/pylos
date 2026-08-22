@@ -1,4 +1,4 @@
-import type { ChatMessage, Packet, ResidentItem, ResidentType, ThreadStats } from "@pylos/protocol";
+import type { Atom, ChatMessage, Packet, ResidentItem, ResidentType, ThreadStats } from "@pylos/protocol";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.ts";
 import { groupedNumber, shortHash, tokenCount } from "../format.ts";
@@ -8,6 +8,8 @@ export interface XrayProps {
   stats: ThreadStats | undefined;
   turnSeq: number | undefined;
   onClose: () => void;
+  /** A successful verify moves `verifiedTo`; the evidence bar should hear about it. */
+  onVerified: () => void;
 }
 
 const RESIDENT_COLOR: Record<ResidentType, string> = {
@@ -30,6 +32,7 @@ const RESIDENT_LABEL: Record<ResidentType, string> = {
 
 export function Xray(props: XrayProps): React.JSX.Element {
   const [packet, setPacket] = useState<Packet | undefined>(undefined);
+  const [atoms, setAtoms] = useState<Atom[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
   const [verified, setVerified] = useState<{ ok: boolean; headHash: string; checkedTo: number } | undefined>(
     undefined,
@@ -56,6 +59,19 @@ export function Xray(props: XrayProps): React.JSX.Element {
       cancelled = true;
     };
   }, [props.threadId, props.turnSeq]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .atoms(props.threadId)
+      .then((list) => {
+        if (!cancelled) setAtoms(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [props.threadId]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -214,6 +230,8 @@ export function Xray(props: XrayProps): React.JSX.Element {
             </>
           ) : null}
 
+          <Memory atoms={atoms} />
+
           <Section title="Archive" count={groupedNumber(props.stats?.turns ?? 0)} defaultOpen>
             <dl className="kv">
               <dt>head hash</dt>
@@ -227,6 +245,12 @@ export function Xray(props: XrayProps): React.JSX.Element {
               <dd>{groupedNumber(props.stats?.capsules ?? 0)}</dd>
               <dt>losses</dt>
               <dd>{groupedNumber(props.stats?.losses ?? 0)}</dd>
+              <dt>atoms</dt>
+              <dd>
+                {groupedNumber(props.stats?.atoms.supported ?? 0)} supported ·{" "}
+                {groupedNumber(props.stats?.atoms.historical ?? 0)} historical ·{" "}
+                {groupedNumber(props.stats?.atoms.proposed ?? 0)} proposed
+              </dd>
               <dt>models</dt>
               <dd>{props.stats?.models.join(", ") || "—"}</dd>
             </dl>
@@ -246,7 +270,10 @@ export function Xray(props: XrayProps): React.JSX.Element {
                   setVerifying(true);
                   void api
                     .verify(props.threadId)
-                    .then(setVerified)
+                    .then((result) => {
+                      setVerified(result);
+                      if (result.ok) props.onVerified();
+                    })
                     .finally(() => setVerifying(false));
                 }}
               >
@@ -257,6 +284,53 @@ export function Xray(props: XrayProps): React.JSX.Element {
         </div>
       </aside>
     </>
+  );
+}
+
+/**
+ * What the thread believes, and on whose word. PROPOSED atoms were asserted by
+ * a model rather than the user (KERNEL A9.1): they are shown, marked, and never
+ * dressed up as certificates.
+ */
+function Memory({ atoms }: { atoms: Atom[] }): React.JSX.Element {
+  const held = atoms.filter((atom) => atom.phase === "SUPPORTED");
+  const proposed = atoms.filter((atom) => atom.phase === "PROPOSED");
+  return (
+    <>
+      <Section title="Memory" count={groupedNumber(held.length)} defaultOpen={false}>
+        {held.length === 0 ? (
+          <div className="empty">Nothing has been asserted yet.</div>
+        ) : (
+          held.slice(0, 60).map((atom) => <AtomRow key={atom.id} atom={atom} />)
+        )}
+      </Section>
+      {proposed.length > 0 ? (
+        <Section title="Proposed" count={groupedNumber(proposed.length)} defaultOpen>
+          <div className="empty">
+            Asserted by a model, not by you. Unconfirmed: never used as a certificate.
+          </div>
+          {proposed.slice(0, 60).map((atom) => (
+            <AtomRow key={atom.id} atom={atom} />
+          ))}
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
+function AtomRow({ atom }: { atom: Atom }): React.JSX.Element {
+  const unconfirmed = atom.phase === "PROPOSED";
+  return (
+    <div className="page-row atom-row" data-proposed={unconfirmed}>
+      <span className="trigger">{unconfirmed ? "≈" : atom.kind}</span>
+      <span>
+        {atom.key} = {atom.value}
+        {unconfirmed ? " · unconfirmed" : ""}
+      </span>
+      <span className="latency">
+        {atom.authority} · #{groupedNumber(atom.sourceSeq)}
+      </span>
+    </div>
   );
 }
 

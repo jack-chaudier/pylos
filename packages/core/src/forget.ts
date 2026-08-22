@@ -11,9 +11,9 @@
  * was there and that it was removed on request, without keeping it.
  */
 
-import type { Seq } from "@pylos/protocol";
+import type { AtomPhase, Seq } from "@pylos/protocol";
 import { COUNTERS } from "./schema.ts";
-import { type Vault, VaultError } from "./vault.ts";
+import { phaseCounter, type Vault, VaultError } from "./vault.ts";
 
 export interface ForgetTarget {
   seqs?: Seq[];
@@ -70,9 +70,7 @@ export function forget(vault: Vault, threadId: string, target: ForgetTarget): Fo
         .all(threadId, seq) as Array<{ id: string; phase: string }>;
       for (const row of affected) {
         vault.atoms.revoke(threadId, row.id);
-        vault.bump(threadId, {
-          [row.phase === "SUPPORTED" ? COUNTERS.atomsSupported : COUNTERS.atomsHistorical]: -1,
-        });
+        vault.bump(threadId, { [phaseCounter(row.phase as AtomPhase)]: -1 });
         atoms += 1;
       }
     }

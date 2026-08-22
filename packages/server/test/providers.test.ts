@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@pylos/protocol";
 import { toAnthropicMessages } from "../src/providers/anthropic.ts";
 import { streamOpenAiChat, toOpenAiMessages } from "../src/providers/openai-chat.ts";
+import { inferProvider } from "../src/providers/registry.ts";
 import { readSse } from "../src/providers/sse.ts";
 import type { ProviderEvent } from "../src/providers/types.ts";
-import { inferProvider } from "../src/providers/registry.ts";
 import { redact } from "../src/providers/types.ts";
 
 function sseResponse(frames: string[]): Response {
@@ -29,7 +29,7 @@ describe("the SSE reader", () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(encoder.encode("data: {\"a\":"));
+        controller.enqueue(encoder.encode('data: {"a":'));
         controller.enqueue(encoder.encode("1}\n\ndata: [DO"));
         controller.enqueue(encoder.encode("NE]\n\n"));
         controller.close();
@@ -52,9 +52,7 @@ describe("the OpenAI-shaped stream", () => {
           choices: [
             {
               delta: {
-                tool_calls: [
-                  { index: 0, id: "call_a", function: { name: "recall", arguments: '{"qu' } },
-                ],
+                tool_calls: [{ index: 0, id: "call_a", function: { name: "recall", arguments: '{"qu' } }],
               },
             },
           ],

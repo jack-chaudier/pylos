@@ -25,12 +25,16 @@ state(seq, salt) = first 16 bytes of sha256(utf8(SEED + ":" + salt + ":" + seq))
 rng = xoshiro128**  seeded with state as four little-endian uint32 (if all zero, set s[0]=1)
 ```
 
-`salt` ∈ {`"layout"`, `"text"`, `"plant"`}. Draw helpers (all on `rng.next()` →
+`salt` ∈ {`"layout"`, `"text"`, `"plant"`, `"memory"`, `"poison"`, `"probe"`}.
+Draw helpers (all on `rng.next()` →
 uint32): `u01() = next()/2^32`; `int(a,b) = a + floor(u01()·(b−a+1))`;
 `pick(list) = list[int(0, len−1)]`; `weighted(table) = first key whose cumulative
 weight > u01()·total` (table order as listed). Never reuse a stream across seqs.
-Planting (§3) uses the `"plant"` stream of seq 0 only, drawn in the order §3
-lists.
+Planting (§3.1–§3.5) uses the `"plant"` stream of seq 0 only, drawn in the order
+§3 lists; §3.6 uses `"memory"`, §3.7 uses `"poison"`, and the checkpoint sequence
+probes (§7.11) use `"probe"` — all at seq 0. The later plants have their own
+streams so that adding them leaves the fact/quote/number manifest of a given seed
+byte-identical.
 
 ## 2. Layout
 
@@ -117,7 +121,31 @@ All plant draws come from `state(0, "plant")` in this order:
    significant digits and 2 decimals drawn from `[1000.00, 99999.99]` avoiding
    any previously drawn number within 1% relative; metric/unit from vocab.
    Manifest: `{kind:"number", key:"{project}.{metric}", value, seq, span}`.
-6. **Checkpoint query sets.** For each checkpoint `K` (10,000·j and N): 100
+6. **Name-free memories (2,000).** From the `"memory"` stream, after every draw
+   above. For i in 1..2000: draw `noun_a`, `verb`, `prep`, `noun_b` from the
+   name-free lists (§4), redrawing until `noun_a ≠ noun_b` and the four-word
+   tuple is unused; then `adj`; then `seq = claim(int(3, N−1000))`. User episode:
+   `"the {noun_a} {verb}ed {adj} {prep} the {noun_b}."`, assistant: `"Noted."`.
+   Manifest: `{id, kind:"memory", nounA, verb, adj, nounB, text, seq, query}`
+   where `query = "how did the {noun_a} {verb} {prep} the {noun_b}?"` — the
+   adjective is withheld. The generator asserts `names(text) = ∅`.
+7. **Authority poison (200 people).** From the `"poison"` stream. For i in
+   1..200: `person = next unused person`; `variant = C if i mod 4 = 3, B if
+   i mod 4 = 2, else A` (so A is half of them); three distinct places `v1, v2,
+   v3`; `want = int(3, N−60000)` and two gaps `int(2000, 200000)`; the seqs the
+   variant needs are claimed and sorted ascending, so the story is always told in
+   order. Episodes:
+   * **A** — user `"{P} lives in {v1}."` / `"Noted."` at `s_u`; later user
+     `"Any news on {P}?"` and assistant `"{P} lives in {v2}. I can draft the
+     note."` at `s_a`.
+   * **B** — the `s_a` pair only: nobody but the assistant ever said it.
+   * **C** — A, then user `"Actually, {P} moved to {v3}."` / `"Noted."` at `s_c`.
+
+   Manifest: `{id, kind:"poison", variant, person, key, value1?, statedSeq?,
+   value2, claimSeq, value3?, correctedSeq?, query}` with
+   `key = person.<slug>.location` and
+   `query = "Remind me — where does {P} live now?"`.
+8. **Checkpoint query sets.** For each checkpoint `K` (10,000·j and N): 100
    random queries drawn from manifest items with `seq < K` (fact, quote, number
    in proportion 60/25/15) using the item's query templates; plus the trap.
 
@@ -125,7 +153,12 @@ Uniqueness guards (generator asserts after generation): each planted number
 string appears in exactly its statement episode and nowhere else before its
 query; each quote-head appears exactly once; noise numbers have ≤ 3
 significant digits (planted have 5 + decimals), so `retained()` cannot
-false-match.
+false-match; every memory's four-word tuple is unique; the person pool is never
+exhausted, so no two planted people share a name.
+
+Counts scale with `--turns`: `round(count · N/1,000,000)`, floored at 4 facts,
+2 quotes, 2 numbers, 4 memories and 4 people, so every variant appears in the
+smallest run.
 
 **Spans** are `[start, end)` char offsets of the value (fact value, full quote
 including quotes, number string) within the episode content, recorded in the
@@ -156,8 +189,17 @@ manifest.
 - `rare` (400 words for quotes): uncommon English words (`palimpsest`,
   `vellichor`, `susurrus`, …) not appearing in any other template.
 - `person` = `first + " " + last`; planted revised-fact persons are the first
-  2,000 distinct pairs in `(first × last)` order; quote persons are drawn from
-  the remaining pairs.
+  2,000 distinct pairs in `(first × last)` order; quote persons, number persons
+  and poisoned people are drawn from the remaining pairs, in that order, so no
+  planted person is ever reused.
+- **Name-free lists**, used only by §3.6: `memNoun` (48), `memVerb` (32,
+  regular — `<verb>ed` is the past tense), `memAdj` (24), `memPrep` (12). All
+  lowercase. The generator asserts, every run, that each word is disjoint from
+  every word in the lists above, that each survives `ftsTerms()` (≥ 3
+  characters, not FTS-stoplisted) in both the stem and the `-ed` form, and that
+  `names()` of an assembled memory sentence is empty. A word that ever became a
+  routing name would make the memories reachable by the ledger, and §7.12 would
+  prove something other than what it claims.
 
 ## 5. The trap
 
@@ -209,7 +251,8 @@ For checkpoint `K` (after episode `K` is appended and compacted):
 3. **Quotes.** For all quotes with `seq < K`: the page served for the quote query
    has `content.slice(span) === text` byte-exact; `resolved=true`.
 4. **Numbers.** For all numbers with `seq < K`: a page resolves to `seq` and
-   `retained(packet, value)` is true only after paging (i.e. the ledger routed it).
+   `retained(packet, value, unit)` is true with the planted unit (KERNEL A9.2)
+   only after paging (i.e. the ledger routed it).
 5. **Ledger.** `count(loss)` ≥ previous checkpoint's count (monotone). For a
    sample of 256 capsule parents (all at `N`): conservation and completeness
    (THEORY §3) recomputed from episodes.
@@ -225,6 +268,33 @@ For checkpoint `K` (after episode `K` is appended and compacted):
     `"additive-only"` as part of a SUPPORTED line pointing to 483,112 and lists
     the key in `historical`; rolling-summary packet recorded with
     `containsException` and `containsOldRule` booleans (expected false/true).
+11. **Sequence (KERNEL A9.3).** 100 targets from `stream(SEED,"probe",0)`:
+    `N = int(1, K−2)`, advanced to the next `user` episode. At the final
+    checkpoint the first two are replaced by `N = 1` and `N = 345`, and their
+    roles are recorded — on the millionth turn, the archive answers for the
+    345th. Query: `"What did I say on turn N?"`. Pass iff the packet contains
+    `episodeAt(N).content` byte-exact — every corpus template is asserted at
+    ≤ 450 tokens, so a page is never excerpted — **and** either
+    `packet.pages` holds `{trigger:"sequence", resolved:true, seqs ∋ N}` or `N`
+    is a resident recent episode (counted separately). Also reported:
+    `falsePages`, the resolved page records these queries drew under any other
+    trigger.
+12. **Name-free memories (KERNEL A9.4).** For all memories with `seq < K` (a
+    sample of 8 at intermediate checkpoints): compile the memory's question.
+    Pass iff the packet contains the memory sentence and a `search` record
+    resolves to its seq (or the episode is still resident). The memories must
+    have produced **zero** `loss` rows — the ledger cannot see them — and that
+    count is asserted and reported.
+13. **Authority (KERNEL A9.1).** For all people whose story is complete before
+    `K` (4 per variant at intermediate checkpoints): compile
+    `"Remind me — where does {P} live now?"`. With `key = person.<slug>.location`
+    — **A** the packet contains `key = v1 ⟨#s_u⟩` and never `key = v2`; **B** it
+    contains `key ≈ v2 ⟨proposed by assistant #s⟩` and no `key = ` line at all;
+    **C** it contains `key = v3 ⟨#s_c⟩` and no `key ≈ ` line. In all three,
+    no entry of `packet.ledger.historical` for that key carries `v2` as its
+    previous or current value: a closed proposal was never true. The checks are
+    scoped to the person's own key, because a packet a million turns deep
+    carries other people's certificates. `atoms.proposed` is reported.
 
 Any assertion failure is recorded (the run continues) and the report marks the
 result `FAIL` with the first failing checkpoint; the results file is written
@@ -234,12 +304,13 @@ regardless.
 
 ```json
 {
-  "schema": "pylos.bench.million.v1",
+  "schema": "pylos.bench.million.v2",
   "seed": "1", "N": 1000000, "budget": 8192,
   "generator": { "version": "1.0.0", "vocabSha256": "…", "manifestSha256": "…" },
   "kernel": { "version": "1.0.0", "leaf": 32, "fanout": 8,
               "capsuleTokens": { "leaf": 204, "mid": 256, "root": 512 } },
-  "planted": { "facts": 2000, "quotes": 200, "numbers": 50, "ruleSeq": 1,
+  "planted": { "facts": 2000, "quotes": 200, "numbers": 50, "memories": 2000,
+               "persons": 200, "ruleSeq": 1,
                "revisionSeq": 483112, "trapSeq": 1000000 },
   "checkpoints": [ {
       "seq": 10000,
@@ -247,6 +318,13 @@ regardless.
       "facts": { "checked": 200, "resident": 31, "paged": 169, "failed": [] },
       "quotes": { "checked": 2, "exact": 2, "failed": [] },
       "numbers": { "checked": 1, "paged": 1, "failed": [] },
+      "sequence": { "checked": 100, "paged": 99, "resident": 1, "failed": [],
+                    "falsePages": 0, "maxTokens": 8015, "forced": [] },
+      "memories": { "checked": 8, "found": 8, "resident": 0, "failed": [],
+                    "ledgerRows": 0, "maxTokens": 7925 },
+      "poison": { "A": { "checked": 4, "passed": 4 }, "B": { "checked": 4, "passed": 4 },
+                  "C": { "checked": 4, "passed": 4 }, "failed": [],
+                  "proposedAtoms": 16, "maxTokens": 7948 },
       "ledger": { "entries": 41233, "parentsChecked": 256, "conservationOk": true, "completenessOk": true },
       "verify": { "ok": true, "headHash": "…", "checkedTo": 10000 },
       "archiveBytes": 4819231, "residentTokensP50": 7650,
@@ -274,15 +352,23 @@ regardless.
 }
 ```
 
+`generator.version` and `kernel.version` are read from
+`packages/core/package.json`, so a result can never claim a version the kernel
+that produced it did not have. At the final checkpoint `sequence.forced` carries
+the two turns asked for by name, each with the role of the episode found there.
+
 The markdown report is rendered from this JSON only; the landing page reads the
-same file.
+same file. `v2` adds `sequence`, `memories` and `poison` to every checkpoint and
+`memories`/`persons` to `planted`; a `v1` file has none of them and is not
+re-renderable by the current `--rerender`.
 
 ## 9. Live variant (`--live --model grok-4.3 --turns 2000`)
 
 Same generator, `N = 2,000`, `B = 8,192`, seed `"live-1"`, plants scaled:
-40 revised facts (gaps in `[50, 1,200]`), 10 quotes, 10 numbers; rule at seq 1,
-revision at seq 966, trap at seq 2,000; handoff seqs dropped (one model
-throughout).
+40 revised facts (gaps in `[50, 1,200]`), 10 quotes, 10 numbers, plus the floor
+of 4 memories and 4 people (§3.6–§3.7), which the live arm plays into the vault
+but does not probe; rule at seq 1, revision at seq 966, trap at seq 2,000;
+handoff seqs dropped (one model throughout).
 
 **What is sent.** Episodes 1..1,999 are *played* into the vault from the
 generator (assistant text is the scripted text — no model calls) so both arms see

@@ -17,7 +17,7 @@ on bone.
 | `--tablet` | `#EAE5DA` | `#1B1D19` | cards, composer, capsules |
 | `--ink` | `#17160F` | `#ECE7DB` | primary text |
 | `--ash` | `#7C786E` | `#8E8A80` | secondary text, hairlines at 0.14 alpha |
-| `--verdigris` | `#1F6F5C` | `#4FB39A` | accent: links, primary buttons, focus, the seal |
+| `--verdigris` | `#1F6F5C` | `#4FB39A` | accent: links, primary buttons, focus, the evidence bar |
 | `--verdigris-deep` | `#164F42` | `#3E9A83` | hover / pressed |
 | `--ember` | `#C98A2E` | `#E0A64A` | "recovered" / paged-in glow, live indicator, resident meter |
 | `--oxblood` | `#8E2C2C` | `#D26060` | stale · revoked · refused |
@@ -50,9 +50,28 @@ Fonts allowed only for the hosted landing.
 
 * The window **is** the transcript. Composer pinned at the bottom, rounded,
   with a tiny model chip (`Grok 4.6 ▾`) and a paperclip. Nothing else by default.
-* Top edge: the thread title in Newsreader, and at the far right the **seal** —
-  a small mono line `archive 12,408 · view 23.1k / 24k · 2 recovered`. The seal
-  is the only place the machinery shows. Clicking it opens the **X-ray** drawer.
+* Top edge: the thread title in Newsreader, and at the far right the
+  **evidence bar** — a mono strip `archive N turns · N GiB · view X / B ·
+  ledger N · recovered N · N models · chain ✓`, each figure with a hover title
+  explaining what it counts. It is the only place the machinery shows;
+  clicking it opens the **X-ray** drawer. A changed figure settles rather than
+  jumps (220ms). A resident meter beneath it fills with ember as the packet is
+  built, then settles. Under 720px the bar collapses to archive, view and
+  recovered — the three that change while you talk.
+* Hosted mode opens on a **sign-in screen**: wordmark, one line (*One
+  conversation. Every model. Nothing forgotten silently.*), a pill **Sign in
+  with xAI**. Starting it shows a one-time user code in Geist Mono and a pill
+  **Open x.ai**; the screen polls quietly until the browser confirms. Once
+  signed in, a small **account** control (initial in a circle) sits beside the
+  evidence bar — who is signed in, and sign out.
+* A checked answer: when a draft names something the view did not contain and
+  the ledger knows where it is, Pylos pages the exact text and gives the model
+  one round to reissue the answer. The provisional text is dropped and
+  `↺ verified against the archive · names` appears above the answer that
+  replaced it, in ember mono.
+* In the X-ray, atoms a model proposed but nothing has confirmed render ash,
+  not ink: `≈ key value ⟨proposed by assistant #seq · unconfirmed⟩`. A
+  proposal is never a certificate; the ash tone is the tell.
 * Messages: no bubbles. User turns in ink with a thin verdigris left rule;
   assistant turns plain. Timestamps and seq numbers appear on hover only, in
   mono ash.
@@ -68,22 +87,28 @@ Fonts allowed only for the hosted landing.
   mono; click to expand the exact spans inline.
 * Handoff divider: hairline, `Grok stopped here. Claude continued from the same thread.`
 * Motion: 150–220ms ease-out; streaming text appears with no typewriter
-  gimmick; the seal's resident meter fills with ember as the packet is built,
-  then settles.
+  gimmick.
+* Responsive: the timeline rail hides under 720px; the X-ray drawer goes
+  full-width; the composer stays pinned to the bottom at every width.
 * Dark mode follows the system.
 
 ## The landing page
 
 Structure (low density, large type, one scroll):
 
-1. Thin nav: wordmark `pylos`, Theory, GitHub, Download.
-2. Hero on bone: overline `OPEN SOURCE · APACHE-2.0 · MAC + LINUX`, display
+1. Thin nav: wordmark `pylos`, Theory, GitHub, Download, and accent **Open app**
+   linking to the hosted app at `/app/`.
+2. Hero on bone: overline `OPEN SOURCE · APACHE-2.0 · WEB · MAC + LINUX`, display
    headline **Talk forever.** (alt: *A conversation that outlives every model.*),
-   one sentence, two CTAs — pill **Watch turn 1,000,000** and ghost **Download**.
+   one sentence, three CTAs — pill **Open Pylos →** (primary, to `/app/`), ghost
+   **Download**, and quiet **Watch turn 1,000,000** for the aperture.
 3. **The aperture** — a live, in-browser run of the real `@pylos/core` compiler
    over a synthetic stream: one counter races toward 1,000,000 turns, the other
    (view tokens) stays flat; a thin ledger strip shows losses being recorded
-   and a recovered span lighting up in ember. Ten seconds, no video.
+   and a recovered span lighting up in ember. Ten seconds, no video. When the
+   closing question's ledger route does not fire, the exhibit says so —
+   `no route fired`, nothing claimed — rather than showing a recovery that
+   did not happen.
 4. Three short statements with mono captions: *The archive is exact.* · *The
    view is bounded.* · *Nothing is forgotten silently.*
 5. The trap (from the bench): two columns, same model, same question at turn

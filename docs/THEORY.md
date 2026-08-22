@@ -25,7 +25,14 @@ content-free reflex (rows 4, 9, 25, 26, 31: PREREGISTERED).
 presents as *supported* are certificate lines `key = value ⟨#seq⟩` with a
 resolvable pointer and verbatim episodes. Capsule text is labelled as a view and
 followed by its ledger digest. The packet may not contain a value the archive no
-longer backs.
+longer backs. The design law this generalizes to: models may propose, never
+authorize (KERNEL A9.1). An atom read from an `assistant` or `model` episode is
+committed `PROPOSED`, never `SUPPORTED`; only a `user` episode moves the
+frontier. A proposal is never frontier-resident and never enters capsule text —
+the one place it can surface is a single routing line, `key ≈ value ⟨proposed by
+<authority> #seq · unconfirmed⟩`, marked with `≈` rather than `=` and served
+only when nothing authoritative holds the key, so the packet can show that a
+claim exists without ever presenting it as support.
 
 **Oracle.** For every frontier line in `K_t`, `episodes.get(seq).content` contains
 `value` (string-presence after the same normalization as `names()`). For every
@@ -107,32 +114,40 @@ absent after truncation appear in `dropped(c)`.
 
 ## 6. Row 21: deterministic loss-ledger routing (the rule, exactly)
 
-**Statement.** On the cached routing corpus (grok, 30 DENIED items), route iff any
-policy value is absent from the artifact by string check: recall 1.00, precision
-0.917, end-to-end 30/30 vs 26/30 for the best reader-side router (OBSERVED,
-re-analysis, one model). The three items no reader-side trigger can catch are
-silent: confident wrong, or coherent-but-wrong. The ledger routes them by
-construction.
+**Statement, as run.** On the cached routing corpus (grok, 30 DENIED items), route
+iff any policy value is absent from the artifact by string check: recall 1.00,
+precision 0.917, end-to-end 30/30 vs 26/30 for the best reader-side router
+(OBSERVED, re-analysis, one model). The three items no reader-side trigger can
+catch are silent: confident wrong, or coherent-but-wrong. The ledger routes them
+by construction.
 
-**The rule as implemented** (`experiments/lib/dissociation.py`, `runner3.py`):
+**The rule as run in the source experiment**
+(`experiments/lib/dissociation.py`, `runner3.py`) used a 1% relative tolerance.
+Pylos withdraws that tolerance (KERNEL A9.2): it made an unrelated `4950 ms`
+stand in for a lost `5000 ms`, and unit-blindness let `48250 usd` stand in for
+a lost `48250 eur` — both silent losses wearing a witness's coat. The rule
+Pylos implements (`packages/core/src/pure/names.ts`, `retained`) is:
 
 ```
-numbers(text)  = [float(m) for m in re.findall(r"-?\d+(?:\.\d+)?", text.replace(",", ""))]
-retained(text, v) = any( |x−v| < 1e-9
-                      or (v ≠ 0 and |x−v|/|v| ≤ 0.01)
-                      or x == round(v, 0) or x == round(v, 1)    for x in numbers(text))
-any_policy_lost = not all(retained(summary, p.value) for p in policy_params)
-route iff any_policy_lost
+x ∈ {v, round(v,0), round(v,1)} ∨ v ∈ {round(x,0), round(x,1)}
 ```
 
-The corpus guarantees each policy value is *uniquely* retained among the item's
-values (collision guard), so the check cannot false-match a non-policy reading.
+for some number occurrence `x` in the text, and, when the lost name `v` carries
+a unit, only when `x` is immediately followed by the same unit token
+(case-insensitive). Number occurrences inside the kernel's own markup (`⟨…⟩`,
+`⟦…⟧`) never count as witnesses: a certificate's pointer `⟨#48250⟩` is
+scaffolding, not evidence that `48250.37` survived. Everything else still
+matches by exact normalized string. The direction of the change is
+conservative — it can only add pages, never remove one that the 1% window
+would have suppressed. `bench/results/million-2.md` (kernel 1.1.0) measured
+ledger-routing precision at 1.00 on the 1,000,000-turn checkpoint's 100-query
+sample (`routing.precision` in the results JSON).
 
 **Mechanism.** Pylos generalizes "policy params named in the query" to
 `names(q_t)` and "absent from the artifact" to "absent from the resident packet":
 `page iff n ∈ names(q_t) ∧ n ∈ unresolved loss ∧ n ∉ names(K_t^resident)`.
-Numbers use the `retained` tolerance above; everything else uses exact normalized
-string presence.
+Numbers use the rounding-equivalence-with-unit-agreement rule above; everything
+else uses exact normalized string presence.
 
 **Oracle.** (i) Recall: for every planted value whose name is in `names(q)` and
 absent from the resident packet, a page is served whose span contains the value
@@ -151,7 +166,10 @@ false-denies, reader over-abstains) (PREREGISTERED, split).
 **Mechanism.** The frontier line `key = value ⟨#seq⟩` *is* a certificate: claim,
 deciding value, pointer. Pylos only issues value-bearing certificates; it never
 emits a value-free "all criteria met" line (the APPROVED failure mode). Absence
-is represented as a ledger entry, not as a negative certificate.
+is represented as a ledger entry, not as a negative certificate. A proposal is
+not a certificate and is never rendered as one: `key ≈ value ⟨proposed by
+<authority> #seq · unconfirmed⟩` uses `≈` precisely because it has no deciding
+authority behind it (KERNEL A9.1).
 
 **Oracle.** Every frontier line has a `seq` pointer; `episodes.get(seq)` contains
 the value; no frontier line has an empty value.
@@ -196,7 +214,10 @@ deterministic, zero model calls): at fixed `F=16, w=2, d=2`, resident context
 **Mechanism.** The frontier holds the **current** complete frontier only
 (SUPPORTED atoms). HISTORICAL atoms are the all-as-of side — identity-like
 growth — so they are never resident by default; they live in the indexed atom
-table with `valid_from/valid_to` and are paged by the historical trigger. The
+table with `valid_from/valid_to` and are paged by the historical trigger.
+PROPOSED atoms (KERNEL A9.1) are a third, disjoint case: never frontier-
+resident, never capsule text, regardless of budget — an assistant's or a
+model extractor's claim does not compete for the frontier slot at all. The
 recent window is the exact last-`w` component. Resident size is a function of
 `(B, frontier, fixed capsule count)` and must not trend with `n`.
 
@@ -224,7 +245,10 @@ export→import, `count(loss)` and every `(name, seq, span)` are identical.
 **Status.** Design law (`DREAM.md` §8; `revelation` gate). Pylos v1 gates no
 actions; the chat analogue is: nothing the packet marks SUPPORTED depends on an
 unresolved loss. Ledger names that are resident elsewhere in the packet are not
-losses *of this packet*: `L_t := ledger ∖ names(K_t)`.
+losses *of this packet*: `L_t := ledger ∖ names(K_t)`. The same law is why a
+PROPOSED atom cannot satisfy a dependency: it is not in `SUPPORTED`, so nothing
+downstream may treat `Dep(d) ∩ {proposals}` as if it were `Dep(d) ∩ L_t = ∅`
+(KERNEL A9.1 — models may propose, never authorize).
 
 **Oracle.** The `⟨lost: …⟩` digest never lists a name present in the packet's
 frontier, paged, or recent slots; every ledger page served is recorded with its
@@ -257,6 +281,12 @@ it pages it.
   cannot reconstruct. Conservative direction = extra pages, never missing ones.
 - **Row 48** (EXACT): rolling exact window + stable-key index + exact fallback is
   the reference architecture; Pylos = recent slot + atom/loss index + `UNKNOWN`.
+  Two more exact routes reach the index besides the ledger: the sequence address
+  (`#seq`, deterministic — "turn 345" pages that seq exactly, KERNEL A9.3) and
+  the lexical address (FTS5, porter stemming, KERNEL A9.4). Neither is a ledger
+  guarantee — the sequence route answers "what's at this position", not "what
+  was lost", and the lexical route is a best-effort address over stemmed text,
+  not a completeness proof.
 - **Frontier factorization lemma** (proved, finite portfolio model): minimum page
   portfolios factor over connected components — Pylos pages per ledger name
   independently, which is exact only because names are treated as independent.
@@ -272,6 +302,13 @@ it pages it.
 - That the capsule hierarchy is information-theoretically small (RCP's byte
   ratios are implementation artifacts; ours will be too).
 - That succession across vendors preserves behaviour; it preserves the packet.
+- That a reply has been fact-checked. The verification round (KERNEL A9.5)
+  pages only the names the ledger recorded as dropped when a draft states them
+  — presence against the archive, not truth of the claim.
+- That an assistant cannot mislead a later model. A proposal (KERNEL A9.1) is
+  shown unconfirmed, `key ≈ value ⟨proposed by assistant #seq · unconfirmed⟩`,
+  not hidden or suppressed; nothing stops a later model from reading it and
+  restating it.
 
 ## 15. Where the mechanism exceeds the evidence
 
@@ -295,3 +332,15 @@ it pages it.
    ledger only if `names()` caught a value in it.
 7. **1K→1M invariance (RCP)** used stable keys known in advance and an oracle
    selector. Pylos's keys are discovered by the atomizer; the bench plants them.
+8. **The lexical route (KERNEL A9.4) is an address, not a guarantee.** It finds
+   an episode only when the query shares ≥ 2 stemmed content words with it and
+   either the query names something unknown or no name route resolved a page
+   this turn. `bench/results/million-2.md` measured 2,000/2,000 planted
+   name-free memories (0 ledger rows, no routing name at all) found by this
+   route at the 1,000,000-turn checkpoint; paraphrase without lexical overlap
+   is still not found deterministically, and precision on real conversation is
+   unmeasured.
+9. **The verification round (KERNEL A9.5) fires only for names the ledger
+   recorded as dropped.** Its effect on answers is unmeasured: row 12 shows
+   reader-facing manifests help some models and not others, and that is the
+   closest evidence we have to how a model treats a `⟨pylos check⟩` prompt.

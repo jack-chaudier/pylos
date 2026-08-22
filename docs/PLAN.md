@@ -28,7 +28,7 @@ pylos/
 
 ## Milestones
 
-Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15.
+Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) is in progress: deployment. `pylos serve --hosted` and the app served at `/app/` exist, along with the sign-in screen, evidence bar, landing rewrites, and the `million-2` bench artifact (kernel 1.1.0, `bench/results/million-2.md`); the deployed hosted URL is not yet up.
 
 | # | Milestone | Done means |
 | --- | --- | --- |
@@ -39,6 +39,7 @@ Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub re
 | 5 | Web | Landing deployed on Vercel with the live aperture and the trap exhibit from real bench output. |
 | 6 | Proofs | Millionth Turn (deterministic + live sample), Brain Transplant (Grok → Claude → Ollama), Laptop Funeral (export/destroy/import/verify/continue), recorded in `bench/results` and linked from README. |
 | 7 | v1.0.0 | CHANGELOG, tagged release with artifacts, README with honest claim boundary. |
+| 8 | Web app (v1.1) | Hosted server with one vault per signed-in user; xAI device-grant login; the app served at `/app/` by `pylos serve`; landing page rewritten around **Open Pylos** as the primary CTA; the hosted app deployed at a public URL. |
 
 ## Decisions already made (do not relitigate)
 
@@ -48,6 +49,12 @@ Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub re
 * Deterministic ledger (string-presence) is the source of truth; model writers are optional and truncated mechanically.
 * No training run unless a measured natural residual demands one (DREAM §18). RunPod budget is reserved for an optional local atomizer/sentinel only after v1 works.
 * Tools default off. Retrieved content is data, never instructions.
+* Web app first: v1.1 makes the hosted web app the primary way in. xAI
+  device-grant login is the identity — no other identity provider in v1.1.
+  Users bring their own xAI account for inference; Pylos does not proxy or
+  pay for it. Desktop remains the local-first option, wrapping the same app.
+  The hosted backend is a single Bun process with one SQLite vault per user
+  under `<home>/users/<id>/` — no Postgres, no separate database service.
 
 ## Claim boundary for v1 (what we will and won't say)
 

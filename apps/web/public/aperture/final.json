@@ -2,14 +2,14 @@
   "engine": "core",
   "seed": 1348029519,
   "generatedAt": "2026-08-22",
-  "runtimeMs": 14452,
+  "runtimeMs": 18222,
   "ruleSeq": 1,
   "revisionSeq": 483112,
   "question": "The change is additive-only and the on-call lead skipped the dry-run — can I send the production migration?",
   "turn": 1000000,
   "total": 1000000,
   "archiveBytes": 173235075,
-  "lossRows": 1412239,
+  "lossRows": 1383046,
   "capsules": 35712,
   "levelCounts": [
     31250,
@@ -20,11 +20,11 @@
   ],
   "packet": {
     "budget": 8192,
-    "tokens": 6551,
+    "tokens": 6553,
     "slots": {
       "header": 151,
       "frontier": 1633,
-      "capsules": 1414,
+      "capsules": 1416,
       "paged": 78,
       "recent": 3275
     },
@@ -35,7 +35,7 @@
       "paged": 1474,
       "recent": 3279
     },
-    "ledgerCount": 1412239,
+    "ledgerCount": 1383046,
     "pagedCount": 1,
     "capsuleCount": 5
   },
@@ -142,5 +142,6 @@
     "text": "Correction to the migration rule: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead.",
     "trigger": "ledger · \"additive-only\"",
     "quote": "additive-only"
-  }
+  },
+  "routed": true
 }

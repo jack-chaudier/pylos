@@ -28,17 +28,48 @@ const xai = new XaiProvider(auth);
 const provider: CoreProvider = (r) =>
   (async function* () {
     let usage: unknown;
-    for await (const ev of xai.stream(r.messages, { model: r.model, tools: r.tools, temperature: 0, maxTokens: 400 })) {
+    for await (const ev of xai.stream(r.messages, {
+      model: r.model,
+      tools: r.tools,
+      temperature: 0,
+      maxTokens: 400,
+    })) {
       if (ev.type === "delta") yield { type: "delta" as const, text: ev.text };
-      else if (ev.type === "tool_call") yield { type: "tool_call" as const, id: ev.id, name: ev.name, arguments: ev.args };
+      else if (ev.type === "tool_call")
+        yield { type: "tool_call" as const, id: ev.id, name: ev.name, arguments: ev.args };
       else if (ev.type === "usage") usage = ev.usage;
       else if (ev.type === "done") yield { type: "done" as const, usage: usage as never };
     }
   })();
 
 const t0 = Date.now();
-const result = await runLive({ model, turns, seed, budget, provider, out: `bench/results/million-live-${seed}.json` });
-console.log(JSON.stringify({ ok: result.ok, model, turns, seed, budget, summary: result.summary, probes: result.probes.length, secs: Math.round((Date.now() - t0) / 1000), reason: result.reason }, null, 2));
+const result = await runLive({
+  model,
+  turns,
+  seed,
+  budget,
+  provider,
+  out: `bench/results/million-live-${seed}.json`,
+});
+console.log(
+  JSON.stringify(
+    {
+      ok: result.ok,
+      model,
+      turns,
+      seed,
+      budget,
+      summary: result.summary,
+      probes: result.probes.length,
+      secs: Math.round((Date.now() - t0) / 1000),
+      reason: result.reason,
+    },
+    null,
+    2,
+  ),
+);
 if (result.trap) {
-  console.log("\n--- TRAP · pylos ---\n" + result.trap.pylos.answer + "\n\n--- TRAP · rolling ---\n" + result.trap.rolling.answer);
+  console.log(
+    `\n--- TRAP · pylos ---\n${result.trap.pylos.answer}\n\n--- TRAP · rolling ---\n${result.trap.rolling.answer}`,
+  );
 }

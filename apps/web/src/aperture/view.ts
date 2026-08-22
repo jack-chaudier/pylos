@@ -135,9 +135,24 @@ export function mountAperture(): void {
     while (els.strip.childElementCount > MAX_CHIPS) els.strip.firstElementChild?.remove();
   }
 
+  /**
+   * Only a real route gets a recovery. If the ledger did not return the
+   * revision, the exhibit says so rather than dressing up a near miss.
+   */
   function reveal(state: RunState): void {
+    if (!state.routed) {
+      els.recovery.dataset.on = "false";
+      return;
+    }
     const r = state.recovered;
-    if (!r) return;
+    if (!r) {
+      els.recovLine.textContent = "no route fired";
+      els.recovQuote.textContent =
+        "The closing question matched nothing this run still holds a locator for. Nothing was recovered, and nothing is claimed for it.";
+      els.recovMeta.textContent = `${nf.format(state.lossRows)} ledger entries recorded, none removed`;
+      els.recovery.dataset.on = "none";
+      return;
+    }
     els.recovLine.textContent = `↺ recovered turn ${nf.format(r.seq)}`;
     els.recovQuote.textContent = "";
     for (const part of split(r.text, r.quote)) {
@@ -182,7 +197,11 @@ export function mountAperture(): void {
     els.replay.disabled = false;
     els.replay.textContent = "Replay";
     els.status.textContent = `Measured in this browser · ${nf.format(state.turn)} turns in ${(elapsed / 1000).toFixed(1)}s · packet ${nf.format(state.packet.tokens)}/${nf.format(state.packet.budget)} · ledger ${nf.format(state.lossRows)} · seed 0x50594C4F`;
-    els.live.textContent = `The run finished: ${nf.format(state.turn)} turns archived, the model's view held at ${nf.format(state.packet.tokens)} of ${nf.format(state.packet.budget)} tokens, and turn ${nf.format(state.recovered?.seq ?? 0)} was recovered from the loss ledger before answering.`;
+    const view = `${nf.format(state.turn)} turns archived, the model's view held at ${nf.format(state.packet.tokens)} of ${nf.format(state.packet.budget)} tokens`;
+    els.live.textContent =
+      state.recovered === null
+        ? `The run finished: ${view}. No ledger route fired for the closing question, so nothing was recovered.`
+        : `The run finished: ${view}, and turn ${nf.format(state.recovered.seq)} was recovered from the loss ledger before answering.`;
   }
 
   function clear(): void {

@@ -1,19 +1,34 @@
-import { openVault, atomize, compact } from "@pylos/core";
+import { atomize, compact, openVault } from "@pylos/core";
 
 const vault = openVault({ home: "/tmp/pylos-demo" });
 const thread = vault.threads.create("The Linear B archive");
 
 const topics = [
-  ["Where did the Pylos tablets come from?", "They came from the palace at Ano Englianos, excavated by Carl Blegen in 1939."],
+  [
+    "Where did the Pylos tablets come from?",
+    "They came from the palace at Ano Englianos, excavated by Carl Blegen in 1939.",
+  ],
   ["How many tablets survived?", "About 1,100 tablets survived the fire, baked hard by it."],
   ["What script are they in?", "Linear B, deciphered by Michael Ventris in 1952 as an early form of Greek."],
   ["What do they record?", "Palace administration: rations, textiles, bronze, offerings to Poseidon."],
-  ["Never send a production migration before the dry-run database is verified.", "Recorded as a standing rule."],
-  ["What was the palace destroyed by?", "A fire around 1200 BCE, at the end of the Late Helladic IIIB period."],
+  [
+    "Never send a production migration before the dry-run database is verified.",
+    "Recorded as a standing rule.",
+  ],
+  [
+    "What was the palace destroyed by?",
+    "A fire around 1200 BCE, at the end of the Late Helladic IIIB period.",
+  ],
   ["Who was the last wanax?", "Unknown by name; the tablets record the office, not a successor."],
   ["What is the Ta series?", "An inventory of furniture and vessels, prepared for a ceremony."],
-  ["What does o-pi-a-ra mean?", "Probably 'coastal districts' — the watcher tablets list men posted to them."],
-  ["Why did the archive survive at all?", "Because clay that would have crumbled was fired by the blaze that destroyed the palace."],
+  [
+    "What does o-pi-a-ra mean?",
+    "Probably 'coastal districts' — the watcher tablets list men posted to them.",
+  ],
+  [
+    "Why did the archive survive at all?",
+    "Because clay that would have crumbled was fired by the blaze that destroyed the palace.",
+  ],
 ];
 
 let n = 0;

@@ -10,9 +10,14 @@
  * Stage 1 (rules) is deterministic and always on. Stage 2 (a model extractor) is
  * optional, asynchronous, never blocks the reply, and every atom it returns must
  * cite a verbatim quote from the episode or it is discarded.
+ *
+ * Authority (KERNEL A9.1) decides what a new atom is allowed to do. An atom read
+ * from an assistant turn, or proposed by the stage-2 extractor, is committed
+ * `PROPOSED`: it may close an earlier proposal on its key, and nothing else. The
+ * model may propose; only the user authorizes.
  */
 
-import type { Atom, AtomKind, Episode, Seq } from "@pylos/protocol";
+import type { Atom, AtomAuthority, AtomKind, Episode, Role, Seq } from "@pylos/protocol";
 import { newId } from "./hash.ts";
 import { type AtomDraft, applyRules } from "./pure/rules.ts";
 import type { Vault } from "./vault.ts";
@@ -40,6 +45,20 @@ export type ModelExtractor = (input: {
 
 function normalizeValue(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Who is speaking (KERNEL A9.1). Only user and assistant turns carry rules
+ * (`SPOKEN` in `rules.ts`); tool payloads and attachments are retrieved data and
+ * are never atomized, so everything that is not the assistant is the user.
+ */
+export function authorityOf(role: Role): AtomAuthority {
+  return role === "assistant" ? "assistant" : "user";
+}
+
+/** The only authority that may move the frontier. */
+function authorizes(authority: AtomAuthority): boolean {
+  return authority === "user";
 }
 
 /**
@@ -89,11 +108,19 @@ function commit(
   episode: Episode,
   draft: AtomDraft,
   createdBy?: string,
+  authority: AtomAuthority = authorityOf(episode.role),
 ): Atom | null {
-  const prior = vault.atoms.byKey(threadId, draft.key, "SUPPORTED");
-  const head = prior[0];
-  if (head !== undefined && normalizeValue(head.value) === normalizeValue(draft.value)) {
+  const value = draft.value.replace(/\s+/g, " ").trim();
+  const supported = vault.atoms.byKey(threadId, draft.key, "SUPPORTED");
+  const proposals = vault.atoms.byKey(threadId, draft.key, "PROPOSED");
+  const head = supported[0];
+  if (head !== undefined && normalizeValue(head.value) === normalizeValue(value)) {
     // A restatement, not a revision: nothing changed, so nothing is recorded.
+    return null;
+  }
+  const authoritative = authorizes(authority);
+  if (!authoritative && proposals.some((p) => normalizeValue(p.value) === normalizeValue(value))) {
+    // The same proposal, made twice. Repeating it does not make it more true.
     return null;
   }
   const atom: Atom = {
@@ -101,12 +128,13 @@ function commit(
     threadId,
     kind: draft.kind,
     key: draft.key,
-    value: draft.value.replace(/\s+/g, " ").trim(),
+    value,
     text: draft.text,
     sourceSeq: episode.seq,
     sourceSpan: draft.span,
     validFromSeq: episode.seq,
-    phase: "SUPPORTED",
+    phase: authoritative ? "SUPPORTED" : "PROPOSED",
+    authority,
     scope: "global",
     pinned: false,
     confidence: draft.confidence,
@@ -114,8 +142,12 @@ function commit(
     createdAt: Date.now(),
   };
   vault.atoms.insert(atom);
-  for (const previous of prior) {
-    vault.atoms.supersede(threadId, previous.id, atom.id, episode.seq);
+  // A proposal closes the proposal it revises, so exactly one is ever open per
+  // key; it closes nothing else. When the user rules on the key, the previous
+  // value becomes history and any open proposal is closed with it — answered,
+  // whether or not it turned out to be right.
+  for (const previous of authoritative ? [...supported, ...proposals] : proposals) {
+    vault.atoms.supersede(threadId, previous, atom.id, episode.seq);
   }
   return atom;
 }
@@ -167,7 +199,9 @@ export async function atomizeWithModel(
         rule: "model",
         confidence: 0.7,
       };
-      const atom = commit(vault, threadId, entry.episode, draft, `model:${result.model}`);
+      // `model`, not the quoted episode's role: quoting the user is not being
+      // the user (KERNEL A9.1).
+      const atom = commit(vault, threadId, entry.episode, draft, `model:${result.model}`, "model");
       if (atom !== null) created.push(atom);
     }
   });

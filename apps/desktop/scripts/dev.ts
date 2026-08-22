@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 /**
  * The dev orchestrator Tauri's `beforeDevCommand` runs: start the Pylos server
- * if nothing is already listening, then hand over to Vite in the foreground.
- * Both die with this process.
+ * if nothing is already listening, then hand over to Vite — running in
+ * `apps/app`, the shared UI this shell wraps — in the foreground. Both die with
+ * this process.
  */
 const PORT = Number(process.env.PYLOS_PORT ?? 7334);
 const UI_PORT = Number(process.env.PYLOS_UI_PORT ?? 1420);
 const SERVER_ENTRY = new URL("../../../packages/server/src/index.ts", import.meta.url).pathname;
+const APP_DIR = new URL("../../app", import.meta.url).pathname;
 
 async function listening(): Promise<boolean> {
   try {
@@ -38,6 +40,7 @@ if (await listening()) {
 }
 
 const vite = Bun.spawn(["bunx", "vite", "--port", String(UI_PORT), "--strictPort"], {
+  cwd: APP_DIR,
   env: { ...process.env },
   stdout: "inherit",
   stderr: "inherit",

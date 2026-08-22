@@ -1,15 +1,17 @@
-import type { AuthStatus, Capsule, Episode, ModelInfo, PageRecord, ThreadStats } from "@pylos/protocol";
+import type { AuthStatus, Capsule, Episode, Me, ModelInfo, PageRecord, ThreadStats } from "@pylos/protocol";
 import { DEFAULT_BUDGET } from "@pylos/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, streamTurn } from "./api.ts";
+import { type ApiError, api, onSessionExpired, resolveBase, session, setSession, streamTurn } from "./api.ts";
+import { Account } from "./components/Account.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Connect } from "./components/Connect.tsx";
-import { Seal, SealMark } from "./components/Seal.tsx";
+import { EvidenceBar, SealMark } from "./components/Seal.tsx";
+import { SignIn } from "./components/SignIn.tsx";
 import { ConfirmSheet, PassphraseSheet, ThreadMenu } from "./components/ThreadMenu.tsx";
 import { TimelineRail } from "./components/TimelineRail.tsx";
 import { type StreamingTurn, Transcript } from "./components/Transcript.tsx";
 import { Xray } from "./components/Xray.tsx";
-import { isMac, pickBundle, saveBytes, showWindow } from "./tauri.ts";
+import { inTauri, isMac, pickBundle, saveBytes, showWindow } from "./tauri.ts";
 
 const PAGE = 60;
 const MAX_LOADED = 400;
@@ -30,7 +32,10 @@ type Sheet =
 
 export function App(): React.JSX.Element {
   const [booted, setBooted] = useState(false);
-  const [offline, setOffline] = useState<string | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
+  const [offline, setOffline] = useState(false);
+  const [me, setMe] = useState<Me | undefined>(undefined);
+  const [signedIn, setSignedIn] = useState(false);
   const [stats, setStats] = useState<ThreadStats | undefined>(undefined);
   const [threads, setThreads] = useState<ThreadStats[]>([]);
   const [window_, setWindow] = useState<Window_>({
@@ -64,6 +69,7 @@ export function App(): React.JSX.Element {
 
   const turn = useRef<{ abort: () => void } | undefined>(undefined);
   const threadId = stats?.threadId;
+  const hosted = me?.hosted === true;
 
   const say = useCallback((text: string, tone?: "bad"): void => {
     setToast(tone === undefined ? { text } : { text, tone });
@@ -108,41 +114,68 @@ export function App(): React.JSX.Element {
     return statuses;
   }, []);
 
+  const openWorkspace = useCallback(async (): Promise<void> => {
+    const list = await api.listThreads();
+    setThreads(list);
+    const remembered = localStorage.getItem(THREAD_KEY);
+    const target =
+      list.find((thread) => thread.threadId === remembered) ?? list[0] ?? (await api.createThread());
+    await openThread(target.threadId);
+    setSignedIn(true);
+    void refreshAuth();
+    void api
+      .models()
+      .then(setModels)
+      .catch(() => undefined);
+  }, [openThread, refreshAuth]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs the boot; it is never read
   useEffect(() => {
     void (async () => {
-      for (let attempt = 0; attempt < 40; attempt += 1) {
+      await resolveBase();
+      onSessionExpired(() => {
+        setSignedIn(false);
+        setStats(undefined);
+        setWindow({ episodes: [], hasOlder: false, hasNewer: false });
+      });
+
+      let identity: Me | undefined;
+      for (let tries = 0; tries < 40 && identity === undefined; tries += 1) {
         try {
-          await api.health();
-          break;
-        } catch {
-          if (attempt === 39) {
-            setOffline("The Pylos server did not start. Run `bun run --cwd packages/server start`.");
+          identity = await api.me();
+        } catch (error) {
+          const failure = error as ApiError;
+          if (failure.code === "unauthorized") {
+            identity = { hosted: true };
+          } else if (failure.code !== "offline" || tries === 39) {
+            setOffline(true);
             setBooted(true);
             void showWindow();
             return;
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 250));
           }
-          await new Promise((resolve) => setTimeout(resolve, 250));
         }
       }
+      if (identity === undefined) return;
+      setMe(identity);
+      setOffline(false);
+
+      if (identity.hosted && session() === null) {
+        setBooted(true);
+        void showWindow();
+        return;
+      }
       try {
-        const list = await api.listThreads();
-        setThreads(list);
-        const remembered = localStorage.getItem(THREAD_KEY);
-        const target =
-          list.find((thread) => thread.threadId === remembered) ?? list[0] ?? (await api.createThread());
-        await openThread(target.threadId);
-        void refreshAuth();
-        void api
-          .models()
-          .then(setModels)
-          .catch(() => undefined);
+        await openWorkspace();
       } catch (error) {
-        setOffline((error as Error).message);
+        // A rejected session drops through to the sign-in screen, not to "unreachable".
+        if ((error as ApiError).code !== "unauthorized") setOffline(true);
       }
       setBooted(true);
       void showWindow();
     })();
-  }, [openThread, refreshAuth]);
+  }, [openWorkspace, attempt]);
 
   const refreshThread = useCallback(async (): Promise<void> => {
     if (threadId === undefined) return;
@@ -275,6 +308,20 @@ export function App(): React.JSX.Element {
             setStreaming((current) =>
               current === undefined ? current : { ...current, text: current.text + event.text },
             );
+          } else if (event.type === "check") {
+            // The draft named lost values: everything streamed so far is void,
+            // and the deltas after this one are the answer that was checked.
+            setRecovered((count) => count + event.pages.length);
+            setStreaming((current) =>
+              current === undefined
+                ? current
+                : {
+                    ...current,
+                    text: "",
+                    check: { names: event.names },
+                    pages: [...current.pages, ...event.pages],
+                  },
+            );
           } else if (event.type === "done") {
             const finished = event.episode;
             setWindow((current) =>
@@ -291,7 +338,7 @@ export function App(): React.JSX.Element {
             if (event.code === "no_provider") {
               setPendingText(text);
               setSheet({ kind: "connect" });
-            } else {
+            } else if (event.code !== "unauthorized") {
               say(event.message, "bad");
             }
             void refreshThread();
@@ -419,6 +466,17 @@ export function App(): React.JSX.Element {
     [threadId, refreshThread, say],
   );
 
+  const signOut = useCallback((): void => {
+    void api
+      .signOut()
+      .catch(() => undefined)
+      .finally(() => {
+        setSession(null);
+        localStorage.removeItem(THREAD_KEY);
+        globalThis.location.reload();
+      });
+  }, []);
+
   // ---------- derived ----------
 
   const handoffs = useMemo(
@@ -462,7 +520,7 @@ export function App(): React.JSX.Element {
 
   if (!booted) {
     return (
-      <div className="app">
+      <div className="app solo">
         <div className="coldstart">
           <SealMark className="seal-emblem" />
         </div>
@@ -470,10 +528,53 @@ export function App(): React.JSX.Element {
     );
   }
 
+  if (offline) {
+    const local = inTauri || me?.hosted === false;
+    return (
+      <div className="app solo">
+        <div className="coldstart">
+          <SealMark className="seal-emblem" />
+          <h1>Pylos is unreachable.</h1>
+          <p>
+            {local
+              ? "The Pylos server is not running. Start it with pylos serve, then try again."
+              : "Retrying the connection."}
+          </p>
+          <button
+            type="button"
+            className="pill"
+            onClick={() => {
+              setOffline(false);
+              setBooted(false);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (hosted && !signedIn) {
+    return (
+      <div className="app solo">
+        <SignIn
+          onSignedIn={(token, identity) => {
+            setSession(token);
+            setMe(identity);
+            setBooted(false);
+            setAttempt((value) => value + 1);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <header className={`titlebar${isMac ? " macos" : ""}`} data-scrolled={scrolled}>
-        <span className="menu-anchor">
+      <header className={`titlebar${isMac && inTauri ? " macos" : ""}`} data-scrolled={scrolled}>
+        <span className="menu-anchor title-slot">
           <button type="button" className="thread-title" onClick={() => setTitleMenu((value) => !value)}>
             {stats?.title ?? "Pylos"}
           </button>
@@ -515,7 +616,7 @@ export function App(): React.JSX.Element {
             Now
           </button>
         ) : null}
-        <Seal
+        <EvidenceBar
           stats={stats}
           building={building}
           recovered={recovered}
@@ -524,20 +625,19 @@ export function App(): React.JSX.Element {
           open={xray}
           onOpen={() => setXray(true)}
         />
+        {hosted && me !== undefined ? <Account me={me} onSignOut={signOut} /> : null}
       </header>
 
       <div className="transcript-wrap">
-        {offline !== undefined ? (
-          <div className="coldstart">
-            <SealMark className="seal-emblem" />
-            <h1>Pylos is not listening.</h1>
-            <p>{offline}</p>
-          </div>
-        ) : empty ? (
+        {empty ? (
           <div className="coldstart">
             <SealMark className="seal-emblem" />
             <h1>Talk forever.</h1>
-            <p>One conversation. Every model. Nothing forgotten silently — and nothing hidden when it is.</p>
+            <ul className="thesis">
+              <li>The archive is exact.</li>
+              <li>The view is bounded.</li>
+              <li>Nothing is forgotten silently.</li>
+            </ul>
           </div>
         ) : (
           <>
@@ -565,10 +665,7 @@ export function App(): React.JSX.Element {
           </>
         )}
         {danglingTurn !== undefined ? (
-          <div
-            className="measure"
-            style={{ position: "absolute", bottom: 4, left: 0, right: 34, pointerEvents: "none" }}
-          >
+          <div className="measure dangling">
             <div className="no-reply">no reply · send again to retry this turn</div>
           </div>
         ) : null}
@@ -598,7 +695,13 @@ export function App(): React.JSX.Element {
       />
 
       {xray && threadId !== undefined ? (
-        <Xray threadId={threadId} stats={stats} turnSeq={lastTurnSeq} onClose={() => setXray(false)} />
+        <Xray
+          threadId={threadId}
+          stats={stats}
+          turnSeq={lastTurnSeq}
+          onClose={() => setXray(false)}
+          onVerified={() => void refreshThread()}
+        />
       ) : null}
 
       {sheet?.kind === "connect" ? (

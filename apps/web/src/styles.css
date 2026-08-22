@@ -675,6 +675,23 @@ section {
   letter-spacing: 0.05em;
   color: var(--ash);
 }
+/* The run put the question to the ledger and nothing matched. Said plainly. */
+.ap__recovery[data-on="none"] {
+  display: block;
+  background: transparent;
+  animation: fade-up 400ms var(--ease) both;
+}
+
+.ap__recovery[data-on="none"] .recov__line {
+  color: var(--ash);
+}
+
+.ap__recovery[data-on="none"] .recov__quote {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ash);
+}
 
 .ap__note {
   margin-top: 1rem;
@@ -1130,4 +1147,9 @@ section {
   /* biome-ignore-end lint/complexity/noImportantStyles: end of the motion override. */
 }
 
-.trap__probes { margin-top: 1rem; color: var(--ash); font-size: 0.8rem; letter-spacing: 0.02em; }
+.trap__probes {
+  margin-top: 1rem;
+  color: var(--ash);
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}

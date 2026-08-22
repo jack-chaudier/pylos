@@ -1,7 +1,7 @@
 import { DEFAULT_BUDGET } from "@pylos/protocol";
+import type { ServerContext } from "./context.ts";
 import { HttpError, json, readJson, SseStream } from "./http.ts";
 import { DEFAULT_MODEL } from "./providers/registry.ts";
-import type { ServerContext } from "./serve.ts";
 
 interface GatewayRequest {
   model?: string;

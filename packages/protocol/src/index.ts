@@ -76,7 +76,10 @@ export type AtomKind =
   | "task"
   | "correction"
   | "hypothesis";
-export type AtomPhase = "SUPPORTED" | "HISTORICAL" | "REVOKED";
+/** PROPOSED: asserted by an assistant or a model extractor; visible, never a certificate (KERNEL A9.1). */
+export type AtomPhase = "PROPOSED" | "SUPPORTED" | "HISTORICAL" | "REVOKED";
+/** Who asserted an atom: the source episode's role, or a model extractor. Assistant/model atoms may propose, never authorize. */
+export type AtomAuthority = "user" | "assistant" | "model";
 
 export interface Atom {
   id: string;
@@ -91,6 +94,7 @@ export interface Atom {
   validToSeq?: Seq;
   supersededBy?: string;
   phase: AtomPhase;
+  authority: AtomAuthority;
   scope: string;
   pinned: boolean;
   confidence: number;
@@ -135,7 +139,7 @@ export interface ResidentItem {
   tokens: number;
 }
 
-export type PageTrigger = "ledger" | "historical" | "search" | "model" | "explicit";
+export type PageTrigger = "sequence" | "ledger" | "historical" | "search" | "model" | "explicit" | "check";
 
 export interface PageRecord {
   trigger: PageTrigger;
@@ -201,7 +205,7 @@ export interface ThreadStats {
   archiveBytes: number;
   capsules: number;
   losses: number; // unresolved ledger entries
-  atoms: { supported: number; historical: number };
+  atoms: { supported: number; historical: number; proposed: number };
   lastPacket?: { tokens: number; budget: number; pages: number; digest: Sha256 };
   headHash: Sha256;
   verifiedTo?: Seq;
@@ -218,6 +222,15 @@ export interface ModelInfo {
   contextLength?: number;
   available: boolean; // credentials present / reachable
   supportsTools: boolean;
+}
+
+/** Who is signed in. `hosted: false` means the local single-user server (no login). */
+export interface Me {
+  hosted: boolean;
+  sub?: string; // xAI subject; the vault is keyed by it
+  name?: string;
+  email?: string;
+  picture?: string;
 }
 
 export interface AuthStatus {
@@ -256,6 +269,14 @@ export interface AuthStatus {
 // POST /api/auth/xai/device/poll {handle}   → AuthStatus | { pending: true }
 // POST /api/auth/:provider/api-key {apiKey} → AuthStatus   (anthropic | openai | openai-compatible {baseUrl})
 // POST /api/auth/:provider/logout           → AuthStatus
+//
+// Hosted mode (pylos serve --hosted): every /api and /v1 request except /api/health and the login
+// routes carries `Authorization: Bearer <session>`; each signed-in xAI subject gets its own vault.
+// GET  /api/health                          → { ok, version, hosted: true }   (no home path)
+// GET  /api/me                              → Me
+// POST /api/login/xai/start                 → { handle, userCode, verificationUrl, verificationUrlComplete?, expiresIn }
+// POST /api/login/xai/poll {handle}         → { pending: true } | { session, me: Me }
+// POST /api/logout                          → { ok }
 // POST /v1/chat/completions                 → OpenAI-compatible gateway; header X-Pylos-Thread: <id>
 
 export interface TurnRequest {
@@ -267,13 +288,22 @@ export interface TurnRequest {
 
 export type TurnEvent =
   | { type: "episode"; episode: Episode } // the user/attachment/handoff episode(s) as appended
-  | { type: "packet"; packetId: string; tokens: number; budget: number; pages: PageRecord[]; ledger: LedgerDigest; digest: Sha256 }
+  | {
+      type: "packet";
+      packetId: string;
+      tokens: number;
+      budget: number;
+      pages: PageRecord[];
+      ledger: LedgerDigest;
+      digest: Sha256;
+    }
   | { type: "page"; page: PageRecord } // model-requested recall served mid-turn
   | { type: "delta"; text: string }
+  | { type: "check"; names: string[]; pages: PageRecord[] } // the draft named lost values; the text so far is provisional and the deltas that follow replace it (KERNEL A9.5)
   | { type: "done"; episode: Episode; usage?: Usage }
   | { type: "error"; message: string; code?: string };
 
-export const PYLOS_VERSION = "1.0.0";
+export const PYLOS_VERSION = "1.1.0";
 export const DEFAULT_BUDGET = 32_768;
 export const DEMO_BUDGET = 8_192;
 export const LEAF_CAPSULE_EPISODES = 32;

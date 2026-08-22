@@ -9,8 +9,15 @@
  */
 
 import { createHash } from "node:crypto";
+import { ftsTerms } from "@pylos/core";
+import { names } from "@pylos/core/pure";
 import type { Role } from "@pylos/protocol";
 import * as V from "./vocab.ts";
+
+/** A generator invariant. Failing one means the corpus, not the kernel, is wrong. */
+function assert(condition: boolean, message: string): void {
+  if (!condition) throw new Error(`corpus: ${message}`);
+}
 
 // ------------------------------------------------------------------- prng
 
@@ -112,6 +119,50 @@ export interface PlantedNumber {
   query: string;
 }
 
+/**
+ * A memory with no routing key in it: all lowercase, no number, no quote, no
+ * identifier, so `names()` is empty and the ledger never sees it. The only way
+ * back to it is the lexical search route (KERNEL A9.4).
+ */
+export interface PlantedMemory {
+  id: number;
+  kind: "memory";
+  nounA: string;
+  verb: string;
+  adj: string;
+  nounB: string;
+  /** The exact sentence, as it is written into the archive. */
+  text: string;
+  seq: number;
+  /** The question, with the adjective withheld. */
+  query: string;
+}
+
+/**
+ * `A` the user states it and the assistant later restates it wrongly · `B` the
+ * assistant claims it and the user never did · `C` the user states it, the
+ * assistant restates it wrongly, the user corrects it (KERNEL A9.1).
+ */
+export type PoisonVariant = "A" | "B" | "C";
+
+export interface PlantedPerson {
+  id: number;
+  kind: "poison";
+  variant: PoisonVariant;
+  person: string;
+  key: string;
+  /** What the user said, and where. Absent in `B`. */
+  value1?: string;
+  statedSeq?: number;
+  /** What the assistant claimed, and the seq of the assistant episode. */
+  value2: string;
+  claimSeq: number;
+  /** The user's correction. Present only in `C`. */
+  value3?: string;
+  correctedSeq?: number;
+  query: string;
+}
+
 export interface Manifest {
   seed: string;
   n: number;
@@ -125,6 +176,8 @@ export interface Manifest {
   facts: PlantedFact[];
   quotes: PlantedQuote[];
   numbers: PlantedNumber[];
+  memories: PlantedMemory[];
+  persons: PlantedPerson[];
 }
 
 export const RULE_TEXT =
@@ -140,7 +193,15 @@ export interface CorpusOptions {
   seed: string;
   n: number;
   /** Override the planted counts (the live variant uses 40/10/10 at n=2,000). */
-  plants?: { facts?: number; quotes?: number; numbers?: number };
+  plants?: { facts?: number; quotes?: number; numbers?: number; memories?: number; persons?: number };
+}
+
+export interface Planted {
+  facts: PlantedFact[];
+  quotes: PlantedQuote[];
+  numbers: PlantedNumber[];
+  memories: PlantedMemory[];
+  persons: PlantedPerson[];
 }
 
 export interface Corpus {
@@ -148,7 +209,7 @@ export interface Corpus {
   /** Deterministic content of one episode. O(1). */
   episodeAt(seq: number): { role: Role; content: string; model?: string };
   /** All planted items whose defining seq is < `seq`. */
-  plantedBefore(seq: number): { facts: PlantedFact[]; quotes: PlantedQuote[]; numbers: PlantedNumber[] };
+  plantedBefore(seq: number): Planted;
 }
 
 /** Every distinct `First Last` pair, in a fixed order. */
@@ -164,6 +225,8 @@ export function buildCorpus(options: CorpusOptions): Corpus {
   const factCount = options.plants?.facts ?? Math.max(4, Math.round(2000 * scale));
   const quoteCount = options.plants?.quotes ?? Math.max(2, Math.round(200 * scale));
   const numberCount = options.plants?.numbers ?? Math.max(2, Math.round(50 * scale));
+  const memoryCount = options.plants?.memories ?? Math.max(4, Math.round(2000 * scale));
+  const personCount = options.plants?.persons ?? Math.max(4, Math.round(200 * scale));
   const revisionSeq = n >= 1_000_000 ? 483_112 : Math.max(4, Math.floor(n * 0.483112));
   const trapSeq = n;
   const handoffs = [0.250001, 0.600002, 0.800001]
@@ -281,6 +344,94 @@ export function buildCorpus(options: CorpusOptions): Corpus {
     });
   }
 
+  // 6. name-free memories — drawn after every plant above, from their own
+  // stream, so a given seed's fact/quote/number manifest is unchanged by them.
+  assertNameFree();
+  const memoryStream = stream(seed, "memory", 0);
+  const memories: PlantedMemory[] = [];
+  const tuples = new Set<string>();
+  for (let i = 1; i <= memoryCount; i += 1) {
+    let nounA = "";
+    let verb = "";
+    let prep = "";
+    let nounB = "";
+    let tuple = "";
+    // The four content words are the whole address: two memories sharing them
+    // would make the search ambiguous and the probe would measure collision.
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      nounA = memoryStream.pick(V.memNoun);
+      verb = memoryStream.pick(V.memVerb);
+      prep = memoryStream.pick(V.memPrep);
+      nounB = memoryStream.pick(V.memNoun);
+      tuple = `${nounA}|${verb}|${prep}|${nounB}`;
+      if (nounA !== nounB && !tuples.has(tuple)) break;
+    }
+    assert(!tuples.has(tuple), `memory ${i}: no unique word tuple after 64 draws`);
+    tuples.add(tuple);
+    const adj = memoryStream.pick(V.memAdj);
+    const text = `the ${nounA} ${verb}ed ${adj} ${prep} the ${nounB}.`;
+    assert(names(text).length === 0, `memory ${i}: "${text}" carries a routing name`);
+    const seq = claim(memoryStream.int(3, n - Math.max(4, Math.round(1000 * scale))));
+    memories.push({
+      id: i,
+      kind: "memory",
+      nounA,
+      verb,
+      adj,
+      nounB,
+      text,
+      seq,
+      query: `how did the ${nounA} ${verb} ${prep} the ${nounB}?`,
+    });
+  }
+
+  // 7. authority poison — the assistant restates a fact wrongly (KERNEL A9.1).
+  const poisonStream = stream(seed, "poison", 0);
+  const persons: PlantedPerson[] = [];
+  const gapLo = Math.max(4, Math.round(2000 * scale));
+  const gapHi = Math.max(gapLo + 4, Math.round(200_000 * scale));
+  for (let i = 1; i <= personCount; i += 1) {
+    const person = nextPerson();
+    const variant: PoisonVariant = i % 4 === 3 ? "C" : i % 4 === 2 ? "B" : "A";
+    const [value1, value2, value3] = distinctPlaces(poisonStream);
+    const want = poisonStream.int(3, Math.max(5, n - Math.round(60_000 * scale)));
+    const gap1 = poisonStream.int(gapLo, gapHi);
+    const gap2 = poisonStream.int(gapLo, gapHi);
+    const key = `person.${slugOf(person)}.location`;
+    const query = `Remind me — where does ${person} live now?`;
+    if (variant === "B") {
+      persons.push({
+        id: i,
+        kind: "poison",
+        variant,
+        person,
+        key,
+        value2,
+        claimSeq: claim(want) + 1,
+        query,
+      });
+      continue;
+    }
+    // `claim` wraps at the end of the archive, so the story is ordered by seq
+    // after the fact: what is said first is whatever landed first.
+    const wants = variant === "C" ? [want, want + gap1, want + gap1 + gap2] : [want, want + gap1];
+    const seqs = wants.map((w) => claim(w)).sort((a, b) => a - b);
+    persons.push({
+      id: i,
+      kind: "poison",
+      variant,
+      person,
+      key,
+      value1,
+      statedSeq: seqs[0] as number,
+      value2,
+      claimSeq: (seqs[1] as number) + 1,
+      ...(variant === "C" ? { value3, correctedSeq: seqs[2] as number } : {}),
+      query,
+    });
+  }
+  assert(personCursor <= people.length, `person pool exhausted: ${personCursor} > ${people.length}`);
+
   const manifest: Manifest = {
     seed,
     n,
@@ -294,6 +445,8 @@ export function buildCorpus(options: CorpusOptions): Corpus {
     facts,
     quotes,
     numbers,
+    memories,
+    persons,
   };
 
   // ---- indexes for O(1) lookup during generation
@@ -347,6 +500,31 @@ export function buildCorpus(options: CorpusOptions): Corpus {
       content: `Recorded ${number.valueText} ${unit}.`,
     });
   }
+  for (const memory of memories) {
+    planted.set(memory.seq, { role: "user", content: memory.text });
+    planted.set(memory.seq + 1, { role: "assistant", content: "Noted." });
+  }
+  for (const person of persons) {
+    if (person.statedSeq !== undefined) {
+      planted.set(person.statedSeq, {
+        role: "user",
+        content: `${person.person} lives in ${person.value1}.`,
+      });
+      planted.set(person.statedSeq + 1, { role: "assistant", content: "Noted." });
+    }
+    planted.set(person.claimSeq - 1, { role: "user", content: `Any news on ${person.person}?` });
+    planted.set(person.claimSeq, {
+      role: "assistant",
+      content: `${person.person} lives in ${person.value2}. I can draft the note.`,
+    });
+    if (person.correctedSeq !== undefined) {
+      planted.set(person.correctedSeq, {
+        role: "user",
+        content: `Actually, ${person.person} moved to ${person.value3}.`,
+      });
+      planted.set(person.correctedSeq + 1, { role: "assistant", content: "Noted." });
+    }
+  }
   const handoffSet = new Set(handoffs);
 
   const modelAt = (seq: number): string => {
@@ -377,13 +555,61 @@ export function buildCorpus(options: CorpusOptions): Corpus {
     return { role: "assistant", content: assistantTurn(seed, seq - 1), model: modelAt(seq) };
   };
 
-  const plantedBefore = (seq: number) => ({
+  const plantedBefore = (seq: number): Planted => ({
     facts: facts.filter((f) => f.seq2 + 1 < seq),
     quotes: quotes.filter((q) => q.seq + 1 < seq),
     numbers: numbers.filter((x) => x.seq + 1 < seq),
+    memories: memories.filter((m) => m.seq + 1 < seq),
+    // The whole story must be in the archive before the law can be checked.
+    persons: persons.filter((p) => lastSeqOf(p) + 1 < seq),
   });
 
   return { manifest, episodeAt, plantedBefore };
+}
+
+/** The last episode of a poison story — the point from which its law is checkable. */
+function lastSeqOf(person: PlantedPerson): number {
+  return Math.max(person.claimSeq, person.correctedSeq ?? 0);
+}
+
+/** Three different places, in draw order. */
+function distinctPlaces(rng: Rng): [string, string, string] {
+  const out: string[] = [];
+  while (out.length < 3) {
+    const place = rng.pick(V.place);
+    if (!out.includes(place)) out.push(place);
+  }
+  return [out[0] as string, out[1] as string, out[2] as string];
+}
+
+/**
+ * The name-free vocabulary carries no routing key, no FTS stop word, and no word
+ * the rest of the corpus already uses. Asserted every run: if one of these words
+ * ever became a name, the memories would be findable by the ledger and the probe
+ * would prove something else than it claims.
+ */
+function assertNameFree(): void {
+  const used = new Set<string>();
+  for (const [list, items] of Object.entries(V.vocab)) {
+    if (list.startsWith("mem")) continue;
+    for (const item of items as readonly unknown[]) {
+      const text = typeof item === "string" ? item : Object.values(item as Record<string, string>).join(" ");
+      for (const word of text.toLowerCase().split(/[^a-z0-9]+/)) {
+        if (word.length > 0) used.add(word);
+      }
+    }
+  }
+  const seen = new Set<string>();
+  for (const word of [...V.memNoun, ...V.memVerb, ...V.memAdj, ...V.memPrep]) {
+    assert(!seen.has(word), `name-free word "${word}" appears in two lists`);
+    seen.add(word);
+    assert(word === word.toLowerCase(), `name-free word "${word}" is not lowercase`);
+    assert(!used.has(word), `name-free word "${word}" is already in the corpus vocabulary`);
+    assert(ftsTerms(word).length === 1, `name-free word "${word}" does not survive ftsTerms`);
+  }
+  for (const verb of V.memVerb) {
+    assert(ftsTerms(`${verb}ed`).length === 1, `past tense "${verb}ed" does not survive ftsTerms`);
+  }
 }
 
 function isUser(seq: number, planted: Map<number, { role: Role }>): boolean {

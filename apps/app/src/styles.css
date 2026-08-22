@@ -17,7 +17,7 @@
   --tablet-sunk: rgba(23, 22, 15, 0.035);
 
   --display: "Newsreader Variable", "Newsreader", Georgia, "Times New Roman", serif;
-  --ui: "Geist Sans", "Geist", Inter, system-ui, -apple-system, sans-serif;
+  --sans: "Geist Sans", "Geist", Inter, system-ui, -apple-system, sans-serif;
   --mono: "Geist Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -57,7 +57,7 @@ body,
 body {
   background: var(--bone);
   color: var(--ink);
-  font-family: var(--ui);
+  font-family: var(--sans);
   font-size: 14.5px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -115,14 +115,22 @@ textarea {
 
 .app {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
   position: relative;
+  overflow: hidden;
+}
+
+/* Boot, offline, sign-in: one screen, so it owns the whole height. */
+.app.solo {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .titlebar {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 12px;
   padding: 0 20px 0 20px;
   height: 46px;
@@ -171,12 +179,15 @@ textarea {
   flex: 1;
 }
 
-/* ---------- the seal ---------- */
+/* ---------- the evidence bar ---------- */
 
-.seal {
+.evidence {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   padding: 5px 11px;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -186,13 +197,18 @@ textarea {
   white-space: nowrap;
 }
 
-.seal:hover,
-.seal[data-open="true"] {
+.evidence:hover,
+.evidence[data-open="true"] {
   border-color: var(--hairline);
   background: var(--tablet);
 }
 
-.seal-text {
+.evidence-strip {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.045em;
@@ -200,13 +216,45 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-.seal-text em {
-  font-style: normal;
-  color: var(--ink);
+.figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
-.seal-text .recovered {
+.figure + .figure::before {
+  content: "·";
+  color: var(--ash);
+  opacity: 0.6;
+  margin-right: 5px;
+}
+
+.figure-label {
+  color: var(--ash);
+}
+
+.figure em {
+  font-style: normal;
+  color: var(--ink);
+  transition: color var(--slow) var(--ease);
+}
+
+.figure-unit {
+  font-style: normal;
+}
+
+.figure em[data-tone="ember"] {
   color: var(--ember);
+}
+
+.figure em[data-tone="verdigris"] {
+  color: var(--verdigris);
+}
+
+/* A settling beat, not a counting animation: the figure that moved says so. */
+.figure em[data-changed="true"] {
+  color: var(--ember);
+  transition-duration: var(--fast);
 }
 
 .seal-mark {
@@ -216,7 +264,7 @@ textarea {
   opacity: 0.75;
 }
 
-.seal-meter {
+.evidence-meter {
   width: 34px;
   height: 3px;
   border-radius: 2px;
@@ -225,11 +273,58 @@ textarea {
   flex: none;
 }
 
-.seal-meter i {
+.evidence-meter i {
   display: block;
   height: 100%;
   background: var(--ember);
   transition: width var(--slow) var(--ease);
+}
+
+/* ---------- account ---------- */
+
+.account {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--tablet);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ash);
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.account:hover,
+.account[data-open="true"] {
+  color: var(--ink);
+  border-color: var(--ash);
+}
+
+.account-who {
+  padding: 8px 10px 6px;
+  min-width: 0;
+}
+
+.account-who b {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-who span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ash);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------- transcript ---------- */
@@ -237,6 +332,7 @@ textarea {
 .transcript-wrap {
   position: relative;
   min-height: 0;
+  min-width: 0;
   display: flex;
 }
 
@@ -368,6 +464,16 @@ textarea {
   color: var(--ember);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* KERNEL A9.5: the draft named a lost value, so it was checked before it stood. */
+.checked {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ember);
+  padding: 2px 0 8px;
+  overflow-wrap: anywhere;
 }
 
 .recovery-spans {
@@ -540,6 +646,7 @@ textarea {
 
 .composer-dock {
   padding: 0 32px 24px;
+  min-width: 0;
   flex: none;
 }
 
@@ -709,13 +816,22 @@ textarea {
 /* ---------- cold start ---------- */
 
 .coldstart {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
   height: 100%;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-content: center;
   justify-items: center;
   gap: 18px;
   text-align: center;
-  padding-bottom: 8vh;
+  padding: 0 24px 8vh;
+}
+
+/* `justify-items: center` sizes children to max-content; keep them inside the column. */
+.coldstart > * {
+  max-width: min(44ch, 100%);
 }
 
 .coldstart h1 {
@@ -731,6 +847,27 @@ textarea {
   margin: 0;
   color: var(--ash);
   max-width: 44ch;
+}
+
+.thesis {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.dangling {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 34px;
+  pointer-events: none;
 }
 
 .coldstart .seal-emblem {
@@ -1282,6 +1419,14 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+.atom-row[data-proposed="true"] {
+  color: var(--ash);
+}
+
+.atom-row[data-proposed="true"] .trigger {
+  color: var(--ash);
+}
+
 .badge {
   display: inline-block;
   font-family: var(--mono);
@@ -1357,6 +1502,216 @@ textarea {
 @keyframes blink {
   50% {
     opacity: 0;
+  }
+}
+
+/* ---------- sign in ---------- */
+
+.signin {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-items: center;
+  padding: 28px 24px;
+}
+
+.signin-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  width: 100%;
+  max-width: 52ch;
+}
+
+/* `justify-items: center` sizes children to max-content; let the prose wrap. */
+.signin-card > * {
+  max-width: 100%;
+}
+
+.signin-card h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.signin-card .seal-emblem {
+  width: 44px;
+  height: 44px;
+  opacity: 0.5;
+}
+
+.signin-line {
+  margin: 0;
+  color: var(--ash);
+}
+
+.signin-cta {
+  margin-top: 8px;
+  padding: 10px 20px;
+}
+
+.signin-note {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--ash);
+}
+
+.signin-code {
+  font-family: var(--mono);
+  font-size: 30px;
+  letter-spacing: 0.2em;
+  color: var(--ink);
+  padding: 6px 0 2px;
+  overflow-wrap: anywhere;
+}
+
+.signin-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.signin-error {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--oxblood);
+  overflow-wrap: anywhere;
+}
+
+/* What the claims rest on, and where the artifact is. */
+.signin-proof {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  line-height: 1.9;
+  color: var(--ash);
+  font-variant-numeric: tabular-nums;
+}
+
+.signin-foot {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.signin-proof span {
+  white-space: nowrap;
+}
+
+.signin a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
+  transition: color var(--fast) var(--ease);
+}
+
+.signin-foot a {
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+}
+
+.signin a:hover {
+  color: var(--verdigris);
+  text-decoration: underline;
+  text-decoration-color: currentcolor;
+}
+
+/* ---------- narrow windows and phones ---------- */
+
+@media (max-width: 720px) {
+  .figure[data-wide="true"],
+  .figure-unit {
+    display: none;
+  }
+
+  /* No room beside the title: the evidence takes a line of its own. */
+  .titlebar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 6px 12px 8px;
+    row-gap: 2px;
+  }
+
+  .titlebar.macos {
+    padding-left: 12px;
+  }
+
+  .titlebar-spacer {
+    display: none;
+  }
+
+  .title-slot {
+    flex: 1 1 100%;
+  }
+
+  .evidence {
+    flex: 1 1 auto;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .evidence-strip {
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  .evidence-meter {
+    display: none;
+  }
+
+  .thread-title {
+    max-width: 100%;
+  }
+
+  .rail {
+    display: none;
+  }
+
+  .dangling {
+    right: 0;
+  }
+
+  .measure {
+    padding: 0 18px;
+  }
+
+  .row-meta,
+  .row-actions {
+    position: static;
+    width: auto;
+    text-align: left;
+    opacity: 0.7;
+  }
+
+  .row-actions {
+    opacity: 1;
+  }
+
+  .row-user {
+    margin-left: 0;
+    padding-left: 12px;
+  }
+
+  .composer-dock {
+    padding: 0 12px 12px;
+  }
+
+  .drawer {
+    width: 100vw;
+    border-left: 0;
   }
 }
 

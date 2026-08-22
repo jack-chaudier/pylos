@@ -6,6 +6,17 @@ export const inTauri: boolean = typeof window !== "undefined" && "__TAURI_INTERN
 
 export const isMac: boolean = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
+/** The port the shell started the server on. Undefined outside Tauri. */
+export async function shellPort(): Promise<string | undefined> {
+  if (!inTauri) return undefined;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("pylos_port");
+  } catch {
+    return undefined;
+  }
+}
+
 export async function openExternal(url: string): Promise<void> {
   if (inTauri) {
     try {

@@ -123,8 +123,13 @@ function copula(clause: string): { key: string; value: string } | null {
   return { key: subject, value: (m[2] as string).replace(/[.]$/, "").trim() };
 }
 
-const ALL: Role[] = ["user", "assistant", "system", "handoff", "tool", "attachment"];
 const USER_ONLY: Role[] = ["user"];
+/**
+ * The only roles the atomizer reads. Tool payloads and attachments are retrieved
+ * data — never instructions, never memory — so no rule may fire on them. A draft
+ * from an assistant turn is still committed as a *proposal*: the role decides
+ * the atom's authority, and only the user authorizes (KERNEL A9.1).
+ */
 const SPOKEN: Role[] = ["user", "assistant"];
 
 const RULES: RuleSpec[] = [
@@ -264,7 +269,7 @@ const RULES: RuleSpec[] = [
   },
   {
     name: "correction.not-but",
-    roles: ALL,
+    roles: SPOKEN,
     re: /\bnot\s+(.{2,80}?)\s*,\s*(?:but\s+|it'?s\s+|its\s+)?(.{2,120}?)(?:[.]|$)/i,
     build: (m) => ({
       kind: "correction",

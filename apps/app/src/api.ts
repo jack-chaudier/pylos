@@ -4,6 +4,7 @@ import type {
   Capsule,
   Episode,
   LossEntry,
+  Me,
   ModelInfo,
   Packet,
   Seq,
@@ -11,9 +12,54 @@ import type {
   TurnEvent,
   TurnRequest,
 } from "@pylos/protocol";
+import { shellPort } from "./tauri.ts";
 
-const PORT = Number(import.meta.env.VITE_PYLOS_PORT ?? 7334);
-export const BASE = `http://127.0.0.1:${PORT}`;
+const SESSION_KEY = "pylos.session";
+const OVERRIDE: string | undefined = import.meta.env.VITE_PYLOS_API;
+
+/**
+ * Same origin by default: hosted, the app is served from the backend at /app/.
+ * Inside the shell the server is a sidecar on loopback, so the port comes from
+ * the shell itself. `VITE_PYLOS_API` wins over both, for dev against a server
+ * running somewhere else.
+ */
+let base = OVERRIDE ?? "";
+
+export async function resolveBase(): Promise<void> {
+  if (OVERRIDE !== undefined && OVERRIDE.length > 0) return;
+  const port = await shellPort();
+  if (port !== undefined) base = `http://127.0.0.1:${port}`;
+}
+
+let sessionToken: string | null = read();
+let expired: (() => void) | undefined;
+
+function read(): string | null {
+  try {
+    return localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function session(): string | null {
+  return sessionToken;
+}
+
+export function setSession(token: string | null): void {
+  sessionToken = token;
+  try {
+    if (token === null) localStorage.removeItem(SESSION_KEY);
+    else localStorage.setItem(SESSION_KEY, token);
+  } catch {
+    // A browser with storage denied still works for the length of this tab.
+  }
+}
+
+/** Called when the backend rejects the session; the UI returns to sign-in. */
+export function onSessionExpired(handler: () => void): void {
+  expired = handler;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -26,16 +72,30 @@ export class ApiError extends Error {
   }
 }
 
+function authorized(init?: RequestInit): RequestInit {
+  if (sessionToken === null) return init ?? {};
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${sessionToken}`);
+  return { ...init, headers };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${BASE}${path}`, init);
+    response = await fetch(`${base}${path}`, authorized(init));
   } catch {
-    throw new ApiError("offline", "The Pylos server is not running.", 0);
+    throw new ApiError("offline", "Pylos is unreachable.", 0);
   }
+  if (response.status === 401) throw unauthorized();
   if (!response.ok) throw await toError(response);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+function unauthorized(): ApiError {
+  setSession(null);
+  expired?.();
+  return new ApiError("unauthorized", "This session has ended. Sign in again.", 401);
 }
 
 async function toError(response: Response): Promise<ApiError> {
@@ -66,8 +126,21 @@ export interface Health {
   backend: "core" | "dev-stub";
 }
 
+export interface LoginStart {
+  handle: string;
+  userCode: string;
+  verificationUrl: string;
+  verificationUrlComplete?: string;
+  expiresIn: number;
+}
+
 export const api = {
   health: (): Promise<Health> => request<Health>("/api/health"),
+  me: (): Promise<Me> => request<Me>("/api/me"),
+  loginStart: (): Promise<LoginStart> => request<LoginStart>("/api/login/xai/start", post({})),
+  loginPoll: (handle: string): Promise<{ pending: true } | { session: string; me: Me }> =>
+    request("/api/login/xai/poll", post({ handle })),
+  signOut: (): Promise<{ ok: boolean }> => request("/api/logout", post({})),
 
   listThreads: (): Promise<ThreadStats[]> => request<ThreadStats[]>("/api/threads"),
   createThread: (title?: string): Promise<ThreadStats> =>
@@ -107,7 +180,8 @@ export const api = {
   },
 
   exportBundle: async (id: string, passphrase: string): Promise<Uint8Array> => {
-    const response = await fetch(`${BASE}/api/threads/${id}/export`, post({ passphrase }));
+    const response = await fetch(`${base}/api/threads/${id}/export`, authorized(post({ passphrase })));
+    if (response.status === 401) throw unauthorized();
     if (!response.ok) throw await toError(response);
     return new Uint8Array(await response.arrayBuffer());
   },
@@ -150,15 +224,23 @@ export function streamTurn(
   const done = (async (): Promise<void> => {
     let response: Response;
     try {
-      response = await fetch(`${BASE}/api/threads/${threadId}/turn`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      response = await fetch(
+        `${base}/api/threads/${threadId}/turn`,
+        authorized({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }),
+      );
     } catch {
       if (controller.signal.aborted) return;
-      onEvent({ type: "error", message: "The Pylos server is not running.", code: "offline" });
+      onEvent({ type: "error", message: "Pylos is unreachable.", code: "offline" });
+      return;
+    }
+    if (response.status === 401) {
+      const error = unauthorized();
+      onEvent({ type: "error", message: error.message, code: error.code });
       return;
     }
     if (!response.ok || response.body === null) {

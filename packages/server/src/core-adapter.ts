@@ -19,14 +19,8 @@ import type {
   ToolDef,
   TurnEvent,
 } from "@pylos/protocol";
-import type {
-  AttachInput,
-  ForgetTarget,
-  Kernel,
-  ThreadSettings,
-  TurnInput,
-} from "./kernel.ts";
-import type { ProviderEvent as ServerProviderEvent, ProviderFn } from "./providers/types.ts";
+import type { AttachInput, ForgetTarget, Kernel, ThreadSettings, TurnInput } from "./kernel.ts";
+import type { ProviderFn, ProviderEvent as ServerProviderEvent } from "./providers/types.ts";
 
 // The kernel's own vocabulary, structurally typed so the server never imports
 // its concrete classes at type level (the module is loaded dynamically).
@@ -82,11 +76,7 @@ interface CoreModule {
     options: Record<string, unknown>,
   ): Promise<{ assistantEpisode: Episode; usage?: unknown }>;
   handoff(vault: Vault, threadId: string, from: string, to: string): Episode;
-  forget(
-    vault: Vault,
-    threadId: string,
-    target: ForgetTarget,
-  ): { tombstoneId: string };
+  forget(vault: Vault, threadId: string, target: ForgetTarget): { tombstoneId: string };
   stats(vault: Vault, threadId: string, options?: { verify?: boolean }): ThreadStats;
   verify(
     vault: Vault,
@@ -294,11 +284,7 @@ class CoreKernel implements Kernel {
    * commits; the HTTP layer wants an async iterable. This is that bridge, with
    * a bounded queue so a slow client cannot stall the kernel's transaction.
    */
-  async *runTurn(
-    threadId: ThreadId,
-    input: TurnInput,
-    provider: ProviderFn,
-  ): AsyncGenerator<TurnEvent> {
+  async *runTurn(threadId: ThreadId, input: TurnInput, provider: ProviderFn): AsyncGenerator<TurnEvent> {
     this.thread(threadId);
     const queue: TurnEvent[] = [];
     let notify: (() => void) | undefined;
@@ -393,13 +379,12 @@ async function* adaptProvider(
 function importError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   if (/already exists/i.test(message)) {
-    return Object.assign(
-      new Error("This thread is already in your vault. Its archive is bound to its id."),
-      { status: 409, code: "import_duplicate" },
-    );
+    return Object.assign(new Error("This thread is already in your vault. Its archive is bound to its id."), {
+      status: 409,
+      code: "import_duplicate",
+    });
   }
-  const unopenable =
-    /passphrase|decrypt|not a \.pylos|magic|manifest|chain|verif|unsupported/i.test(message);
+  const unopenable = /passphrase|decrypt|not a \.pylos|magic|manifest|chain|verif|unsupported/i.test(message);
   return Object.assign(new Error(message), {
     status: unopenable ? 422 : 500,
     code: unopenable ? "import_refused" : "import_failed",
@@ -407,9 +392,7 @@ function importError(error: unknown): Error {
 }
 
 function extractText(file: AttachInput): string {
-  const textual = /^(text\/|application\/(json|xml|javascript|typescript|x-yaml|yaml))/.test(
-    file.mime,
-  );
+  const textual = /^(text\/|application\/(json|xml|javascript|typescript|x-yaml|yaml))/.test(file.mime);
   if (textual || /\.(md|txt|ts|tsx|js|json|py|rs|go|css|html|yml|yaml|toml|csv)$/i.test(file.name)) {
     return new TextDecoder().decode(file.bytes).slice(0, 200_000);
   }
