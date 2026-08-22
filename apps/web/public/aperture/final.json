@@ -2,7 +2,7 @@
   "engine": "core",
   "seed": 1348029519,
   "generatedAt": "2026-08-22",
-  "runtimeMs": 18222,
+  "runtimeMs": 17349,
   "ruleSeq": 1,
   "revisionSeq": 483112,
   "question": "The change is additive-only and the on-call lead skipped the dry-run — can I send the production migration?",

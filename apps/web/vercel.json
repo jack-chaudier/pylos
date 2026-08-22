@@ -5,10 +5,11 @@
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
-    { "source": "/app", "destination": "https://pylos-backend.invalid/app/" },
-    { "source": "/app/:path*", "destination": "https://pylos-backend.invalid/app/:path*" },
-    { "source": "/api/:path*", "destination": "https://pylos-backend.invalid/api/:path*" },
-    { "source": "/v1/:path*", "destination": "https://pylos-backend.invalid/v1/:path*" }
+    { "source": "/app", "destination": "https://awhx4r2wjqkgxv-7334.proxy.runpod.net/app/" },
+    { "source": "/app/", "destination": "https://awhx4r2wjqkgxv-7334.proxy.runpod.net/app/" },
+    { "source": "/app/:path*", "destination": "https://awhx4r2wjqkgxv-7334.proxy.runpod.net/app/:path*" },
+    { "source": "/api/:path*", "destination": "https://awhx4r2wjqkgxv-7334.proxy.runpod.net/api/:path*" },
+    { "source": "/v1/:path*", "destination": "https://awhx4r2wjqkgxv-7334.proxy.runpod.net/v1/:path*" }
   ],
   "headers": [
     {

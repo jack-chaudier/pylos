@@ -28,7 +28,7 @@ pylos/
 
 ## Milestones
 
-Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) is in progress: deployment. `pylos serve --hosted` and the app served at `/app/` exist, along with the sign-in screen, evidence bar, landing rewrites, and the `million-2` bench artifact (kernel 1.1.0, `bench/results/million-2.md`); the deployed hosted URL is not yet up.
+Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) is done: the hosted backend runs `pylos serve --hosted` from the release tarball on a RunPod pod (template `pylos-hosted`, vaults on the pod's `/workspace` volume), `https://pylos.vercel.app/app/` rewrites `/app/*`, `/api/*`, `/v1/*` to it, sign-in is the xAI device grant, and `bench/results/million-2.md` is the kernel 1.1 artifact. Open: a domain of its own and a cheaper CPU host (needs a public container image or a RunPod API key — see CHANGELOG 1.1.1).
 
 | # | Milestone | Done means |
 | --- | --- | --- |
