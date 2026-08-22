@@ -1,0 +1,23 @@
+{
+  "name": "pylos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The forever chat. One conversation, every model, nothing forgotten silently.",
+  "license": "Apache-2.0",
+  "packageManager": "bun@1.3.10",
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*", "bench"],
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun test --timeout 30000 packages",
+    "lint": "bunx biome check packages apps bench",
+    "format": "bunx biome format --write packages apps bench",
+    "serve": "bun run packages/core/src/cli.ts serve",
+    "bench:million": "bun run bench/million.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@types/bun": "^1.2.20",
+    "typescript": "^5.9.2"
+  }
+}

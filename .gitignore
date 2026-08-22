@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+.env
+.env.*
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/binaries/
+bench/results/*.sqlite*
+bench/results/tmp/
+.vercel/
+*.pylos
+~/.pylos
