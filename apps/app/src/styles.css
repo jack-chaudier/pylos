@@ -476,6 +476,11 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* KERNEL A10.4: the archive could not be re-read; the answer stands, unverified. */
+.checked[data-failed="true"] {
+  color: var(--oxblood);
+}
+
 .recovery-spans {
   margin: 4px 0 12px;
   border-left: 1.5px solid var(--ember);
@@ -1417,6 +1422,20 @@ textarea {
 .page-row .latency {
   color: var(--ash);
   font-variant-numeric: tabular-nums;
+}
+
+/* KERNEL A10.1: what a resident span is allowed to support. */
+.epistemic {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ash);
+  margin-right: 8px;
+}
+
+.epistemic[data-supported="true"] {
+  color: var(--verdigris);
 }
 
 .atom-row[data-proposed="true"] {

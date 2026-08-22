@@ -1,4 +1,13 @@
-import type { AuthStatus, Capsule, Episode, Me, ModelInfo, PageRecord, ThreadStats } from "@pylos/protocol";
+import type {
+  AuthStatus,
+  Capsule,
+  Episode,
+  Me,
+  ModelInfo,
+  PageRecord,
+  Seq,
+  ThreadStats,
+} from "@pylos/protocol";
 import { DEFAULT_BUDGET } from "@pylos/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ApiError, api, onSessionExpired, resolveBase, session, setSession, streamTurn } from "./api.ts";
@@ -28,6 +37,8 @@ type Sheet =
   | { kind: "export" }
   | { kind: "import"; name: string; bytes: Uint8Array }
   | { kind: "forget"; episode: Episode }
+  /** KERNEL A10.6: replies that quoted the removed text, named but never removed on a guess. */
+  | { kind: "echoes"; seqs: Seq[]; reason: string }
   | undefined;
 
 export function App(): React.JSX.Element {
@@ -51,6 +62,7 @@ export function App(): React.JSX.Element {
   const [budget, setBudget] = useState(DEFAULT_BUDGET);
   const [streaming, setStreaming] = useState<StreamingTurn | undefined>(undefined);
   const [viewTokens, setViewTokens] = useState<number | undefined>(undefined);
+  const [viewRounds, setViewRounds] = useState<number | undefined>(undefined);
   const [building, setBuilding] = useState<number | undefined>(undefined);
   const [recovered, setRecovered] = useState(0);
   const [lastTurnSeq, setLastTurnSeq] = useState<number | undefined>(undefined);
@@ -94,6 +106,7 @@ export function App(): React.JSX.Element {
     });
     setAttachments([]);
     setViewTokens(thread.lastPacket?.tokens);
+    setViewRounds(undefined);
     setRecovered(thread.lastPacket?.pages ?? 0);
     const lastUser = [...episodes].reverse().find((episode) => episode.role === "user");
     setLastTurnSeq(lastUser?.seq);
@@ -276,6 +289,7 @@ export function App(): React.JSX.Element {
       setStreaming({ text: "", model, pages: [] });
       setBuilding(0.08);
       setRecovered(0);
+      setViewRounds(undefined);
 
       const handle = streamTurn(
         threadId,
@@ -446,19 +460,30 @@ export function App(): React.JSX.Element {
     [openThread, say],
   );
 
+  /**
+   * An assistant turn that restated the removed text is an episode of its own,
+   * so the kernel names it rather than guessing (KERNEL A10.6). `offerEchoes` is
+   * false when the user is already answering that question.
+   */
   const doForget = useCallback(
-    (episode: Episode): void => {
+    (seqs: Seq[], reason: string, offerEchoes: boolean): void => {
       if (threadId === undefined) return;
       void api
-        .forget(threadId, [episode.seq], "user request")
-        .then(async () => {
-          setSheet(undefined);
-          const refreshed = await api.episode(threadId, episode.seq);
+        .forget(threadId, seqs, reason)
+        .then(async (result) => {
+          const refreshed = await Promise.all(seqs.map((seq) => api.episode(threadId, seq)));
           setWindow((current) => ({
             ...current,
-            episodes: current.episodes.map((entry) => (entry.seq === refreshed.seq ? refreshed : entry)),
+            episodes: current.episodes.map(
+              (entry) => refreshed.find((item) => item.seq === entry.seq) ?? entry,
+            ),
           }));
           void refreshThread();
+          if (offerEchoes && result.echoes.length > 0) {
+            setSheet({ kind: "echoes", seqs: result.echoes, reason });
+            return;
+          }
+          setSheet(undefined);
           say("Forgotten, and recorded as forgotten.");
         })
         .catch((error: Error) => say(error.message, "bad"));
@@ -506,6 +531,22 @@ export function App(): React.JSX.Element {
   }, [streaming, window_]);
 
   const empty = window_.episodes.length === 0 && streaming === undefined;
+
+  // KERNEL A10.3: a turn may cost more than one request. The receipt says how
+  // many, so the view figure can say it too once the turn has settled.
+  useEffect(() => {
+    if (threadId === undefined || lastTurnSeq === undefined || streaming !== undefined) return;
+    let cancelled = false;
+    void api
+      .packet(threadId, lastTurnSeq)
+      .then((packet) => {
+        if (!cancelled) setViewRounds(packet.rounds?.length);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, lastTurnSeq, streaming]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -621,6 +662,7 @@ export function App(): React.JSX.Element {
           building={building}
           recovered={recovered}
           viewTokens={viewTokens}
+          viewRounds={viewRounds}
           budget={budget}
           open={xray}
           onOpen={() => setXray(true)}
@@ -729,7 +771,7 @@ export function App(): React.JSX.Element {
       {sheet?.kind === "export" ? (
         <PassphraseSheet
           title="Export this thread"
-          note="The bundle is encrypted with this passphrase. Credentials are never included."
+          note="The bundle is encrypted with this passphrase, and carries the receipts — what each turn was compiled from — so the X-ray survives the move. Credentials are never included."
           confirm="Export"
           busy={sheetBusy}
           error={sheetError}
@@ -756,7 +798,21 @@ export function App(): React.JSX.Element {
           note={`Turn #${sheet.episode.seq} will be replaced by a tombstone. The hash chain stays valid, and Pylos records that it forgot.`}
           confirm="Forget it"
           onCancel={() => setSheet(undefined)}
-          onConfirm={() => doForget(sheet.episode)}
+          onConfirm={() => doForget([sheet.episode.seq], "user request", true)}
+        />
+      ) : null}
+
+      {sheet?.kind === "echoes" ? (
+        <ConfirmSheet
+          title={`${sheet.seqs.length === 1 ? "One reply" : `${sheet.seqs.length} replies`} quoted it.`}
+          note={`${sheet.seqs.map((seq) => `#${seq}`).join(", ")} — a model's own words, so Pylos left them alone. Forget those too?`}
+          confirm="Forget those too"
+          cancel="Leave them"
+          onCancel={() => {
+            setSheet(undefined);
+            say("Forgotten, and recorded as forgotten.");
+          }}
+          onConfirm={() => doForget(sheet.seqs, sheet.reason, false)}
         />
       ) : null}
 

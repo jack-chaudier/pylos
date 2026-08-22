@@ -174,6 +174,10 @@ absent from the artifact) and of the Mirage-conservation law
 
 ## 4. The context compiler `C_B(H_t, q_t) → (K_t, L_t, P_t)`
 
+*Superseded in part by A10.1: every resident item carries an `epistemic` label,
+and it is `Support(K_t)`, not this section's `K_t^resident`, that routing (§5)
+and the check round (§6) read as "already in the view".*
+
 Input: thread, budget `B` (tokens; default 32,768; the demo runs at 8,192 to
 make the point), the query `q_t`, the target model's capabilities.
 Token counting: an approximate tokenizer (chars/3.6 with a 10% safety margin)
@@ -207,6 +211,9 @@ The compiler emits:
 
 ## 5. Paging (read-time)
 
+*Superseded in part by A10.1: the routing rule (§4/A4) and numeric presence
+(A9.2) are decided against `Support(K_t)`, not raw residency.*
+
 Triggers, in order, each bounded by the `paged` share:
 
 1. **Ledger routing (deterministic).** `names(q_t) ∩ loss.name` → page the
@@ -226,6 +233,10 @@ Pages are never fuzzy.
 
 ## 6. Turn protocol
 
+*Superseded by A10.2 (user atomization moves into tx A, before `compile()`)
+and A10.3 (every provider request of the turn, not just the compiled packet,
+is bounded and receipted as `Packet.rounds`).*
+
 ```
 turn(thread, text, attachments?, model) :
   1. append user episode (and attachment episodes) — tx
@@ -242,6 +253,10 @@ every time; no provider conversation id is ever required to continue.
 
 ## 7. Export / import — `.pylos` bundle
 
+*Superseded in part by A10.7: the object set is a reachability closure over
+the exported episodes, not the whole profile, and import restores
+`packets.jsonl` so the X-ray survives transport.*
+
 A single file: `pylos-<threadid>-<headseq>.pylos` = AES-256-GCM over a zip of
 `{manifest.json, episodes.jsonl, atoms.jsonl, capsules.jsonl, loss.jsonl,
 packets.jsonl, tombstones.jsonl, objects/*}` with a key derived from a
@@ -251,6 +266,10 @@ refuses on mismatch. Selective export by seq range is allowed and marks the
 manifest as partial.
 
 ## 8. Forgetting
+
+*Superseded in part by A10.6: redaction re-derives capsules and packets over
+the surviving source instead of leaving them untouched, and the removal itself
+is an append-only chain event, checked by `verify()`.*
 
 `forget(target)` writes a tombstone, marks atoms `REVOKED`, sets
 `loss.resolved_by`, deletes FTS rows and the inline content of the targeted

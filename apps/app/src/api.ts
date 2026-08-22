@@ -126,6 +126,16 @@ export interface Health {
   backend: "core" | "dev-stub";
 }
 
+/** What a removal did, and the replies it deliberately left alone (KERNEL A10.6). */
+export interface ForgetResult {
+  tombstoneId: string;
+  removalSeq: Seq;
+  echoes: Seq[];
+  capsules: number;
+  packets: number;
+  blobs: number;
+}
+
 export interface LoginStart {
   handle: string;
   userCode: string;
@@ -168,8 +178,8 @@ export const api = {
 
   handoff: (id: string, model: string): Promise<Episode> =>
     request<Episode>(`/api/threads/${id}/handoff`, post({ model })),
-  forget: (id: string, seqs: Seq[], reason?: string): Promise<{ tombstoneId: string }> =>
-    request(`/api/threads/${id}/forget`, post({ seqs, reason })),
+  forget: (id: string, seqs: Seq[], reason?: string): Promise<ForgetResult> =>
+    request<ForgetResult>(`/api/threads/${id}/forget`, post({ seqs, reason })),
   settings: (id: string, patch: { model?: string; budget?: number }): Promise<unknown> =>
     request(`/api/threads/${id}/settings`, post(patch)),
 

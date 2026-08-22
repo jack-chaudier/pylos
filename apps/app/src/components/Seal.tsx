@@ -20,6 +20,8 @@ export interface EvidenceBarProps {
   building: number | undefined;
   recovered: number;
   viewTokens: number | undefined;
+  /** KERNEL A10.3: provider requests the last turn spent, packet included. */
+  viewRounds: number | undefined;
   budget: number;
   open: boolean;
   onOpen: () => void;
@@ -31,7 +33,7 @@ export interface EvidenceBarProps {
  * keep archive, view and recovered — the three that change while you talk.
  */
 export function EvidenceBar(props: EvidenceBarProps): React.JSX.Element {
-  const { stats, building, recovered, viewTokens, budget } = props;
+  const { stats, building, recovered, viewTokens, viewRounds, budget } = props;
   const turns = stats?.turns ?? 0;
   const meter =
     building !== undefined
@@ -67,7 +69,11 @@ export function EvidenceBar(props: EvidenceBarProps): React.JSX.Element {
         <Figure
           label="view"
           value={`${viewTokens === undefined ? "—" : tokenCount(viewTokens)} / ${tokenCount(budget)}`}
-          hint="Tokens in the packet the model last saw, against the budget it may never exceed."
+          {...(viewRounds !== undefined && viewRounds > 1 ? { unit: `· ${viewRounds} rounds` } : {})}
+          hint={
+            "Tokens in the packet the model last saw, against the budget it may never exceed. " +
+            "A turn that recalled, or was checked, costs more than one request — each held to that same budget."
+          }
         />
         <Figure
           label="ledger"
@@ -118,7 +124,7 @@ function Figure({
 }: {
   label: string;
   value: string;
-  /** Dropped on narrow screens, where the label already says what the number counts. */
+  /** Trailing detail — the unit, or what the figure cost. Dropped on narrow screens. */
   unit?: string;
   hint: string;
   tone?: "ember" | "verdigris";

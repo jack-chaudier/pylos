@@ -174,8 +174,9 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
           {streaming.pages.length > 0 ? (
             <RecoveryLine threadId={props.threadId} pages={streaming.pages} />
           ) : null}
+          {/* Mid-turn the outcome is not settled, but the draft is already gone. */}
           {streaming.check !== undefined ? (
-            <div className="checked">↺ verified against the archive · {streaming.check.names.join(", ")}</div>
+            <CheckLine meta={{ names: streaming.check.names, status: "revised" }} />
           ) : null}
           <div className="row row-assistant">
             <div className="row-text">
@@ -236,6 +237,7 @@ function Row({ episode, sealed, threadId, measure, onForget }: RowProps): React.
       ) : (
         <>
           {pages.length > 0 ? <RecoveryLine threadId={threadId} pages={pages} /> : null}
+          <CheckLine meta={episode.meta.check} />
           <div className={`row row-${episode.role}${removed ? " row-removed" : ""}`}>
             <RowMeta episode={episode} />
             <div className="row-text">{episode.content}</div>
@@ -271,6 +273,34 @@ function RowMeta({ episode }: { episode: Episode }): React.JSX.Element {
           {episode.model}
         </>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * What the check round did (KERNEL A9.5, A10.4). Episodes written before 1.2
+ * carry `{names, revised}` instead of a status; a check that ran and changed
+ * nothing reads the same under either shape. `none` carries no names and says
+ * nothing: there was nothing to reopen.
+ */
+function CheckLine({ meta }: { meta: unknown }): React.JSX.Element | null {
+  if (meta === null || typeof meta !== "object") return null;
+  const receipt = meta as { names?: unknown; status?: unknown; revised?: unknown };
+  const names = Array.isArray(receipt.names) ? receipt.names.filter((name) => typeof name === "string") : [];
+  if (names.length === 0) return null;
+  const status =
+    typeof receipt.status === "string" ? receipt.status : receipt.revised === true ? "revised" : "confirmed";
+  if (status === "check-failed") {
+    return (
+      <div className="checked" data-failed="true">
+        archive could not be re-read · {names.join(", ")} — unverified
+      </div>
+    );
+  }
+  return (
+    <div className="checked">
+      ↺ reopened the archive · {names.join(", ")}
+      {status === "confirmed" ? " · answer stood" : ""}
     </div>
   );
 }

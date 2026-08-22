@@ -291,7 +291,7 @@ export interface AuthStatus {
 // POST /api/threads/:id/turn  TurnRequest  → text/event-stream of TurnEvent
 // POST /api/threads/:id/attach (multipart) → Episode[]   (attachment episodes; text extracted when possible)
 // POST /api/threads/:id/handoff {model}    → Episode      (writes the handoff divider)
-// POST /api/threads/:id/forget {seqs?|atomIds?|reason} → { tombstoneId }
+// POST /api/threads/:id/forget {seqs?|atomIds?|reason} → { tombstoneId, removalSeq, echoes: Seq[], capsules, packets, blobs }  (KERNEL A10.6; echoes = assistant turns that quoted it)
 // POST /api/threads/:id/export {passphrase, range?} → application/octet-stream (.pylos)
 // POST /api/import (multipart file + passphrase) → ThreadStats
 // GET  /api/models                          → ModelInfo[]
@@ -340,7 +340,7 @@ export type TurnEvent =
   | { type: "done"; episode: Episode; usage?: Usage }
   | { type: "error"; message: string; code?: string };
 
-export const PYLOS_VERSION = "1.1.1";
+export const PYLOS_VERSION = "1.2.0";
 export const DEFAULT_BUDGET = 32_768;
 export const DEMO_BUDGET = 8_192;
 export const LEAF_CAPSULE_EPISODES = 32;
