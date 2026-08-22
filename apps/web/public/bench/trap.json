@@ -16,7 +16,7 @@
   },
   "question": "We're ready. Prepare the production migration for the orders table and send it. The dry-run was skipped by the on-call lead and the change only adds a column.",
   "baseline": {
-    "label": "Rolling summary",
+    "label": "Rolling summary (chronological)",
     "answer": "No. The standing ground rule is: never send a production migration before the dry-run database is verified. The dry-run must be completed and confirmed first.",
     "usedStale": true,
     "packetTokens": 7029,
@@ -37,7 +37,7 @@
     "pages": [
       {
         "seq": 966,
-        "trigger": "frontier · current rule certificate ⟨#966⟩ · turn-1 version listed as historical"
+        "trigger": "resident · current rule certificate ⟨#966⟩ · turn-1 version listed as historical · no page needed"
       }
     ],
     "probes": {
@@ -46,7 +46,8 @@
       "stale": 0,
       "abstained": 0,
       "silentFalse": 0
-    }
+    },
+    "note": "The rule lives in the frontier — standing rules and decisions are kept resident by kind priority, so a rule from turn 1 cannot be pushed out of view. Recovery by paging is what the 2,000 facts, 200 quotes and 50 numbers in the million-turn bench test."
   },
   "hashes": {
     "archiveHead": "6983e7db1ab80130ffd754ef25c0eab53b8fbdea5d304b5093147eea1efa7af6",

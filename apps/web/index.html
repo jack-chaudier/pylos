@@ -189,13 +189,13 @@
               touches it. Export it, destroy the machine, import it on another one — the chain still
               verifies.
             </p>
-            <span class="mono">hash_i = sha256(hash_i−1 ‖ episode_i)</span>
+            <span class="mono">hash_i = sha256(hash_i−1 ‖ canonical(seq, ts, role, model, content_hash, meta_hash))</span>
           </article>
           <article class="statement">
             <h3>The view is bounded.</h3>
             <p>
               On every turn the compiler builds one packet within a fixed token budget: header,
-              frontier, the O(log n) capsules covering the past, anything paged back, and the recent
+              frontier, a fixed set of capsules covering the past (a rolling root plus the newest leaves), anything paged back, and the recent
               turns verbatim. It never grows with the archive.
             </p>
             <span class="mono">‖K_t‖ ≤ B, for all t</span>
@@ -207,7 +207,7 @@
               contains, each with an exact locator. Ledgers are conserved upward. When a question
               touches one, the exact source is paged back before the model answers.
             </p>
-            <span class="mono">ledger(parent) ⊇ ⋃ ledger(child)</span>
+            <span class="mono">names(episodes) ⊆ names(capsule) ∪ ledger(capsule) · ledger(parent) ⊇ ⋃ ledger(child)</span>
           </article>
         </div>
       </section>
@@ -250,8 +250,8 @@
             <li class="step">
               <h3>01 · Archive</h3>
               <p>
-                Every turn is appended verbatim to a hash-chained vault, one transaction per turn.
-                The answer and its derivation are never written apart.
+                Every turn is appended verbatim to a hash-chained vault. The user turn commits with a pending
+                packet, the answer commits with its derivation; a crash can never leave one without the other.
               </p>
             </li>
             <li class="step">

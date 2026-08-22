@@ -49,8 +49,11 @@ Pylos packet digest `f3594573c7ae204a`; current rule from turn
 
 ## What this run does and does not prove
 
-It proves, deterministically: the packet never exceeded 8192 tokens; every planted
-quote paged back byte-exact; every planted number was routed by the ledger rather than
-recalled from a summary; the ledger was conserved and complete at every sampled capsule;
-the hash chain verified. It does not prove anything about a real model's answers —
-that is the live variant, and it is reported separately and labelled as a sample.
+It measures, deterministically: the hard packet cap held at every checkpoint; every planted quote
+paged back byte-exact; every planted number was present in the packet after compile (ledger-routing
+precision is reported separately); every revised-fact packet contained the current value and never a
+stale certificate (historical reachability is asserted for the rule, not for every fact); the ledger was
+conserved and complete on the sampled capsules (exhaustive at the final checkpoint); the hash chain
+verified. The trap tests residency of the revised rule (a frontier certificate), not paging; the rolling
+summary baseline is chronological (oldest text survives truncation). It measures nothing about a real
+model's answers — that is the live variant, reported separately and labelled as a sample.

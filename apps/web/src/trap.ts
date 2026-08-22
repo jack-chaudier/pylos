@@ -140,7 +140,15 @@ function column(d: TrapArtifact, which: "baseline" | "pylos"): HTMLElement {
   } else {
     const pages = d.pylos.pages ?? [];
     for (const p of pages) {
-      receipt.append(el("span", "page", `↺ recovered #${nf.format(p.seq)} · ${p.trigger}`));
+      receipt.append(
+        el(
+          "span",
+          "page",
+          p.trigger.startsWith("resident")
+            ? `● resident #${nf.format(p.seq)} · ${p.trigger.replace(/^resident · /, "")}`
+            : `↺ recovered #${nf.format(p.seq)} · ${p.trigger}`,
+        ),
+      );
     }
     if (pages.length === 0) receipt.append(el("span", "", "pages: none needed"));
     receipt.append(

@@ -7,16 +7,16 @@ Pylos is a desktop chat app (macOS, Linux) with a single text box and a single c
 
 > The tablets survived because the palace burned.
 
-## What is proven (and what is not)
+## What is measured (deterministic), what is sampled (live) — and what is not
 
 | Claim | Evidence |
 | --- | --- |
-| The view stays bounded while the archive grows without bound | `bench/results/million-1.md`: 1,000,000 turns, packet never above 8,192 tokens (max 7,998), residency slope ≈ 0 tokens per decade |
-| What was compacted away is recoverable, exactly | same run: 200/200 planted quotes paged back byte-exact, 50/50 numbers routed by the ledger, 2,000/2,000 revised facts answered from the current value with the old value kept as historical |
-| The ledger is conserved and complete; the chain verifies | same run: conservation + completeness recomputed from episodes at every checkpoint; `verify()` ok to #1,000,000 |
-| A model answering from a Pylos packet is less likely to state a stale value as current | `bench/results/million-live-live-1.md` (a live **sample**, grok-4.3, 36 probes/arm): Pylos 36/36 current, 0 silent-false; rolling summary 5/36 current, 29 abstentions, 2 silent-false; the trap: Pylos honours the revised rule, the summary follows the stale one |
-| The thread survives the machine | `bench/results/laptop-funeral.md`: export → clean profile → import → identical head hash, chain verified |
-| Any model can continue the same thread | `bench/results/brain-transplant.md`: Grok → local `qwen3:4b` mid-thread through the shipping sidecar |
+| The view stays bounded while the archive grows without bound | `bench/results/million-1.md`: 1,000,000 turns; the hard cap of 8,192 tokens held at every checkpoint (max observed 8,062) while recovery stayed exact over a 1,063 MiB archive |
+| What was compacted away is recoverable, exactly | same run: 200/200 planted quotes paged back byte-exact; 50/50 planted numbers present in the packet after compile (ledger-routing precision 1.00 on the 100-query sample); 2,000/2,000 revised-fact packets contained the current value (all by paging at 1M) and never a stale certificate — historical reachability is asserted for the rule, not for every fact |
+| The ledger is conserved and complete; the chain verifies | same run: conservation + completeness recomputed from episodes (sampled at each checkpoint, exhaustive at 1,000,000); `verify()` ok to #1,000,000 |
+| In one live sample, a model answering from a Pylos packet did not state a stale value as current | `bench/results/million-live-live-1.md` (one model, one seed, grok-4.3, 36 probes/arm): Pylos 36/36 current, 0 silent-false; chronological rolling summary 5/36 current, 29 abstentions, 2 silent-false. The model never called `recall` — every answer came from the compiled packet. The trap: Pylos's packet carried the revised rule as a *resident* certificate with the turn-1 version listed as historical (a frontier mechanism the baseline lacks; no page was needed) and the model honoured it; the summary carried only the stale rule |
+| The thread survives the machine | `bench/results/laptop-funeral.md` (1,999-episode vault, 0.26 MiB bundle): export → clean profile → import → identical head hash, chain verified |
+| A different model can continue the same thread from the compiled packet alone | `bench/results/brain-transplant.md`: a short thread, Grok → local `qwen3:4b` mid-thread through the shipping sidecar; no provider session reused |
 
 Not claimed: that a model cannot still be wrong; any natural-conversation benchmark we have not run; "never forgets" (Pylos forgets only on command, and records that it did). See `docs/THEORY.md` §"what we are not claiming".
 
