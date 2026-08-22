@@ -39,19 +39,21 @@ import {
   type Vault,
   verify,
 } from "@pylos/core";
-import { nameSet, parseNumberName, retained } from "@pylos/core/pure";
+import {
+  type Corpus,
+  type CorpusManifest,
+  createCorpus,
+  nameSet,
+  type PlantedPerson,
+  type PoisonVariant,
+  parseNumberName,
+  retained,
+  stream,
+  vocabSha256,
+} from "@pylos/core/pure";
 import type { Episode, Packet, Role } from "@pylos/protocol";
 import corePackage from "../packages/core/package.json";
 import { bm25Packet, RollingSummary } from "./baseline.ts";
-import {
-  buildCorpus,
-  type Corpus,
-  type Manifest,
-  type PlantedPerson,
-  type PoisonVariant,
-  stream,
-  vocabSha256,
-} from "./corpus.ts";
 
 export interface MillionOptions {
   turns: number;
@@ -184,7 +186,7 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
 
   const vault = openVault({ home, fast: true });
   const thread = vault.threads.create(`bench-${options.seed}`, { budget: options.budget });
-  const corpus = buildCorpus({ seed: options.seed, n: options.turns });
+  const corpus = createCorpus(options.seed, options.turns);
   const manifest = corpus.manifest;
   const rolling = new RollingSummary(options.budget);
 
@@ -362,7 +364,7 @@ interface CheckpointInput {
   vault: Vault;
   threadId: string;
   corpus: Corpus;
-  manifest: Manifest;
+  manifest: CorpusManifest;
   seq: number;
   budget: number;
   isFinal: boolean;

@@ -1,17 +1,21 @@
 /**
- * The deterministic corpus for `pylos bench million` (`bench/CORPUS.md`).
+ * The deterministic corpus — one generator, shared by `pylos bench million`
+ * (`bench/CORPUS.md`) and by the landing page's in-browser thread.
  *
  * Zero model calls, seeded, and reproducible: every episode is a pure function
  * of `(seed, seq)`, so the generator can be resumed, sharded, or replayed and
  * produce byte-identical text. The planted structure — one rule, its revision
  * 483,112 turns later, 2,000 revised facts, 200 exact quotes, 50 exact numbers —
  * is what the assertions are written against.
+ *
+ * It lives in `pure` because the browser has to be able to generate the same
+ * million turns the bench does, byte for byte, with no Bun or Node import.
  */
 
-import { createHash } from "node:crypto";
-import { ftsTerms } from "@pylos/core";
-import { names } from "@pylos/core/pure";
 import type { Role } from "@pylos/protocol";
+import { names } from "../names.ts";
+import { ftsTerms } from "../terms.ts";
+import { sha256Hex, sha256Into } from "./sha256.ts";
 import * as V from "./vocab.ts";
 
 /** A generator invariant. Failing one means the corpus, not the kernel, is wrong. */
@@ -28,12 +32,12 @@ export class Rng {
   private s2: number;
   private s3: number;
 
-  constructor(state: Uint8Array) {
-    const view = new DataView(state.buffer, state.byteOffset, 16);
-    this.s0 = view.getUint32(0, true);
-    this.s1 = view.getUint32(4, true);
-    this.s2 = view.getUint32(8, true);
-    this.s3 = view.getUint32(12, true);
+  /** Seeded from the first four words of a digest, read little-endian. */
+  constructor(digest: Uint32Array) {
+    this.s0 = swap32(digest[0] as number);
+    this.s1 = swap32(digest[1] as number);
+    this.s2 = swap32(digest[2] as number);
+    this.s3 = swap32(digest[3] as number);
     if ((this.s0 | this.s1 | this.s2 | this.s3) === 0) this.s0 = 1;
   }
 
@@ -76,10 +80,18 @@ function rotl(x: number, k: number): number {
   return (((x << k) | (x >>> (32 - k))) >>> 0) as number;
 }
 
+/** Big-endian words to little-endian, so the seeding is the byte order it always was. */
+function swap32(x: number): number {
+  return (((x >>> 24) | ((x >>> 8) & 0xff00) | ((x << 8) & 0xff0000) | ((x << 24) & 0xff000000)) >>>
+    0) as number;
+}
+
+const digest = new Uint32Array(8);
+
 /** `state(seq, salt) = first 16 bytes of sha256(SEED ‖ ":" ‖ salt ‖ ":" ‖ seq)`. */
 export function stream(seed: string, salt: string, seq: number): Rng {
-  const digest = createHash("sha256").update(`${seed}:${salt}:${seq}`, "utf8").digest();
-  return new Rng(new Uint8Array(digest.buffer, digest.byteOffset, 16));
+  sha256Into(`${seed}:${salt}:${seq}`, digest);
+  return new Rng(digest);
 }
 
 // --------------------------------------------------------------- manifest
@@ -163,7 +175,7 @@ export interface PlantedPerson {
   query: string;
 }
 
-export interface Manifest {
+export interface CorpusManifest {
   seed: string;
   n: number;
   ruleSeq: number;
@@ -190,8 +202,6 @@ export const TRAP_TEXT =
 const MODELS = ["grok-4.6", "claude-sonnet-4.5", "grok-4.6", "llama3.1:8b"];
 
 export interface CorpusOptions {
-  seed: string;
-  n: number;
   /** Override the planted counts (the live variant uses 40/10/10 at n=2,000). */
   plants?: { facts?: number; quotes?: number; numbers?: number; memories?: number; persons?: number };
 }
@@ -204,10 +214,20 @@ export interface Planted {
   persons: PlantedPerson[];
 }
 
+export interface CorpusEpisode {
+  role: Role;
+  content: string;
+  model?: string;
+}
+
 export interface Corpus {
-  manifest: Manifest;
+  seed: string;
+  n: number;
+  manifest: CorpusManifest;
+  /** The planted structure, by kind — the same arrays the manifest carries. */
+  planted: Planted;
   /** Deterministic content of one episode. O(1). */
-  episodeAt(seq: number): { role: Role; content: string; model?: string };
+  episodeAt(seq: number): CorpusEpisode;
   /** All planted items whose defining seq is < `seq`. */
   plantedBefore(seq: number): Planted;
 }
@@ -219,8 +239,8 @@ function personPool(): string[] {
   return out;
 }
 
-export function buildCorpus(options: CorpusOptions): Corpus {
-  const { seed, n } = options;
+/** Build the corpus of `n` turns for `seed`. The manifest is materialised; the text is not. */
+export function createCorpus(seed: string, n: number, options: CorpusOptions = {}): Corpus {
   const scale = n / 1_000_000;
   const factCount = options.plants?.facts ?? Math.max(4, Math.round(2000 * scale));
   const quoteCount = options.plants?.quotes ?? Math.max(2, Math.round(200 * scale));
@@ -432,7 +452,7 @@ export function buildCorpus(options: CorpusOptions): Corpus {
   }
   assert(personCursor <= people.length, `person pool exhausted: ${personCursor} > ${people.length}`);
 
-  const manifest: Manifest = {
+  const manifest: CorpusManifest = {
     seed,
     n,
     ruleSeq: 1,
@@ -450,19 +470,19 @@ export function buildCorpus(options: CorpusOptions): Corpus {
   };
 
   // ---- indexes for O(1) lookup during generation
-  const planted = new Map<number, { role: Role; content: string }>();
-  planted.set(1, { role: "user", content: RULE_TEXT });
-  planted.set(2, {
+  const scripted = new Map<number, { role: Role; content: string }>();
+  scripted.set(1, { role: "user", content: RULE_TEXT });
+  scripted.set(2, {
     role: "assistant",
     content: "Understood. Rule recorded: no production migration before the dry-run database is verified.",
   });
-  planted.set(revisionSeq, { role: "user", content: REVISION_TEXT });
-  planted.set(revisionSeq + 1, {
+  scripted.set(revisionSeq, { role: "user", content: REVISION_TEXT });
+  scripted.set(revisionSeq + 1, {
     role: "assistant",
     content:
       "Updated. The exception (additive-only plus the on-call lead skipping the dry-run) is now part of the rule.",
   });
-  planted.set(trapSeq, { role: "user", content: TRAP_TEXT });
+  scripted.set(trapSeq, { role: "user", content: TRAP_TEXT });
   for (const fact of facts) {
     const first =
       fact.slot === "location"
@@ -472,57 +492,57 @@ export function buildCorpus(options: CorpusOptions): Corpus {
       fact.slot === "location"
         ? `Actually, ${fact.person} moved to ${fact.value2}.`
         : `${fact.person} switched jobs — now at ${fact.value2}.`;
-    planted.set(fact.seq1, { role: "user", content: first });
-    planted.set(fact.seq1 + 1, { role: "assistant", content: `Noted — ${first}` });
-    planted.set(fact.seq2, { role: "user", content: second });
-    planted.set(fact.seq2 + 1, {
+    scripted.set(fact.seq1, { role: "user", content: first });
+    scripted.set(fact.seq1 + 1, { role: "assistant", content: `Noted — ${first}` });
+    scripted.set(fact.seq2, { role: "user", content: second });
+    scripted.set(fact.seq2 + 1, {
       role: "assistant",
       content: `Updated: ${fact.key} is now ${fact.value2} (was ${fact.value1}).`,
     });
   }
   for (const quote of quotes) {
-    planted.set(quote.seq, {
+    scripted.set(quote.seq, {
       role: "user",
       content: `${quote.person} wrote this and I want it kept exactly: ${quote.text}`,
     });
-    planted.set(quote.seq + 1, { role: "assistant", content: "Kept verbatim." });
+    scripted.set(quote.seq + 1, { role: "assistant", content: "Kept verbatim." });
   }
   for (const number of numbers) {
     const metricName = number.key.split(".")[1]?.replace(/_/g, " ") ?? "metric";
     const project = number.key.split(".")[0] ?? "project";
     const unit = number.name.split(" ")[1] ?? "";
-    planted.set(number.seq, {
+    scripted.set(number.seq, {
       role: "user",
       content: `${number.person} reported the final ${metricName} for ${project}: ${number.valueText} ${unit}. Hold onto that.`,
     });
-    planted.set(number.seq + 1, {
+    scripted.set(number.seq + 1, {
       role: "assistant",
       content: `Recorded ${number.valueText} ${unit}.`,
     });
   }
   for (const memory of memories) {
-    planted.set(memory.seq, { role: "user", content: memory.text });
-    planted.set(memory.seq + 1, { role: "assistant", content: "Noted." });
+    scripted.set(memory.seq, { role: "user", content: memory.text });
+    scripted.set(memory.seq + 1, { role: "assistant", content: "Noted." });
   }
   for (const person of persons) {
     if (person.statedSeq !== undefined) {
-      planted.set(person.statedSeq, {
+      scripted.set(person.statedSeq, {
         role: "user",
         content: `${person.person} lives in ${person.value1}.`,
       });
-      planted.set(person.statedSeq + 1, { role: "assistant", content: "Noted." });
+      scripted.set(person.statedSeq + 1, { role: "assistant", content: "Noted." });
     }
-    planted.set(person.claimSeq - 1, { role: "user", content: `Any news on ${person.person}?` });
-    planted.set(person.claimSeq, {
+    scripted.set(person.claimSeq - 1, { role: "user", content: `Any news on ${person.person}?` });
+    scripted.set(person.claimSeq, {
       role: "assistant",
       content: `${person.person} lives in ${person.value2}. I can draft the note.`,
     });
     if (person.correctedSeq !== undefined) {
-      planted.set(person.correctedSeq, {
+      scripted.set(person.correctedSeq, {
         role: "user",
         content: `Actually, ${person.person} moved to ${person.value3}.`,
       });
-      planted.set(person.correctedSeq + 1, { role: "assistant", content: "Noted." });
+      scripted.set(person.correctedSeq + 1, { role: "assistant", content: "Noted." });
     }
   }
   const handoffSet = new Set(handoffs);
@@ -533,7 +553,7 @@ export function buildCorpus(options: CorpusOptions): Corpus {
     return MODELS[index % MODELS.length] as string;
   };
 
-  const episodeAt = (seq: number): { role: Role; content: string; model?: string } => {
+  const episodeAt = (seq: number): CorpusEpisode => {
     if (handoffSet.has(seq)) {
       let index = 0;
       for (const handoff of handoffs) if (seq > handoff) index += 1;
@@ -541,17 +561,17 @@ export function buildCorpus(options: CorpusOptions): Corpus {
       const to = MODELS[index % MODELS.length] as string;
       return { role: "handoff", content: `${from} stopped here. ${to} continued from the same thread.` };
     }
-    const fixed = planted.get(seq);
+    const fixed = scripted.get(seq);
     if (fixed !== undefined) {
       return fixed.role === "assistant"
         ? { role: "assistant", content: fixed.content, model: modelAt(seq) }
         : fixed;
     }
     // Parity fixer: two user turns must never collide.
-    if (isUser(seq, planted) && isUser(seq + 1, planted)) {
+    if (isUser(seq, scripted) && isUser(seq + 1, scripted)) {
       return { role: "system", content: "Session resumed." };
     }
-    if (isUser(seq, planted)) return { role: "user", content: userTurn(seed, seq) };
+    if (isUser(seq, scripted)) return { role: "user", content: userTurn(seed, seq) };
     return { role: "assistant", content: assistantTurn(seed, seq - 1), model: modelAt(seq) };
   };
 
@@ -564,7 +584,14 @@ export function buildCorpus(options: CorpusOptions): Corpus {
     persons: persons.filter((p) => lastSeqOf(p) + 1 < seq),
   });
 
-  return { manifest, episodeAt, plantedBefore };
+  return {
+    seed,
+    n,
+    manifest,
+    planted: { facts, quotes, numbers, memories, persons },
+    episodeAt,
+    plantedBefore,
+  };
 }
 
 /** The last episode of a poison story — the point from which its law is checkable. */
@@ -612,10 +639,10 @@ function assertNameFree(): void {
   }
 }
 
-function isUser(seq: number, planted: Map<number, { role: Role }>): boolean {
-  const fixed = planted.get(seq);
+function isUser(seq: number, scripted: Map<number, { role: Role }>): boolean {
+  const fixed = scripted.get(seq);
   if (fixed !== undefined) return fixed.role === "user";
-  if (planted.get(seq - 1)?.role === "user") return false;
+  if (scripted.get(seq - 1)?.role === "user") return false;
   return seq % 2 === 1;
 }
 
@@ -725,5 +752,5 @@ function normalizeNumberName(valueText: string, unit: string): string {
 
 /** sha256 of the frozen vocabularies — recorded in the results file. */
 export function vocabSha256(): string {
-  return createHash("sha256").update(JSON.stringify(V.vocab), "utf8").digest("hex");
+  return sha256Hex(JSON.stringify(V.vocab));
 }

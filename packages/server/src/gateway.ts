@@ -15,6 +15,13 @@ interface GatewayRequest {
  * OpenAI-compatible gateway. Any client that speaks `/v1/chat/completions` gets
  * the whole Pylos thread behind its last user message: the archive is the
  * conversation, so only that last message is the turn.
+ *
+ * The check round (KERNEL A9.5) makes a turn's text non-monotonic: a draft can
+ * be retracted and reissued. A non-streaming response therefore carries only the
+ * committed text. A stream cannot take words back, so it says so — one chunk
+ * with an empty delta and `x_pylos: {event:"check", names, retract:true}`, then
+ * the replacement deltas. A client that ignores `x_pylos` must not treat the
+ * stream as append-only once that chunk has appeared.
  */
 export async function handleGatewayCompletions(context: ServerContext, request: Request): Promise<Response> {
   const body = await readJson<GatewayRequest>(request);
@@ -39,7 +46,7 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
   const created = Math.floor(Date.now() / 1000);
   const turn = context.kernel.runTurn(
     threadId,
-    { text, model: bound.model, provider: bound.provider, budget },
+    { text, model: bound.model, provider: bound.provider, budget, signal: request.signal },
     bound.fn,
   );
 
@@ -47,9 +54,15 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
     let answer = "";
     let usage = { inputTokens: 0, outputTokens: 0 };
     for await (const event of turn) {
-      if (event.type === "delta") answer += event.text;
-      else if (event.type === "done" && event.usage !== undefined) usage = event.usage;
-      else if (event.type === "error") throw new HttpError(502, event.code ?? "turn_failed", event.message);
+      // The committed episode is the final text: it is the reissued answer when
+      // a check replaced the draft, and the draft plus the kernel's unverified
+      // line when the check could not be run (KERNEL A9.5, A10.4).
+      if (event.type === "done") {
+        answer = event.episode.content;
+        if (event.usage !== undefined) usage = event.usage;
+      } else if (event.type === "error") {
+        throw new HttpError(502, event.code ?? "turn_failed", event.message);
+      }
     }
     return json(
       {
@@ -75,31 +88,40 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
   }
 
   const stream = new SseStream({ "X-Pylos-Thread": threadId });
+  const head = { id, object: "chat.completion.chunk", created, model: bound.model };
   void (async () => {
+    /** Text streamed since the draft was last retracted. */
+    let sinceCheck = "";
+    let retracted = false;
     try {
-      stream.send({
-        id,
-        object: "chat.completion.chunk",
-        created,
-        model: bound.model,
-        choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
-      });
+      stream.send({ ...head, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
       for await (const event of turn) {
         if (stream.isClosed) break;
         if (event.type === "delta") {
+          sinceCheck += event.text;
           stream.send({
-            id,
-            object: "chat.completion.chunk",
-            created,
-            model: bound.model,
+            ...head,
             choices: [{ index: 0, delta: { content: event.text }, finish_reason: null }],
           });
-        } else if (event.type === "done") {
+        } else if (event.type === "check") {
+          retracted = true;
+          sinceCheck = "";
           stream.send({
-            id,
-            object: "chat.completion.chunk",
-            created,
-            model: bound.model,
+            ...head,
+            choices: [{ index: 0, delta: {}, finish_reason: null }],
+            x_pylos: { event: "check", names: event.names, retract: true },
+          });
+        } else if (event.type === "done") {
+          // A check that could not be run streams no replacement; the kept draft
+          // and its unverified line are the answer, and must still arrive.
+          if (retracted && sinceCheck.length === 0 && event.episode.content.length > 0) {
+            stream.send({
+              ...head,
+              choices: [{ index: 0, delta: { content: event.episode.content }, finish_reason: null }],
+            });
+          }
+          stream.send({
+            ...head,
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
             ...(event.usage === undefined
               ? {}

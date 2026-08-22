@@ -256,14 +256,50 @@ describe("attachments, handoff, forget", () => {
     const thread = await newThread();
     provider.reply("ok");
     await h.sse(`/api/threads/${thread.threadId}/turn`, { text: "my secret is 424242" });
-    const result = await h.json<{ tombstoneId: string }>(
+    const result = await h.json<ForgetResult>(
       `/api/threads/${thread.threadId}/forget`,
       jsonPost({ seqs: [1], reason: "test" }),
     );
     expect(result.tombstoneId).toBeTruthy();
+    // The removal is itself an episode, appended after the two it followed.
+    expect(result.removalSeq).toBe(3);
     const episode = await h.json<Episode>(`/api/threads/${thread.threadId}/episodes/1`);
     expect(episode.content).toContain("removed by user");
     expect(episode.meta.removed).toBe(true);
+    const verified = await h.json<{ ok: boolean }>(
+      `/api/threads/${thread.threadId}/verify`,
+      jsonPost({}),
+    );
+    expect(verified.ok).toBe(true);
+  });
+
+  test("forget names the replies that quoted it and forgets them on request", async () => {
+    const thread = await newThread();
+    provider.reply("Understood: the Valletta contract came to 48250 usd.");
+    await h.sse(`/api/threads/${thread.threadId}/turn`, {
+      text: "The Valletta contract came to 48250 usd.",
+    });
+    const first = await h.json<ForgetResult>(
+      `/api/threads/${thread.threadId}/forget`,
+      jsonPost({ seqs: [1], reason: "user request" }),
+    );
+    // The assistant's echo is named, never removed on a guess (KERNEL A10.6).
+    expect(first.echoes).toEqual([2]);
+    expect((await h.json<Episode>(`/api/threads/${thread.threadId}/episodes/2`)).meta.removed).toBe(
+      undefined,
+    );
+
+    const second = await h.json<ForgetResult>(
+      `/api/threads/${thread.threadId}/forget`,
+      jsonPost({ seqs: first.echoes, reason: "user request" }),
+    );
+    expect(second.tombstoneId).not.toBe(first.tombstoneId);
+    expect((await h.json<Episode>(`/api/threads/${thread.threadId}/episodes/2`)).meta.removed).toBe(true);
+    const verified = await h.json<{ ok: boolean }>(
+      `/api/threads/${thread.threadId}/verify`,
+      jsonPost({}),
+    );
+    expect(verified.ok).toBe(true);
   });
 });
 

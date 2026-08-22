@@ -62,7 +62,7 @@ export {
 // browser-safe entry point that carries no Bun or SQLite import.
 export * from "./pure/index.ts";
 export { needsAuthorityReplay, replayAtoms } from "./replay.ts";
-export { ftsQuery, ftsTerms } from "./rows.ts";
+export { ftsQuery } from "./rows.ts";
 export { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
 export { stats } from "./stats.ts";
 export {

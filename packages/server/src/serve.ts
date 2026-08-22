@@ -507,23 +507,28 @@ async function turnRoute(context: ServerContext, request: Request, threadId: str
   const supportsTools = catalogue.find((entry) => entry.id === bound.model)?.supportsTools !== false;
   await context.kernel.setSettings(threadId, { model: bound.model, budget });
 
+  // Claimed before the stream opens, so a thread with eight turns already
+  // waiting answers `429 thread_busy` instead of a stream that says so.
+  const turn = context.kernel.runTurn(
+    threadId,
+    {
+      text,
+      model: bound.model,
+      provider: bound.provider,
+      budget,
+      supportsTools,
+      signal: request.signal,
+      ...(body.attachmentSeqs === undefined ? {} : { attachmentSeqs: body.attachmentSeqs }),
+    },
+    bound.fn,
+  );
+
   const stream = new SseStream();
   const heartbeat = setInterval(() => stream.comment("keep-alive"), 15_000);
 
   void (async () => {
     try {
-      for await (const event of context.kernel.runTurn(
-        threadId,
-        {
-          text,
-          model: bound.model,
-          provider: bound.provider,
-          budget,
-          supportsTools,
-          ...(body.attachmentSeqs === undefined ? {} : { attachmentSeqs: body.attachmentSeqs }),
-        },
-        bound.fn,
-      )) {
+      for await (const event of turn) {
         if (request.signal.aborted || stream.isClosed) break;
         stream.send(event);
       }
