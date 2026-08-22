@@ -25,14 +25,14 @@ function service(fetcher?: (url: string, init?: RequestInit) => Promise<Response
 describe("credential custody", () => {
   test("the auth file is written 0600", async () => {
     const auth = service();
-    await auth.setApiKey("anthropic", "sk-ant-abcdefghijklmnop");
+    await auth.setApiKey("anthropic", "sk-ant-abcdefghijklmnop"); // scan-secrets:allow (fixture)
     const info = await stat(join(home, "auth.json"));
     expect(info.mode & 0o777).toBe(0o600);
   });
 
   test("status masks the key and never returns it", async () => {
     const auth = service();
-    const status = await auth.setApiKey("openai", "sk-proj-supersecretvalue");
+    const status = await auth.setApiKey("openai", "sk-proj-supersecretvalue"); // scan-secrets:allow (fixture)
     expect(status.identity).toBe("sk-••••alue");
     expect(JSON.stringify(await auth.statuses())).not.toContain("supersecretvalue");
   });

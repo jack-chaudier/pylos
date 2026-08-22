@@ -15,8 +15,10 @@ for (const f of files) {
   if (/\.(png|jpg|jpeg|webp|ico|woff2?|ttf|otf|pdf|sqlite)$/i.test(f)) continue;
   let text: string;
   try { text = await Bun.file(f).text(); } catch { continue; }
+  // Lines carrying the marker are declared fixtures (tests with obviously fake keys).
+  const scanned = text.split("\n").filter((line) => !line.includes("scan-secrets:allow")).join("\n");
   for (const [name, re] of patterns) {
-    if (re.test(text)) { console.error(`secret-like content (${name}) in ${f}`); bad++; }
+    if (re.test(scanned)) { console.error(`secret-like content (${name}) in ${f}`); bad++; }
   }
 }
 if (bad) process.exit(1);
