@@ -1129,3 +1129,5 @@ section {
   }
   /* biome-ignore-end lint/complexity/noImportantStyles: end of the motion override. */
 }
+
+.trap__probes { margin-top: 1rem; color: var(--ash); font-size: 0.8rem; letter-spacing: 0.02em; }

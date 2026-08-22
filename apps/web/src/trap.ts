@@ -19,15 +19,24 @@ export interface TrapArtifact {
   rule: { seq: number; text: string };
   revision: { seq: number; text: string };
   question: string;
-  baseline: { label?: string; answer: string; usedStale: boolean; note?: string };
+  baseline: { label?: string; answer: string; usedStale: boolean; note?: string; probes?: Probes };
   pylos: {
     label?: string;
     answer: string;
     usedStale: boolean;
     pages?: { seq: number; trigger: string }[];
     note?: string;
+    probes?: Probes;
   };
   hashes: { archiveHead: string; packet: string };
+}
+
+export interface Probes {
+  n: number;
+  current: number;
+  stale: number;
+  abstained: number;
+  silentFalse: number;
 }
 
 const nf = new Intl.NumberFormat("en-US");
@@ -76,6 +85,20 @@ function render(d: TrapArtifact): DocumentFragment {
     el("span", "", `packet ${short(d.hashes.packet)}`),
   );
   frag.append(hashes);
+
+  const pp = d.pylos.probes;
+  const bp = d.baseline.probes;
+  if (pp && bp) {
+    frag.append(
+      el(
+        "p",
+        "trap__probes mono",
+        `${nf.format(pp.n)} probes per arm · Pylos current ${pp.current}/${pp.n}, silent-false ${pp.silentFalse} · ` +
+          `rolling summary current ${bp.current}/${bp.n}, abstained ${bp.abstained}, silent-false ${bp.silentFalse}`,
+      ),
+    );
+  }
+  if (!d.placeholder && d.note) frag.append(el("p", "dl__note", d.note));
 
   if (d.placeholder) {
     const note = el(

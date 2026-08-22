@@ -15,6 +15,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { atomize, compact, compile, type EpisodeInput, openVault, type Provider, recall } from "@pylos/core";
+import { RECALL_TOOL } from "@pylos/core/pure";
 import { retained } from "@pylos/core/pure";
 import type { ChatMessage } from "@pylos/protocol";
 import { RollingSummary } from "./baseline.ts";
@@ -33,6 +34,8 @@ export interface LiveOptions {
 
 export interface ProbeScore {
   seq: number;
+  kind?: "fact" | "quote" | "number";
+  query?: string;
   arm: "pylos" | "rolling";
   packetDigest: string;
   packetTokens: number;
@@ -51,11 +54,19 @@ export interface LiveResult {
     "pylos" | "rolling",
     { current: number; stale: number; abstained: number; silentFalse: number }
   >;
-  trap: { pylos: string; rolling: string } | null;
+  trap: {
+    question: string;
+    rule: { seq: number; text: string };
+    revision: { seq: number; text: string };
+    headHash: string;
+    pylos: { answer: string; packetDigest: string; packetTokens: number; pages: number };
+    rolling: { answer: string; packetTokens: number };
+  } | null;
   reason?: string;
 }
 
-const ABSTAIN = /don't have|do not have|not in|would need to check|recall|cannot see|can't see/i;
+const ABSTAIN =
+  /don't have|do not have|not in|would need to check|recall|cannot see|can't see|no record|no information|not recorded|don't see|do not see|no mention|nothing in|not available|unknown|not stated|haven't|have not (?:been )?(?:told|given)|unable to|let me check|checking the archive/i;
 const HEDGE = /earlier|previously|used to|has changed|since changed/i;
 
 export async function runLive(options: LiveOptions): Promise<LiveResult> {
@@ -85,7 +96,11 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
   rmSync(home, { recursive: true, force: true });
   const vault = openVault({ home, fast: true });
   const thread = vault.threads.create(`live-${options.seed}`, { budget: options.budget });
-  const corpus = buildCorpus({ seed: options.seed, n: options.turns });
+  const corpus = buildCorpus({
+    seed: options.seed,
+    n: options.turns,
+    plants: options.turns < 100_000 ? { facts: 40, quotes: 10, numbers: 10 } : undefined,
+  });
   const rolling = new RollingSummary(options.budget);
 
   // ---- play the archive in; no model calls, both arms see identical history
@@ -115,7 +130,7 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
   }
 
   const probeSeqs: number[] = [];
-  for (let seq = 200; seq < options.turns; seq += 100) probeSeqs.push(seq);
+  for (let seq = 200; seq < options.turns; seq += 50) probeSeqs.push(seq);
   const probes: ProbeScore[] = [];
 
   const ask = async (
@@ -130,7 +145,7 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
       for await (const event of (options.provider as Provider)({
         model: options.model,
         messages: conversation,
-        tools: [],
+        tools: allowRecall ? [RECALL_TOOL] : [],
       })) {
         if (event.type === "delta") text += event.text;
         else if (event.type === "tool_call") calls.push(event);
@@ -153,18 +168,51 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
     return { text, pages };
   };
 
+  type Item = { kind: "fact" | "quote" | "number"; query: string; value1: string; value2: string; numeric?: number };
+  const usedFacts = new Set<number>();
+  const usedQuotes = new Set<number>();
+  const usedNumbers = new Set<number>();
+  const pickItem = (seq: number, i: number): Item | undefined => {
+    const order: Array<"fact" | "quote" | "number"> =
+      i % 3 === 0 ? ["quote", "fact", "number"] : i % 3 === 1 ? ["number", "fact", "quote"] : ["fact", "quote", "number"];
+    for (const kind of order) {
+      if (kind === "fact") {
+        const f = corpus.manifest.facts.filter((x) => x.seq2 < seq && !usedFacts.has(x.id)).at(-1);
+        if (f) {
+          usedFacts.add(f.id);
+          return { kind, query: f.queries[0] as string, value1: f.value1, value2: f.value2 };
+        }
+      } else if (kind === "quote") {
+        const q = corpus.manifest.quotes.filter((x) => x.seq < seq && !usedQuotes.has(x.seq)).at(-1);
+        if (q) {
+          usedQuotes.add(q.seq);
+          return { kind, query: q.query, value1: "", value2: q.text.replace(/^[“"]|[”"]$/g, "") };
+        }
+      } else {
+        const n = corpus.manifest.numbers.filter((x) => x.seq < seq && !usedNumbers.has(x.seq)).at(-1);
+        if (n) {
+          usedNumbers.add(n.seq);
+          return { kind, query: n.query, value1: "", value2: n.valueText, numeric: n.value };
+        }
+      }
+    }
+    return undefined;
+  };
+
+  let i = 0;
   for (const seq of probeSeqs) {
-    const fact = corpus.manifest.facts.filter((f) => f.seq2 < seq).at(-1);
-    if (fact === undefined) continue;
-    const query = fact.queries[0] as string;
+    const item = pickItem(seq, i);
+    i += 1;
+    if (item === undefined) continue;
+    const query = item.query;
 
     const packet = compile(vault, thread.id, { query, budget: options.budget, model: options.model });
     const pylosAnswer = await ask([...packet.messages, { role: "user", content: query }], true);
-    probes.push(score(seq, "pylos", packet.digest, packet.tokens, pylosAnswer.pages, pylosAnswer.text, fact));
+    probes.push(score(seq, "pylos", packet.digest, packet.tokens, pylosAnswer.pages, pylosAnswer.text, item));
 
     const baseline = rolling.packet(query, seq);
     const rollingAnswer = await ask(baseline.messages, false);
-    probes.push(score(seq, "rolling", "", baseline.tokens, 0, rollingAnswer.text, fact));
+    probes.push(score(seq, "rolling", "", baseline.tokens, 0, rollingAnswer.text, item));
   }
 
   const summary = {
@@ -181,14 +229,30 @@ export async function runLive(options: LiveOptions): Promise<LiveResult> {
     [...trapPacket.messages, { role: "user", content: corpus.manifest.trapText }],
     true,
   );
-  const trapRolling = await ask(rolling.packet(corpus.manifest.trapText, options.turns).messages, false);
+  const rollingTrapPacket = rolling.packet(corpus.manifest.trapText, options.turns);
+  const trapRolling = await ask(rollingTrapPacket.messages, false);
+  const ruleEp = vault.episodes.get(thread.id, corpus.manifest.ruleSeq);
+  const revisionEp = vault.episodes.get(thread.id, corpus.manifest.revisionSeq);
+  const head = vault.threads.get(thread.id);
 
   const result: LiveResult = {
     ok: true,
     model: options.model,
     probes,
     summary,
-    trap: { pylos: trapPylos.text, rolling: trapRolling.text },
+    trap: {
+      question: corpus.manifest.trapText,
+      rule: { seq: corpus.manifest.ruleSeq, text: ruleEp?.content ?? "" },
+      revision: { seq: corpus.manifest.revisionSeq, text: revisionEp?.content ?? "" },
+      headHash: head?.headHash ?? "",
+      pylos: {
+        answer: trapPylos.text,
+        packetDigest: trapPacket.digest,
+        packetTokens: trapPacket.tokens,
+        pages: trapPylos.pages,
+      },
+      rolling: { answer: trapRolling.text, packetTokens: rollingTrapPacket.tokens },
+    },
   };
   const out = options.out ?? join(resultsDir, `million-live-${options.seed}.jsonl`);
   await Bun.write(
@@ -206,12 +270,17 @@ function score(
   tokens: number,
   pages: number,
   answer: string,
-  fact: { value1: string; value2: string },
+  fact: { kind: "fact" | "quote" | "number"; query: string; value1: string; value2: string; numeric?: number },
 ): ProbeScore {
-  const current = answer.includes(fact.value2) || retained(answer, Number(fact.value2));
-  const stale = answer.includes(fact.value1) && !HEDGE.test(answer);
+  const current =
+    answer.includes(fact.value2) ||
+    (fact.numeric !== undefined && retained(answer, fact.numeric)) ||
+    (fact.kind !== "quote" && fact.value2 !== "" && retained(answer, Number(fact.value2)));
+  const stale = fact.value1 !== "" && answer.includes(fact.value1) && !HEDGE.test(answer);
   return {
     seq,
+    kind: fact.kind,
+    query: fact.query,
     arm,
     packetDigest: digest,
     packetTokens: tokens,

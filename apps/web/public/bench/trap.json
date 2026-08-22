@@ -1,36 +1,55 @@
 {
-  "placeholder": true,
-  "note": "Illustrative. Replaced by the output of `pylos bench million --live` before launch; nothing here is a measured model response.",
-  "seed": "0x50594C4F",
-  "turns": 1000000,
+  "placeholder": false,
+  "source": "bench/results/million-live-live-1.json",
+  "seed": "live-1",
+  "turns": 2000,
   "budget": 8192,
-  "model": "grok-4.6",
+  "model": "grok-4.3",
+  "note": "Live sample, not a benchmark result: one model, n = 36 probes per arm, deterministic string scoring (epistemic-debt row 24: string survival is a conservative lower bound).",
   "rule": {
     "seq": 1,
-    "text": "Never send a production migration before the dry-run database is verified."
+    "text": "One ground rule for this whole project: never send a production migration before the dry-run database is verified."
   },
   "revision": {
-    "seq": 483112,
-    "text": "Correction to the migration rule: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead."
+    "seq": 966,
+    "text": "Update to our migration rule: never send a production migration before the dry-run database is verified — unless the change is additive-only and the dry-run was skipped by the on-call lead."
   },
-  "question": "The change is additive-only and the on-call lead skipped the dry-run — can I send the production migration?",
+  "question": "We're ready. Prepare the production migration for the orders table and send it. The dry-run was skipped by the on-call lead and the change only adds a column.",
   "baseline": {
     "label": "Rolling summary",
-    "answer": "No — you set the rule yourself: never send a production migration before the dry-run database is verified. The dry-run was skipped, so the migration should not go out. Run the dry-run against a verified copy first, then send it.",
+    "answer": "No. The standing ground rule is: never send a production migration before the dry-run database is verified. The dry-run must be completed and confirmed first.",
     "usedStale": true,
-    "note": "The summary that survives at turn 1,000,000 still carries the original rule and no trace of the correction. The model answers from it with the confidence it had when it could see the source."
+    "packetTokens": 7029,
+    "note": "The summary that survives at turn 2,000 still carries the turn-1 rule and no trace of the revision at turn 966. The model answers from it with full confidence.",
+    "probes": {
+      "n": 36,
+      "current": 5,
+      "stale": 2,
+      "abstained": 29,
+      "silentFalse": 2
+    }
   },
   "pylos": {
     "label": "Pylos",
-    "answer": "Yes, under the exception you added later. The rule from turn 1 was corrected on turn 483,112: it does not apply when the change is additive-only and the dry-run was skipped by the on-call lead. Both conditions hold here, so the migration is allowed — the original blanket rule is historical as of that turn.",
+    "answer": "Migration for orders table prepared and sent (additive-only, dry-run skipped by on-call lead per rule #966).",
     "usedStale": false,
+    "packetTokens": 8108,
     "pages": [
-      { "seq": 483112, "trigger": "ledger · \"additive-only\"" },
-      { "seq": 483112, "trigger": "ledger · \"dry-run\"" }
-    ]
+      {
+        "seq": 966,
+        "trigger": "frontier · current rule certificate ⟨#966⟩ · turn-1 version listed as historical"
+      }
+    ],
+    "probes": {
+      "n": 36,
+      "current": 36,
+      "stale": 0,
+      "abstained": 0,
+      "silentFalse": 0
+    }
   },
   "hashes": {
-    "archiveHead": "0000000000000000000000000000000000000000000000000000000000000000",
-    "packet": "0000000000000000000000000000000000000000000000000000000000000000"
+    "archiveHead": "6983e7db1ab80130ffd754ef25c0eab53b8fbdea5d304b5093147eea1efa7af6",
+    "packet": "d7b08f23e1b71715cd9d3c8ef43cde639199e71976950cd1c2744e80e1886489"
   }
 }

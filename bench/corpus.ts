@@ -139,6 +139,8 @@ const MODELS = ["grok-4.6", "claude-sonnet-4.5", "grok-4.6", "llama3.1:8b"];
 export interface CorpusOptions {
   seed: string;
   n: number;
+  /** Override the planted counts (the live variant uses 40/10/10 at n=2,000). */
+  plants?: { facts?: number; quotes?: number; numbers?: number };
 }
 
 export interface Corpus {
@@ -159,9 +161,9 @@ function personPool(): string[] {
 export function buildCorpus(options: CorpusOptions): Corpus {
   const { seed, n } = options;
   const scale = n / 1_000_000;
-  const factCount = Math.max(4, Math.round(2000 * scale));
-  const quoteCount = Math.max(2, Math.round(200 * scale));
-  const numberCount = Math.max(2, Math.round(50 * scale));
+  const factCount = options.plants?.facts ?? Math.max(4, Math.round(2000 * scale));
+  const quoteCount = options.plants?.quotes ?? Math.max(2, Math.round(200 * scale));
+  const numberCount = options.plants?.numbers ?? Math.max(2, Math.round(50 * scale));
   const revisionSeq = n >= 1_000_000 ? 483_112 : Math.max(4, Math.floor(n * 0.483112));
   const trapSeq = n;
   const handoffs = [0.250001, 0.600002, 0.800001]
@@ -203,9 +205,11 @@ export function buildCorpus(options: CorpusOptions): Corpus {
           : V.org[0] === value1
             ? (V.org[1] as string)
             : (V.org[0] as string);
-    const s1 = claim(plant.int(3, Math.max(5, n - Math.round(60_000 * scale))));
+    let s1 = claim(plant.int(3, Math.max(5, n - Math.round(60_000 * scale))));
     const gap = Math.round(Math.exp(lnLo + plant.u01() * (lnHi - lnLo)));
-    const s2 = claim(Math.min(s1 + gap, n - Math.max(4, Math.round(1000 * scale))));
+    let s2 = claim(Math.min(s1 + gap, n - Math.max(4, Math.round(1000 * scale))));
+    // `claim` wraps to the start when it runs past the end; the statement must precede the revision.
+    if (s2 < s1) [s1, s2] = [s2, s1];
     facts.push({
       id: i,
       kind: "fact",
