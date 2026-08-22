@@ -7,6 +7,8 @@ Pylos is a desktop chat app (macOS, Linux) with a single text box and a single c
 
 > The tablets survived because the palace burned.
 
+<p align="center"><img src="apps/desktop/screenshots/app-dark.png" width="820" alt="Pylos desktop: one composer, the seal, the timeline rail"></p>
+
 ## What is measured (deterministic), what is sampled (live) — and what is not
 
 | Claim | Evidence |
