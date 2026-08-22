@@ -1,0 +1,48 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.10 }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: ${{ matrix.target }} }
+      - name: Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libssl-dev
+      - run: bun install --frozen-lockfile
+      - run: bun test --timeout 60000 packages
+      - name: Build sidecar (kernel + server, single binary)
+        run: PYLOS_TARGET_TRIPLE=${{ matrix.target }} bun run --cwd packages/server build:sidecar
+      - name: Build desktop
+        run: bun run --cwd apps/desktop tauri build --bundles ${{ matrix.bundles }} --target ${{ matrix.target }}
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p out
+          find apps/desktop/src-tauri/target -path '*bundle*' \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
+          cd out && for f in *; do mv "$f" "$(echo "$f" | sed -E 's/^Pylos_?/pylos-/; s/_aarch64|_amd64|_x86_64//')"; done; ls -la; shasum -a 256 * > SHA256SUMS-${{ matrix.target }}.txt
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: out/*
+          generate_release_notes: true
