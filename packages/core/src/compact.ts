@@ -367,6 +367,9 @@ export function sourceNamesForRange(vault: Vault, threadId: string, from: Seq, t
     source.push(...sourceNamesOfEpisode(episode.seq, episode.content));
   }
   for (const atom of vault.atoms.inRange(threadId, from, to)) {
+    // A REVOKED atom was read from material the user removed (KERNEL A10.6);
+    // its key and value are not part of what a capsule must account for.
+    if (atom.phase === "REVOKED") continue;
     const span = atom.sourceSpan ? { span: atom.sourceSpan } : {};
     source.push({ name: normalizeName(atom.key, "atom"), kind: "atom", seq: atom.sourceSeq, ...span });
     const value = normalizeName(atom.value, "atom");

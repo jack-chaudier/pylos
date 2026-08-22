@@ -12,7 +12,7 @@
  */
 
 import { Database, type Statement } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -41,12 +41,14 @@ import {
   type LossRow,
   type PacketRow,
   type ThreadRow,
+  type TombstoneRow,
   toAtom,
   toCapsule,
   toEpisode,
   toLoss,
   toPacket,
   toThread,
+  toTombstone,
 } from "./rows.ts";
 import { COUNTERS, MIGRATIONS } from "./schema.ts";
 
@@ -115,6 +117,20 @@ export function chainRecord(input: {
 export interface StoredCapsule extends Capsule {
   /** Names still visible in this capsule's text, with their deepest locators. */
   kept: LossEntry[];
+}
+
+/** The record of one removal (KERNEL §8, A10.6). */
+export interface Tombstone {
+  id: string;
+  threadId: string;
+  /** What the user asked to remove: `seqs:…`, `range:…` or `atoms:…`. */
+  target: string;
+  reason: string;
+  createdAt: number;
+  /** Seq of the `system` episode that records this removal; 0 for legacy rows. */
+  removalSeq: Seq;
+  /** Assistant episodes that carry a routing name of the removed text. */
+  echoes: Seq[];
 }
 
 export interface AppendResult {
@@ -451,6 +467,22 @@ export class Vault {
         mime: string | null;
         size: number;
       }>,
+    /**
+     * True if any episode that has not itself been removed still references this
+     * hash — across every thread, since `objects/` is one content-addressed store.
+     * A scan of `meta`: `forget` is user-initiated and rare, and the alternative
+     * is an index paid for on every append.
+     */
+    referenced: (hash: string): boolean =>
+      this.stmt(
+        "SELECT 1 FROM episode WHERE json_extract(meta, '$.blob') = ? " +
+          "AND COALESCE(json_extract(meta, '$.removed'), 0) != 1 LIMIT 1",
+      ).get(hash) !== null,
+    /** Delete the bytes and the row. Only `forget` may call this (KERNEL A10.6). */
+    delete: (hash: string): void => {
+      rmSync(join(this.objectsDir, hash), { force: true });
+      this.stmt("DELETE FROM blob WHERE hash = ?").run(hash);
+    },
   };
 
   // ------------------------------------------------------------------ atoms
@@ -883,14 +915,29 @@ export class Vault {
     create: (threadId: string, target: string, reason: string): string => {
       const id = newId("tb");
       this.stmt(
-        "INSERT INTO tombstone (id, thread_id, target, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO tombstone (id, thread_id, target, reason, created_at, removal_seq, echoes) " +
+          "VALUES (?, ?, ?, ?, ?, NULL, '[]')",
       ).run(id, threadId, target, reason, Date.now());
       return id;
     },
-    list: (threadId: string): Array<{ id: string; target: string; reason: string; created_at: number }> =>
-      this.stmt("SELECT id, target, reason, created_at FROM tombstone WHERE thread_id = ?").all(
-        threadId,
-      ) as Array<{ id: string; target: string; reason: string; created_at: number }>,
+    /** Bind a tombstone to its chain event and the echoes it found (KERNEL A10.6). */
+    record: (id: string, removalSeq: Seq, echoes: readonly Seq[]): void => {
+      this.stmt("UPDATE tombstone SET removal_seq = ?, echoes = ? WHERE id = ?").run(
+        removalSeq,
+        canonicalJson([...echoes]),
+        id,
+      );
+    },
+    get: (id: string): Tombstone | null => {
+      const row = this.stmt("SELECT * FROM tombstone WHERE id = ?").get(id) as TombstoneRow | undefined;
+      return row == null ? null : toTombstone(row);
+    },
+    list: (threadId: string): Tombstone[] =>
+      (
+        this.stmt("SELECT * FROM tombstone WHERE thread_id = ? ORDER BY created_at ASC").all(
+          threadId,
+        ) as TombstoneRow[]
+      ).map(toTombstone),
   };
 
   // --------------------------------------------------------------- internal

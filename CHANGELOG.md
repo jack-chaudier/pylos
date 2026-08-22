@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* **Kernel** (`@pylos/core`): forgetting is complete. `forget` no longer stops at the episode — the capsules that quoted it have their text re-derived over the surviving source, the packets that could still be carrying it lose their `messages` (their digest, resident set and pages stay, so the X-ray labels them reconstructed), and an attachment's bytes are deleted from `objects/` once no surviving episode references them. An assistant turn that restated the material is still never removed on a guess: the tombstone now lists those turns as `echoes`, so the interface can ask.
+* **Kernel** (`@pylos/core`): forgetting is chain-bound. Each removal appends a `system` episode, `⟦removed #n · <tombstone>⟧`, and `verify()` requires every episode marked removed to have a tombstone and that later record — so setting `removed` by hand in the database now fails verification instead of skipping the content-hash check. Vault migration 008 adds `tombstone.removal_seq` and `tombstone.echoes`; removals recorded before this release are marked legacy and still verify.
+* **Export** (`@pylos/core`): a `.pylos` bundle carries the attachments its own episodes reach, not every object in the profile — exporting one thread no longer ships another thread's files, and a partial export ships only what its range reaches.
+* **Import** (`@pylos/core`): `packets.jsonl` is restored instead of discarded, so the X-ray survives a Laptop Funeral: an imported thread still shows what each turn was compiled from. Import checks the restored packet count against the manifest and refuses on disagreement.
+
 ## 1.1.1 — 2026-08-22
 
 * **Release**: the headless tarball now ships the hosted build of the app (`/app/` base); 1.1.0 packaged the desktop variant, so `pylos serve` served an app whose assets resolved to `/assets/` and did not load. Landing rewrites point `/app/`, `/api/*`, `/v1/*` at the hosted backend.
