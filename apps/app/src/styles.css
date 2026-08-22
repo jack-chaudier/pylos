@@ -115,14 +115,22 @@ textarea {
 
 .app {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
   position: relative;
+  overflow: hidden;
+}
+
+/* Boot, offline, sign-in: one screen, so it owns the whole height. */
+.app.solo {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .titlebar {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 12px;
   padding: 0 20px 0 20px;
   height: 46px;
@@ -177,7 +185,9 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
   padding: 5px 11px;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -227,6 +237,10 @@ textarea {
   font-style: normal;
   color: var(--ink);
   transition: color var(--slow) var(--ease);
+}
+
+.figure-unit {
+  font-style: normal;
 }
 
 .figure em[data-tone="ember"] {
@@ -318,6 +332,7 @@ textarea {
 .transcript-wrap {
   position: relative;
   min-height: 0;
+  min-width: 0;
   display: flex;
 }
 
@@ -631,6 +646,7 @@ textarea {
 
 .composer-dock {
   padding: 0 32px 24px;
+  min-width: 0;
   flex: none;
 }
 
@@ -800,13 +816,22 @@ textarea {
 /* ---------- cold start ---------- */
 
 .coldstart {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
   height: 100%;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-content: center;
   justify-items: center;
   gap: 18px;
   text-align: center;
-  padding-bottom: 8vh;
+  padding: 0 24px 8vh;
+}
+
+/* `justify-items: center` sizes children to max-content; keep them inside the column. */
+.coldstart > * {
+  max-width: min(44ch, 100%);
 }
 
 .coldstart h1 {
@@ -1485,8 +1510,11 @@ textarea {
 .signin {
   height: 100%;
   display: grid;
-  place-items: center;
-  padding: 32px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-items: center;
+  padding: 28px 24px;
 }
 
 .signin-card {
@@ -1494,8 +1522,13 @@ textarea {
   justify-items: center;
   gap: 14px;
   text-align: center;
-  max-width: 44ch;
-  padding-bottom: 8vh;
+  width: 100%;
+  max-width: 52ch;
+}
+
+/* `justify-items: center` sizes children to max-content; let the prose wrap. */
+.signin-card > * {
+  max-width: 100%;
 }
 
 .signin-card h1 {
@@ -1554,23 +1587,93 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* What the claims rest on, and where the artifact is. */
+.signin-proof {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  line-height: 1.9;
+  color: var(--ash);
+  font-variant-numeric: tabular-nums;
+}
+
+.signin-foot {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.signin-proof span {
+  white-space: nowrap;
+}
+
+.signin a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
+  transition: color var(--fast) var(--ease);
+}
+
+.signin-foot a {
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+}
+
+.signin a:hover {
+  color: var(--verdigris);
+  text-decoration: underline;
+  text-decoration-color: currentcolor;
+}
+
 /* ---------- narrow windows and phones ---------- */
 
 @media (max-width: 720px) {
-  .figure[data-wide="true"] {
+  .figure[data-wide="true"],
+  .figure-unit {
     display: none;
   }
 
+  /* No room beside the title: the evidence takes a line of its own. */
   .titlebar {
-    padding: 0 12px;
+    flex-wrap: wrap;
+    height: auto;
+    padding: 6px 12px 8px;
+    row-gap: 2px;
   }
 
   .titlebar.macos {
     padding-left: 12px;
   }
 
+  .titlebar-spacer {
+    display: none;
+  }
+
+  .title-slot {
+    flex: 1 1 100%;
+  }
+
+  .evidence {
+    flex: 1 1 auto;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .evidence-strip {
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  .evidence-meter {
+    display: none;
+  }
+
   .thread-title {
-    max-width: 18ch;
+    max-width: 100%;
   }
 
   .rail {

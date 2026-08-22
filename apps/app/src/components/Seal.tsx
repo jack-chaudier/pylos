@@ -39,7 +39,8 @@ export function EvidenceBar(props: EvidenceBarProps): React.JSX.Element {
       : viewTokens === undefined
         ? 0
         : Math.min(1, viewTokens / Math.max(budget, 1));
-  const verified = stats?.verifiedTo !== undefined && stats.verifiedTo >= turns && turns > 0;
+  const verifiedTo = stats?.verifiedTo ?? 0;
+  const verified = turns > 0 && verifiedTo >= turns;
 
   return (
     <button
@@ -53,7 +54,8 @@ export function EvidenceBar(props: EvidenceBarProps): React.JSX.Element {
       <span className="evidence-strip">
         <Figure
           label="archive"
-          value={`${groupedNumber(turns)} turns`}
+          value={groupedNumber(turns)}
+          unit="turns"
           hint="Turns held verbatim in the hash-chained vault. Compaction never touches them."
         />
         <Figure
@@ -88,12 +90,14 @@ export function EvidenceBar(props: EvidenceBarProps): React.JSX.Element {
         <Figure
           label="chain"
           wide
-          value={verified ? "✓" : "?"}
+          value={verified ? "✓" : "—"}
           tone={verified ? "verdigris" : undefined}
           hint={
-            verified
-              ? "The hash chain verified to the head of the thread."
-              : "Not verified since this thread was opened. Open the X-ray to verify it."
+            turns === 0
+              ? "Nothing has been written to this thread yet."
+              : `Hash chain verified to #${groupedNumber(verifiedTo)} of #${groupedNumber(turns)}.${
+                  verified ? "" : " Open the X-ray to verify the rest."
+                }`
           }
         />
       </span>
@@ -107,12 +111,15 @@ export function EvidenceBar(props: EvidenceBarProps): React.JSX.Element {
 function Figure({
   label,
   value,
+  unit,
   hint,
   tone,
   wide,
 }: {
   label: string;
   value: string;
+  /** Dropped on narrow screens, where the label already says what the number counts. */
+  unit?: string;
   hint: string;
   tone?: "ember" | "verdigris";
   wide?: boolean;
@@ -123,6 +130,7 @@ function Figure({
       {label === "" ? null : <span className="figure-label">{label}</span>}
       <em data-tone={tone} data-changed={changed}>
         {value}
+        {unit === undefined ? null : <i className="figure-unit"> {unit}</i>}
       </em>
     </span>
   );

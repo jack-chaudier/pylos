@@ -8,6 +8,8 @@ export interface XrayProps {
   stats: ThreadStats | undefined;
   turnSeq: number | undefined;
   onClose: () => void;
+  /** A successful verify moves `verifiedTo`; the evidence bar should hear about it. */
+  onVerified: () => void;
 }
 
 const RESIDENT_COLOR: Record<ResidentType, string> = {
@@ -268,7 +270,10 @@ export function Xray(props: XrayProps): React.JSX.Element {
                   setVerifying(true);
                   void api
                     .verify(props.threadId)
-                    .then(setVerified)
+                    .then((result) => {
+                      setVerified(result);
+                      if (result.ok) props.onVerified();
+                    })
                     .finally(() => setVerifying(false));
                 }}
               >

@@ -168,8 +168,9 @@ export function App(): React.JSX.Element {
       }
       try {
         await openWorkspace();
-      } catch {
-        setOffline(true);
+      } catch (error) {
+        // A rejected session drops through to the sign-in screen, not to "unreachable".
+        if ((error as ApiError).code !== "unauthorized") setOffline(true);
       }
       setBooted(true);
       void showWindow();
@@ -519,7 +520,7 @@ export function App(): React.JSX.Element {
 
   if (!booted) {
     return (
-      <div className="app">
+      <div className="app solo">
         <div className="coldstart">
           <SealMark className="seal-emblem" />
         </div>
@@ -530,7 +531,7 @@ export function App(): React.JSX.Element {
   if (offline) {
     const local = inTauri || me?.hosted === false;
     return (
-      <div className="app">
+      <div className="app solo">
         <div className="coldstart">
           <SealMark className="seal-emblem" />
           <h1>Pylos is unreachable.</h1>
@@ -557,7 +558,7 @@ export function App(): React.JSX.Element {
 
   if (hosted && !signedIn) {
     return (
-      <div className="app">
+      <div className="app solo">
         <SignIn
           onSignedIn={(token, identity) => {
             setSession(token);
@@ -573,7 +574,7 @@ export function App(): React.JSX.Element {
   return (
     <div className="app">
       <header className={`titlebar${isMac && inTauri ? " macos" : ""}`} data-scrolled={scrolled}>
-        <span className="menu-anchor">
+        <span className="menu-anchor title-slot">
           <button type="button" className="thread-title" onClick={() => setTitleMenu((value) => !value)}>
             {stats?.title ?? "Pylos"}
           </button>
@@ -694,7 +695,13 @@ export function App(): React.JSX.Element {
       />
 
       {xray && threadId !== undefined ? (
-        <Xray threadId={threadId} stats={stats} turnSeq={lastTurnSeq} onClose={() => setXray(false)} />
+        <Xray
+          threadId={threadId}
+          stats={stats}
+          turnSeq={lastTurnSeq}
+          onClose={() => setXray(false)}
+          onVerified={() => void refreshThread()}
+        />
       ) : null}
 
       {sheet?.kind === "connect" ? (
