@@ -14,5 +14,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run test
+      - run: bun run lint
       - run: bun run scripts/scan-secrets.ts
+      - run: bun run --cwd apps/app build
       - run: bun run --cwd apps/web build
+      - run: bun test --cwd apps/web

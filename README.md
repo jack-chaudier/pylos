@@ -3,11 +3,11 @@
 <p align="center"><strong>The forever chat.</strong> One conversation. Every model. Nothing forgotten silently.</p>
 <p align="center"><a href="https://pylos.vercel.app">pylos.vercel.app</a> · <a href="docs/VISION.md">Vision</a> · <a href="docs/KERNEL.md">Kernel</a> · <a href="docs/THEORY.md">Theory</a> · <a href="docs/DESIGN.md">Design</a> · <a href="bench/results/">Proofs</a></p>
 
-Pylos is a desktop chat app (macOS, Linux) with a single text box and a single conversation that does not end. Underneath it: an exact, hash-chained archive of every turn; a context compiler that hands the current model a **fixed-budget view**; a **loss ledger** that records, deterministically, what each compaction step dropped and never lets that record disappear; and **exact paging** that brings the original material back before the model answers. Models are temporary cognition. The thread is the agent.
+Pylos is a chat app with a single text box and a single conversation that does not end. It ships three ways: a hosted web app (sign in with your xAI account; your thread lives in your own vault on the server), a local-first desktop app (macOS, Linux), and a headless `pylos serve` — all three share the same kernel and the same `.pylos` bundle. Underneath it: an exact, hash-chained archive of every turn; a context compiler that hands the current model a **fixed-budget view**; a **loss ledger** that records, deterministically, what each compaction step dropped and never lets that record disappear; and **exact paging** that brings the original material back before the model answers. Models are temporary cognition. The thread is the agent.
 
 > The tablets survived because the palace burned.
 
-<p align="center"><img src="apps/desktop/screenshots/app-dark.png" width="820" alt="Pylos desktop: one composer, the seal, the timeline rail"></p>
+<p align="center"><img src="apps/app/screenshots/app-dark.png" width="820" alt="Pylos: one composer, the evidence bar, the timeline rail"></p>
 
 ## What is measured (deterministic), what is sampled (live) — and what is not
 
@@ -26,9 +26,13 @@ Not claimed: that a model cannot still be wrong; any natural-conversation benchm
 
 ```bash
 bun install
+bun run --cwd apps/app build && bun packages/core/src/cli.ts serve   # web app, open http://127.0.0.1:7334/app/
+# hosted (multi-user, one vault per signed-in xAI account):
+pylos serve --hosted --origin https://your-domain --web apps/app/dist
+# or the desktop shell:
 bun run --cwd packages/server build:sidecar      # kernel + server → one binary for the Tauri sidecar
 bun run --cwd apps/desktop tauri dev             # the app (starts the sidecar; first Rust build takes a while)
-# or headless:
+# or headless, no UI:
 bun packages/core/src/cli.ts serve               # local API on 127.0.0.1:7334
 bun packages/core/src/cli.ts bench million --turns 100000 --seed 1 --budget 8192
 ```
@@ -43,6 +47,7 @@ Release builds: `.dmg` (Apple Silicon) and `.AppImage`/`.deb` from the [releases
 packages/protocol   shared types + the local API contract
 packages/core       the kernel (bun:sqlite) · src/pure is browser-safe and powers the landing page's aperture
 packages/server     local API, providers, auth custody, OpenAI-compatible gateway
+apps/app            the React app (served at /app/ by the server; wrapped by the desktop shell)
 apps/desktop        Tauri 2 + React (the one-composer app)
 apps/web            the landing page (Vite, static, Vercel)
 bench/              the million-turn bench, the live variant, and results

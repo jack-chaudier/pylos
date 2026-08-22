@@ -2,10 +2,14 @@
 
 > One conversation. Every model. Nothing forgotten silently.
 
-Pylos is a desktop chat application (macOS, Linux) with one text box, one
-scrolling conversation, an attachment control, and a small model switch.
-That is the whole visible product. The invisible product is the reason the
-conversation never has to end.
+Pylos is a web app: sign in with your xAI account and your thread lives in
+your own vault on the server. The same React app is wrapped by a local-first
+desktop shell (Tauri, macOS + Linux), and a headless `pylos serve` runs it
+without any UI at all — all three share the same kernel and the same
+`.pylos` bundle. Every surface is one text box, one scrolling conversation,
+an attachment control, and a small model switch. That is the whole visible
+product. The invisible product is the reason the conversation never has to
+end.
 
 ## Why the name
 
@@ -75,16 +79,16 @@ compact the source of truth, and never let the view forget what it forgot.**
 ## What the user sees
 
 * An empty, calm conversation. One composer. A tiny model indicator. An
-  attachment button. A faint **seal** in the corner: `archive 12,408 · view
-  23.1k/24k · 2 recovered`.
+  attachment button. A quiet **evidence bar** in the corner: `archive 12,408
+  turns · view 23.1k / 24k · 2 recovered`.
 * When the kernel pages something back: a single quiet line above the answer —
   *Recovered two earlier moments before answering.*
 * When a belief has changed: *That was true earlier, but it changed on turn
   4,812.* with both moments one click away.
 * When the model changes: a hairline divider — *Grok stopped here. Claude
   continued from the same thread.*
-* Click the seal → the **X-ray**: the exact packet the model saw, the ledger,
-  what was paged and why, the hash of the archive head.
+* Click the evidence bar → the **X-ray**: the exact packet the model saw, the
+  ledger, what was paged and why, the hash of the archive head.
 
 Everything else collapses inward. No dashboards. No vocabulary.
 
@@ -96,6 +100,9 @@ Everything else collapses inward. No dashboards. No vocabulary.
   false certainty from lost context; it does not police entailment.
 * Not a promise that nothing can be deleted. Pylos forgets only under explicit
   user command, and records that it did.
+* Not a fact-checker. The verification round pages the archive and gives the
+  model one more try only for names the ledger already recorded as dropped;
+  it does not check a reply against the world.
 
 ## Lineage
 

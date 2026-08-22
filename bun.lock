@@ -5,13 +5,13 @@
     "": {
       "name": "pylos",
       "devDependencies": {
-        "@biomejs/biome": "^2.2.0",
+        "@biomejs/biome": "2.5.10",
         "@types/bun": "^1.2.20",
         "typescript": "^5.9.2",
       },
     },
-    "apps/desktop": {
-      "name": "@pylos/desktop",
+    "apps/app": {
+      "name": "@pylos/app",
       "version": "1.0.0",
       "dependencies": {
         "@fontsource-variable/newsreader": "^5.2.5",
@@ -21,17 +21,23 @@
         "@tauri-apps/api": "^2.9.0",
         "@tauri-apps/plugin-dialog": "^2.4.0",
         "@tauri-apps/plugin-opener": "^2.5.0",
-        "@tauri-apps/plugin-shell": "^2.3.1",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
       },
       "devDependencies": {
-        "@tauri-apps/cli": "^2.9.0",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "@vitejs/plugin-react": "^5.0.4",
         "typescript": "^5.9.3",
         "vite": "^7.1.9",
+      },
+    },
+    "apps/desktop": {
+      "name": "@pylos/desktop",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@tauri-apps/cli": "^2.9.0",
+        "typescript": "^5.9.3",
       },
     },
     "apps/web": {
@@ -203,6 +209,8 @@
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
+    "@pylos/app": ["@pylos/app@workspace:apps/app"],
+
     "@pylos/bench": ["@pylos/bench@workspace:bench"],
 
     "@pylos/core": ["@pylos/core@workspace:packages/core"],
@@ -296,8 +304,6 @@
     "@tauri-apps/plugin-dialog": ["@tauri-apps/plugin-dialog@2.7.2", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-pX0IGm1I3I6wc+zeKYcq1GSqogK6okCNX5fOdaNU5ab1AjGS6l1E5wFNjEb7meg7ZFSp0JUs+0jQGQNyOvLrsg=="],
 
     "@tauri-apps/plugin-opener": ["@tauri-apps/plugin-opener@2.5.4", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-1HnPkb+AmgO29HBazm4uPLKB+r7zzcTBW1d0fyYp1uP+jwtpoiNDGKMMzz58SFp49nOIrxdE3aUJtT57lfO9CQ=="],
-
-    "@tauri-apps/plugin-shell": ["@tauri-apps/plugin-shell@2.3.5", "", { "dependencies": { "@tauri-apps/api": "^2.10.1" } }, "sha512-jewtULhiQ7lI7+owCKAjc8tYLJr92U16bPOeAa472LHJdgaibLP83NcfAF2e+wkEcA53FxKQAZ7byDzs2eeizg=="],
 
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 

@@ -1,6 +1,6 @@
 {
   "name": "pylos",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "The forever chat. One conversation, every model, nothing forgotten silently.",
   "license": "Apache-2.0",
@@ -20,7 +20,7 @@
     "bench:million": "bun run bench/million.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.0",
+    "@biomejs/biome": "2.5.10",
     "@types/bun": "^1.2.20",
     "typescript": "^5.9.2"
   }
