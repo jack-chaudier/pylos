@@ -8,7 +8,7 @@
  * The hosted app. `vercel.json` rewrites /app/* (and /api/*, /v1/*) to the
  * backend, so the landing page and the app share an origin. One place.
  */
-export const APP_URL = "/app/";
+export const APP_URL = "#download";
 
 const LIVE_ID = "pylos-live";
 
