@@ -1,0 +1,7118 @@
+{
+  "schema": "pylos.bench.million.v1",
+  "seed": "1",
+  "N": 1000000,
+  "budget": 8192,
+  "generator": {
+    "version": "1.0.0",
+    "vocabSha256": "702c6e620a7e70a16462576bd2e958e66b0eea937dec6dde59677dadbf2d67fe",
+    "manifestSha256": "434c532fdd0d97faeaf589df2125576d16e9035cf9893f332595b76eb581a201"
+  },
+  "kernel": {
+    "version": "1.0.0",
+    "leaf": 32,
+    "fanout": 8,
+    "capsuleTokens": {
+      "leaf": 204,
+      "mid": 256,
+      "root": 512,
+      "residentLeaves": 4
+    }
+  },
+  "planted": {
+    "facts": 2000,
+    "quotes": 200,
+    "numbers": 50,
+    "ruleSeq": 1,
+    "revisionSeq": 483112,
+    "trapSeq": 1000000
+  },
+  "checkpoints": [
+    {
+      "seq": 10000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7975,
+        "queryTokensP50": 7967
+      },
+      "facts": {
+        "checked": 12,
+        "resident": 0,
+        "paged": 12,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 3,
+        "exact": 3,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 7390,
+        "parentsChecked": 28,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "1aaa6fe5562b98fa1ec318d220f8ff9a585630ebd2f82d7445b131780c139c0d",
+        "checkedTo": 10000
+      },
+      "archiveBytes": 17631896,
+      "residentTokensP50": 7967,
+      "wall": {
+        "ingestP50Ms": 0.075,
+        "ingestP99Ms": 0.088,
+        "compileP50Ms": 7.624,
+        "compileP99Ms": 11.52
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6584
+        },
+        "bm25": {
+          "survival": 0.667,
+          "tokensMax": 4017
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 20000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7805,
+        "queryTokensP50": 7792
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 4,
+        "exact": 4,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 14495,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "568f56359eeab6c91cd896686a95c2f9f0635d1a2f9a1aa62ab692b8d6cbf823",
+        "checkedTo": 20000
+      },
+      "archiveBytes": 27064128,
+      "residentTokensP50": 7794,
+      "wall": {
+        "ingestP50Ms": 0.09,
+        "ingestP99Ms": 0.112,
+        "compileP50Ms": 9.45,
+        "compileP99Ms": 10.851
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 20,
+        "precision": 0.667
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6403
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 3576
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 30000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7830,
+        "queryTokensP50": 7814
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 21581,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "9de01d59189a6bb74d93ec1e19943f3884964f73e09f8fc03de7ca359ca40554",
+        "checkedTo": 30000
+      },
+      "archiveBytes": 39392528,
+      "residentTokensP50": 7813,
+      "wall": {
+        "ingestP50Ms": 0.102,
+        "ingestP99Ms": 0.113,
+        "compileP50Ms": 9.182,
+        "compileP99Ms": 11.056
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.333,
+          "tokensMax": 7197
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 3977
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 40000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 8019,
+        "queryTokensP50": 8006
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 28677,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "28e5a62e6533fd15befb6f9c23d59c25ece9472d7fb785918243e7eeeb876b22",
+        "checkedTo": 40000
+      },
+      "archiveBytes": 50846648,
+      "residentTokensP50": 8005,
+      "wall": {
+        "ingestP50Ms": 0.11,
+        "ingestP99Ms": 0.125,
+        "compileP50Ms": 9.631,
+        "compileP99Ms": 11.372
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6960
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 4051
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 50000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7873,
+        "queryTokensP50": 7763
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 35723,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "5a6725a57169cc1ae3db228783c6a8b10248e04a060ad758b2fea9aefc8dc371",
+        "checkedTo": 50000
+      },
+      "archiveBytes": 61542520,
+      "residentTokensP50": 7760,
+      "wall": {
+        "ingestP50Ms": 0.116,
+        "ingestP99Ms": 0.144,
+        "compileP50Ms": 9.811,
+        "compileP99Ms": 12.297
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6612
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 4129
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 60000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7931,
+        "queryTokensP50": 7923
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 42663,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "10862fc7d0f8634a2bd8ad59fb3cd19c31a041e7b69749d3689f6c180ec6439d",
+        "checkedTo": 60000
+      },
+      "archiveBytes": 72791744,
+      "residentTokensP50": 7921,
+      "wall": {
+        "ingestP50Ms": 0.124,
+        "ingestP99Ms": 0.139,
+        "compileP50Ms": 9.587,
+        "compileP99Ms": 11.949
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6473
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 4288
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 70000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7934,
+        "queryTokensP50": 7926
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 1,
+        "paged": 1,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 49824,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "2a3cb3c2e3a8bb3ad19cf2ce9c4a40f209011e5ae31d456308dde34eb54cb2b2",
+        "checkedTo": 70000
+      },
+      "archiveBytes": 84961640,
+      "residentTokensP50": 7912,
+      "wall": {
+        "ingestP50Ms": 0.135,
+        "ingestP99Ms": 0.143,
+        "compileP50Ms": 9.457,
+        "compileP99Ms": 12.057
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6903
+        },
+        "bm25": {
+          "survival": 0.667,
+          "tokensMax": 4203
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 80000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7910,
+        "queryTokensP50": 7902
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 2,
+        "paged": 2,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 56875,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ff5920be3e321a6409076b6fabc91c6f5bb94941b133ae601ba9f5b891355070",
+        "checkedTo": 80000
+      },
+      "archiveBytes": 95818768,
+      "residentTokensP50": 7900,
+      "wall": {
+        "ingestP50Ms": 0.134,
+        "ingestP99Ms": 0.144,
+        "compileP50Ms": 9.67,
+        "compileP99Ms": 11.616
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7033
+        },
+        "bm25": {
+          "survival": 0.667,
+          "tokensMax": 4215
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 90000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7918,
+        "queryTokensP50": 7911
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 4,
+        "paged": 4,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 63741,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "566a1f87f3ca8cbb83753f366dc1a2bb48eda3d571160b28fd832a23e12fae42",
+        "checkedTo": 90000
+      },
+      "archiveBytes": 106994624,
+      "residentTokensP50": 7909,
+      "wall": {
+        "ingestP50Ms": 0.135,
+        "ingestP99Ms": 0.162,
+        "compileP50Ms": 9.718,
+        "compileP99Ms": 11.385
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7030
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4256
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 100000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7965,
+        "queryTokensP50": 7954
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 70697,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "5006b1359c4df7d0f3375cf6ec83409f835e03f6301a9cde3aba2d2250750053",
+        "checkedTo": 100000
+      },
+      "archiveBytes": 118824072,
+      "residentTokensP50": 7952,
+      "wall": {
+        "ingestP50Ms": 0.14,
+        "ingestP99Ms": 0.157,
+        "compileP50Ms": 9.653,
+        "compileP99Ms": 11.901
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6513
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4251
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 110000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7926,
+        "queryTokensP50": 7913
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 77484,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "b1db74241d6541c5d4aad48a4984ff4a9e1466607950c8adcd26700d0b7edf7a",
+        "checkedTo": 110000
+      },
+      "archiveBytes": 129753208,
+      "residentTokensP50": 7909,
+      "wall": {
+        "ingestP50Ms": 0.143,
+        "ingestP99Ms": 0.161,
+        "compileP50Ms": 9.747,
+        "compileP99Ms": 11.83
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6504
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 4269
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 120000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7896,
+        "queryTokensP50": 7891
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 84420,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "3ec937525d5da373dc87b1fa735886542ffd0eee7f70564612a984be753e64f6",
+        "checkedTo": 120000
+      },
+      "archiveBytes": 140474664,
+      "residentTokensP50": 7892,
+      "wall": {
+        "ingestP50Ms": 0.146,
+        "ingestP99Ms": 0.191,
+        "compileP50Ms": 9.879,
+        "compileP99Ms": 12.306
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7070
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 4243
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 130000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7923,
+        "queryTokensP50": 7906
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 91211,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "2181f891b3bb6d0b6fde45b2dea93eaa28f39cfe7b0c974dc28da5793f86bb5e",
+        "checkedTo": 130000
+      },
+      "archiveBytes": 151267240,
+      "residentTokensP50": 7906,
+      "wall": {
+        "ingestP50Ms": 0.147,
+        "ingestP99Ms": 0.191,
+        "compileP50Ms": 10.008,
+        "compileP99Ms": 13.356
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6256
+        },
+        "bm25": {
+          "survival": 0.833,
+          "tokensMax": 4296
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 140000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7972,
+        "queryTokensP50": 7954
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 98114,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "bfc99f92533e57eefcd09508efe092c86519c5b15d26037aa91682fa843e5540",
+        "checkedTo": 140000
+      },
+      "archiveBytes": 163318304,
+      "residentTokensP50": 7954,
+      "wall": {
+        "ingestP50Ms": 0.151,
+        "ingestP99Ms": 0.19,
+        "compileP50Ms": 10.025,
+        "compileP99Ms": 12.895
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6267
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4181
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 150000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7929,
+        "queryTokensP50": 7914
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 104971,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "f8371a47b614ff3089b1f274c4a1aa87fa8e464ce8188e66c54ee526ca53a84e",
+        "checkedTo": 150000
+      },
+      "archiveBytes": 173999640,
+      "residentTokensP50": 7910,
+      "wall": {
+        "ingestP50Ms": 0.157,
+        "ingestP99Ms": 0.173,
+        "compileP50Ms": 9.88,
+        "compileP99Ms": 11.594
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7034
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4204
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 160000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7915,
+        "queryTokensP50": 7901
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 111903,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "47d9a127112b40d1ddb1eb42ff0284b04c98e08482b31c790194b6492665179c",
+        "checkedTo": 160000
+      },
+      "archiveBytes": 184536584,
+      "residentTokensP50": 7899,
+      "wall": {
+        "ingestP50Ms": 0.157,
+        "ingestP99Ms": 0.176,
+        "compileP50Ms": 9.778,
+        "compileP99Ms": 12.86
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 7060
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4207
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 170000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7919,
+        "queryTokensP50": 7910
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 118768,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "f0b7b2d3d260dd80af631cc5e0cf517ce7a30e993d45728db1b67015d7e44baf",
+        "checkedTo": 170000
+      },
+      "archiveBytes": 195670184,
+      "residentTokensP50": 7905,
+      "wall": {
+        "ingestP50Ms": 0.16,
+        "ingestP99Ms": 0.169,
+        "compileP50Ms": 9.776,
+        "compileP99Ms": 12.848
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6677
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4194
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 180000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7850,
+        "queryTokensP50": 7840
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 125665,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "57fc8fecb6bc5c36ef2def71da34d7fbf1a10ba086f9f9c527c6f79ea00b47d0",
+        "checkedTo": 180000
+      },
+      "archiveBytes": 206268592,
+      "residentTokensP50": 7838,
+      "wall": {
+        "ingestP50Ms": 0.159,
+        "ingestP99Ms": 0.18,
+        "compileP50Ms": 9.705,
+        "compileP99Ms": 12.084
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6202
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4183
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 190000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7867,
+        "queryTokensP50": 7859
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 132527,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "82d555399676497c677121478b265f944f32bce52cfa37c9b61d83f0b010262e",
+        "checkedTo": 190000
+      },
+      "archiveBytes": 216936896,
+      "residentTokensP50": 7856,
+      "wall": {
+        "ingestP50Ms": 0.153,
+        "ingestP99Ms": 0.162,
+        "compileP50Ms": 10.019,
+        "compileP99Ms": 13.296
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7222
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4184
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 200000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7856,
+        "queryTokensP50": 7840
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 139455,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "03f1e43074473852526f1d950a76e6e15891d6d2605be7530e2f6cc0a0266aba",
+        "checkedTo": 200000
+      },
+      "archiveBytes": 228638888,
+      "residentTokensP50": 7840,
+      "wall": {
+        "ingestP50Ms": 0.155,
+        "ingestP99Ms": 0.164,
+        "compileP50Ms": 9.741,
+        "compileP99Ms": 12.841
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6543
+        },
+        "bm25": {
+          "survival": 0.667,
+          "tokensMax": 3700
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 210000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7898,
+        "queryTokensP50": 7891
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 146294,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "06ed315b30764908137e0bb89ce10290642ec4bbcca2f633274d108d8862af16",
+        "checkedTo": 210000
+      },
+      "archiveBytes": 241490832,
+      "residentTokensP50": 7888,
+      "wall": {
+        "ingestP50Ms": 0.157,
+        "ingestP99Ms": 0.184,
+        "compileP50Ms": 9.805,
+        "compileP99Ms": 12.676
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6727
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4174
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 220000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7891,
+        "queryTokensP50": 7887
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 153047,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "92b122b09821e3e8b92d0783dc21f918a64d6445463c4a0c488bd5d75ef946e4",
+        "checkedTo": 220000
+      },
+      "archiveBytes": 250434376,
+      "residentTokensP50": 7880,
+      "wall": {
+        "ingestP50Ms": 0.157,
+        "ingestP99Ms": 0.18,
+        "compileP50Ms": 9.857,
+        "compileP99Ms": 12.567
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6466
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4181
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 230000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7865,
+        "queryTokensP50": 7843
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 159733,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "d619a2ee4021cd98f839f38db3bbe1a2e97dac158dd7169e79b980e91e83e0f7",
+        "checkedTo": 230000
+      },
+      "archiveBytes": 260674872,
+      "residentTokensP50": 7825,
+      "wall": {
+        "ingestP50Ms": 0.159,
+        "ingestP99Ms": 0.192,
+        "compileP50Ms": 9.704,
+        "compileP99Ms": 12.589
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7001
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4110
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 240000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7943,
+        "queryTokensP50": 7923
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 166744,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "6b6d72d9ae1c1ad7541a0860d356e27228bb938816233952689f673b91b859e5",
+        "checkedTo": 240000
+      },
+      "archiveBytes": 273392896,
+      "residentTokensP50": 7919,
+      "wall": {
+        "ingestP50Ms": 0.167,
+        "ingestP99Ms": 0.185,
+        "compileP50Ms": 10.036,
+        "compileP99Ms": 14.789
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6933
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4160
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 250000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7911,
+        "queryTokensP50": 7899
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 173680,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "10e781fcacfb6c0213ae437ccd3b7da866923be7c94fc60fdafd76c9750df951",
+        "checkedTo": 250000
+      },
+      "archiveBytes": 282986360,
+      "residentTokensP50": 7899,
+      "wall": {
+        "ingestP50Ms": 0.164,
+        "ingestP99Ms": 0.186,
+        "compileP50Ms": 9.918,
+        "compileP99Ms": 12.677
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7019
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4170
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 260000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7731,
+        "queryTokensP50": 7715
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 180752,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "22d29839e4b8e90313e396cf595c206d93f94fd95dc2f23140ae29f425d2c006",
+        "checkedTo": 260000
+      },
+      "archiveBytes": 294720064,
+      "residentTokensP50": 7711,
+      "wall": {
+        "ingestP50Ms": 0.164,
+        "ingestP99Ms": 0.198,
+        "compileP50Ms": 9.856,
+        "compileP99Ms": 13.574
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6628
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 3717
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 270000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7892,
+        "queryTokensP50": 7875
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 187541,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "90ab77f6ab5e12ad42f80530f44a2ab9942ddae45837b34a8cb886e32e5d844a",
+        "checkedTo": 270000
+      },
+      "archiveBytes": 306451352,
+      "residentTokensP50": 7862,
+      "wall": {
+        "ingestP50Ms": 0.165,
+        "ingestP99Ms": 0.183,
+        "compileP50Ms": 19.835,
+        "compileP99Ms": 25.754
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 20,
+        "precision": 0.667
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6692
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4162
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 280000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7905,
+        "queryTokensP50": 7856
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 194369,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "746a439e2b816e96fb3d169a00afe2602db1e85bd42d38ac62529f231fb221be",
+        "checkedTo": 280000
+      },
+      "archiveBytes": 319330216,
+      "residentTokensP50": 7895,
+      "wall": {
+        "ingestP50Ms": 0.169,
+        "ingestP99Ms": 0.196,
+        "compileP50Ms": 9.923,
+        "compileP99Ms": 13.276
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6289
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4179
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 290000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7918,
+        "queryTokensP50": 7905
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 201422,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ac7a3b22a4b99479da733c8787fecf0172481c8fb91e4953a002e2c215817ddc",
+        "checkedTo": 290000
+      },
+      "archiveBytes": 329148824,
+      "residentTokensP50": 7903,
+      "wall": {
+        "ingestP50Ms": 0.171,
+        "ingestP99Ms": 0.186,
+        "compileP50Ms": 10.013,
+        "compileP99Ms": 13.252
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7191
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4151
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 300000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7859,
+        "queryTokensP50": 7841
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 208522,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "2bc94038c341f6e758e95fe71909b28c1c5d67e220ec4e8bd660e05739e880ca",
+        "checkedTo": 300000
+      },
+      "archiveBytes": 340222920,
+      "residentTokensP50": 7826,
+      "wall": {
+        "ingestP50Ms": 0.17,
+        "ingestP99Ms": 0.185,
+        "compileP50Ms": 10.156,
+        "compileP99Ms": 15.575
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7132
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4143
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 310000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7864,
+        "queryTokensP50": 7852
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 215354,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "a1c6ad4371cbca1ddab01d51e19532757c2d1a69d7720bde4e408ba99a7be4ad",
+        "checkedTo": 310000
+      },
+      "archiveBytes": 349923072,
+      "residentTokensP50": 7847,
+      "wall": {
+        "ingestP50Ms": 0.183,
+        "ingestP99Ms": 0.226,
+        "compileP50Ms": 10.306,
+        "compileP99Ms": 18.29
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7040
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4149
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 320000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7951,
+        "queryTokensP50": 7940
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 222353,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "68b69d2a47471ec90b0bb7935dee26d3671eba636caeecb2d99f8d3742dbe183",
+        "checkedTo": 320000
+      },
+      "archiveBytes": 361624944,
+      "residentTokensP50": 7939,
+      "wall": {
+        "ingestP50Ms": 0.172,
+        "ingestP99Ms": 0.224,
+        "compileP50Ms": 9.907,
+        "compileP99Ms": 13.431
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 7228
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4183
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 330000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7911,
+        "queryTokensP50": 7894
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 229194,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "15d9b692487ca034c65e5dc15baf441a83ba942c8533526f893991d649411349",
+        "checkedTo": 330000
+      },
+      "archiveBytes": 373281592,
+      "residentTokensP50": 7890,
+      "wall": {
+        "ingestP50Ms": 0.171,
+        "ingestP99Ms": 0.202,
+        "compileP50Ms": 9.988,
+        "compileP99Ms": 13.722
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6938
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4142
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 340000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7924,
+        "queryTokensP50": 7916
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 236185,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "76a9a2604f0c9fe86e195f6a22ec8ca1983d8f5530eaff152a421a784e4c270c",
+        "checkedTo": 340000
+      },
+      "archiveBytes": 384208976,
+      "residentTokensP50": 7913,
+      "wall": {
+        "ingestP50Ms": 0.179,
+        "ingestP99Ms": 0.232,
+        "compileP50Ms": 10.273,
+        "compileP99Ms": 17.601
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6557
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4173
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 350000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7865,
+        "queryTokensP50": 7854
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 243186,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "cfc25e5d6b59dd120a99aa0e10613f97b2af1b6f8f3a07ce199e59ba63178b4e",
+        "checkedTo": 350000
+      },
+      "archiveBytes": 395106224,
+      "residentTokensP50": 7835,
+      "wall": {
+        "ingestP50Ms": 0.182,
+        "ingestP99Ms": 0.204,
+        "compileP50Ms": 10.628,
+        "compileP99Ms": 18.987
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6521
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4180
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 360000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7973,
+        "queryTokensP50": 7965
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 250056,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "a702173e80f8ee8e1e2ba069c2598eabe1d59fe2c693a21cf298ff06c30b77df",
+        "checkedTo": 360000
+      },
+      "archiveBytes": 405909960,
+      "residentTokensP50": 7962,
+      "wall": {
+        "ingestP50Ms": 0.171,
+        "ingestP99Ms": 0.197,
+        "compileP50Ms": 9.955,
+        "compileP99Ms": 13.331
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6965
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4202
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 370000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7864,
+        "queryTokensP50": 7860
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 256944,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "d8c5508dafd4c90b19f36bc1a02aecc334a35f84451a98f1e2c5a2791f9ef103",
+        "checkedTo": 370000
+      },
+      "archiveBytes": 417669320,
+      "residentTokensP50": 7844,
+      "wall": {
+        "ingestP50Ms": 0.179,
+        "ingestP99Ms": 0.203,
+        "compileP50Ms": 10.412,
+        "compileP99Ms": 24.257
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6433
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 3990
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 380000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7583,
+        "queryTokensP50": 7577
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 263809,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "90542c4032481501daf09211126a73a48b101d3fb96c3b35d47c7cfcba45d60d",
+        "checkedTo": 380000
+      },
+      "archiveBytes": 427830024,
+      "residentTokensP50": 7574,
+      "wall": {
+        "ingestP50Ms": 0.184,
+        "ingestP99Ms": 0.211,
+        "compileP50Ms": 23.815,
+        "compileP99Ms": 30.771
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 20,
+        "precision": 0.667
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6778
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 3801
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 390000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7994,
+        "queryTokensP50": 7979
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 270746,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "258a556c136b587728c36bc3d5d3e90200aec572a20f92f3524816eb3b969648",
+        "checkedTo": 390000
+      },
+      "archiveBytes": 439486768,
+      "residentTokensP50": 7982,
+      "wall": {
+        "ingestP50Ms": 0.172,
+        "ingestP99Ms": 0.204,
+        "compileP50Ms": 10.343,
+        "compileP99Ms": 24.854
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6459
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4202
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 400000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7938,
+        "queryTokensP50": 7929
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 277590,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "b532cb0462a853a8bf31c53ea41ac6943dd107b060259707c9fb4708b7380d55",
+        "checkedTo": 400000
+      },
+      "archiveBytes": 450804760,
+      "residentTokensP50": 7926,
+      "wall": {
+        "ingestP50Ms": 0.182,
+        "ingestP99Ms": 0.202,
+        "compileP50Ms": 10.343,
+        "compileP99Ms": 15.51
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6940
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4169
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 410000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7691,
+        "queryTokensP50": 7680
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 284385,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "a7419190031eb22aabee0dfbcbcaaf9d2a3acc6b60afbfe9751de08d307e401f",
+        "checkedTo": 410000
+      },
+      "archiveBytes": 460950880,
+      "residentTokensP50": 7676,
+      "wall": {
+        "ingestP50Ms": 0.176,
+        "ingestP99Ms": 0.22,
+        "compileP50Ms": 10.035,
+        "compileP99Ms": 16.022
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6850
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 3882
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 420000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7906,
+        "queryTokensP50": 7892
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 291494,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "6ec01e6b42322c8063d627cabcabc1578cc23a468ec3ad5aac11f8e25faf03c0",
+        "checkedTo": 420000
+      },
+      "archiveBytes": 472815824,
+      "residentTokensP50": 7884,
+      "wall": {
+        "ingestP50Ms": 0.184,
+        "ingestP99Ms": 0.231,
+        "compileP50Ms": 10.516,
+        "compileP99Ms": 23.981
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6851
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4146
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 430000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7932,
+        "queryTokensP50": 7904
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 298199,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ca5c74bd0be7f8c20878c792bc3c43719a0457f8de4cb5072d8e0b94258683a3",
+        "checkedTo": 430000
+      },
+      "archiveBytes": 484045072,
+      "residentTokensP50": 7902,
+      "wall": {
+        "ingestP50Ms": 0.187,
+        "ingestP99Ms": 0.235,
+        "compileP50Ms": 10.309,
+        "compileP99Ms": 18.521
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6392
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4077
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 440000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7963,
+        "queryTokensP50": 7950
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 305242,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "39e5d24f67f28a70d83dd3b8531f7b551264459f81b853ad73b0c08e58591215",
+        "checkedTo": 440000
+      },
+      "archiveBytes": 495325720,
+      "residentTokensP50": 7950,
+      "wall": {
+        "ingestP50Ms": 0.179,
+        "ingestP99Ms": 0.202,
+        "compileP50Ms": 10.387,
+        "compileP99Ms": 25.191
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.333,
+          "tokensMax": 6746
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4252
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 450000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7975,
+        "queryTokensP50": 7966
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 312283,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "21561cd631a44c589b8dfbd007b2821561edc751988322028511af026ff41208",
+        "checkedTo": 450000
+      },
+      "archiveBytes": 506556664,
+      "residentTokensP50": 7962,
+      "wall": {
+        "ingestP50Ms": 0.197,
+        "ingestP99Ms": 0.256,
+        "compileP50Ms": 10.271,
+        "compileP99Ms": 14.026
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7001
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4208
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 460000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7955,
+        "queryTokensP50": 7949
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 319147,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "eadd4682d4fabab11ce8c5ce4625199f24d5fdbd7b363ae63071a3e34a954c93",
+        "checkedTo": 460000
+      },
+      "archiveBytes": 516920184,
+      "residentTokensP50": 7941,
+      "wall": {
+        "ingestP50Ms": 0.174,
+        "ingestP99Ms": 0.225,
+        "compileP50Ms": 10.044,
+        "compileP99Ms": 12.936
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6722
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4206
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 470000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7900,
+        "queryTokensP50": 7889
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 325910,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "acf682a95e89cf2c526fd55221f3c6f8a1e06260fa4478c791c7230c108d8bed",
+        "checkedTo": 470000
+      },
+      "archiveBytes": 529085264,
+      "residentTokensP50": 7888,
+      "wall": {
+        "ingestP50Ms": 0.176,
+        "ingestP99Ms": 0.208,
+        "compileP50Ms": 10.081,
+        "compileP99Ms": 13.612
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6813
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4160
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 480000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": null,
+        "queryTokensMax": 7916,
+        "queryTokensP50": 7906
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 333086,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "6979e4a228c413ad62f0a891beaa7d7885327f0f401c34f03db1a10bac36f22c",
+        "checkedTo": 480000
+      },
+      "archiveBytes": 538551776,
+      "residentTokensP50": 7907,
+      "wall": {
+        "ingestP50Ms": 0.184,
+        "ingestP99Ms": 0.25,
+        "compileP50Ms": 10.463,
+        "compileP99Ms": 25.327
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6581
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4158
+        }
+      },
+      "trap": null
+    },
+    {
+      "seq": 490000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8031,
+        "queryTokensMax": 8031,
+        "queryTokensP50": 7942
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 339910,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "05446e21e0881a3ba5def7b2ed610250ce93971a3c3d28111a66648ba44f0ba7",
+        "checkedTo": 490000
+      },
+      "archiveBytes": 550155464,
+      "residentTokensP50": 7940,
+      "wall": {
+        "ingestP50Ms": 0.198,
+        "ingestP99Ms": 0.22,
+        "compileP50Ms": 10.434,
+        "compileP99Ms": 14.583
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6219
+        },
+        "bm25": {
+          "survival": 0.5,
+          "tokensMax": 4152
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "d45e41371e4c5c06f1d1f1fc25683b78fbf047a7ffc39fdceac010d6a22d7a04",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8031
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6254
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4347
+        }
+      }
+    },
+    {
+      "seq": 500000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7975,
+        "queryTokensMax": 7975,
+        "queryTokensP50": 7895
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 346932,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "d5e398c007b614671499930aaf030bf80c2320461ca1bd7b7b687d53ce7dc760",
+        "checkedTo": 500000
+      },
+      "archiveBytes": 561386360,
+      "residentTokensP50": 7892,
+      "wall": {
+        "ingestP50Ms": 0.193,
+        "ingestP99Ms": 0.243,
+        "compileP50Ms": 10.467,
+        "compileP99Ms": 24.141
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6918
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4106
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "f055c113ddfc1ed7949a864d63442a1b0fdf6aa94c420a7abdd2f2b22e66eaf6",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7975
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6953
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4301
+        }
+      }
+    },
+    {
+      "seq": 510000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7954,
+        "queryTokensMax": 7954,
+        "queryTokensP50": 7872
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 353790,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "eb85033e8a6ab1afcf0da46e7792ee416a6327a224890cca7a0c8226c1bf824d",
+        "checkedTo": 510000
+      },
+      "archiveBytes": 573442528,
+      "residentTokensP50": 7870,
+      "wall": {
+        "ingestP50Ms": 0.189,
+        "ingestP99Ms": 0.281,
+        "compileP50Ms": 10.393,
+        "compileP99Ms": 14.579
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6722
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4153
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "391f58992fb58e53b2c1bf8de845df4caa10350c8172c8aa8a57400a4d4f2982",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7954
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6757
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4348
+        }
+      }
+    },
+    {
+      "seq": 520000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8069,
+        "queryTokensMax": 8069,
+        "queryTokensP50": 7982
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 360721,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "99a9815f8508615c1c813f7833906f0644e88fc323e49cecb1f39c05f37fe1c3",
+        "checkedTo": 520000
+      },
+      "archiveBytes": 586212160,
+      "residentTokensP50": 7980,
+      "wall": {
+        "ingestP50Ms": 0.195,
+        "ingestP99Ms": 0.24,
+        "compileP50Ms": 10.51,
+        "compileP99Ms": 28.518
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6279
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4218
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "c63ee48cb911dc5b9b1ff1119effd17d13b959fd8244a642a4a58b163d603c8f",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8069
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6314
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4413
+        }
+      }
+    },
+    {
+      "seq": 530000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7962,
+        "queryTokensMax": 7962,
+        "queryTokensP50": 7878
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 367772,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "05b966f8dd72a5301a077ab317f3ff9a9d07089928bea926f82db3d36e71364a",
+        "checkedTo": 530000
+      },
+      "archiveBytes": 595674680,
+      "residentTokensP50": 7873,
+      "wall": {
+        "ingestP50Ms": 0.196,
+        "ingestP99Ms": 0.228,
+        "compileP50Ms": 10.587,
+        "compileP99Ms": 17.052
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6758
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4178
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "3a8944dfb85719576c978cd972350b48ba18c061bcb0460cda54f7298bee4075",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7962
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6792
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4365
+        }
+      }
+    },
+    {
+      "seq": 540000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8014,
+        "queryTokensMax": 8014,
+        "queryTokensP50": 7939
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 374723,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "6c7cf2c0cee3c364259fdca094c115eb04c27698017ef6c9f7308089ad2b9723",
+        "checkedTo": 540000
+      },
+      "archiveBytes": 606520024,
+      "residentTokensP50": 7937,
+      "wall": {
+        "ingestP50Ms": 0.2,
+        "ingestP99Ms": 0.252,
+        "compileP50Ms": 10.88,
+        "compileP99Ms": 21.156
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6881
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4176
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "fe2cd0a4fb9f3c7e9e15f2b7ea36f7e9f7ff2d1c1409728fd5be4afdac0c8ed6",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8014
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6916
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4371
+        }
+      }
+    },
+    {
+      "seq": 550000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7962,
+        "queryTokensMax": 7962,
+        "queryTokensP50": 7887
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 381818,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ac75a19d54a40c07179f92f35c5155f9714cf8419871acaca95c3f6da0aaf294",
+        "checkedTo": 550000
+      },
+      "archiveBytes": 618672864,
+      "residentTokensP50": 7884,
+      "wall": {
+        "ingestP50Ms": 0.197,
+        "ingestP99Ms": 0.219,
+        "compileP50Ms": 10.58,
+        "compileP99Ms": 15.314
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7181
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4134
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "e4d1611d91940f720b4982cba646a1feb06fde9b73eb1a4bfc2bbe0592b692d6",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7962
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7216
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4328
+        }
+      }
+    },
+    {
+      "seq": 560000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8003,
+        "queryTokensMax": 8003,
+        "queryTokensP50": 7923
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 388716,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "d57c2d363f2d92eaaa01f0c2dcba748fe3ddeddaa568743bce415137074a6cee",
+        "checkedTo": 560000
+      },
+      "archiveBytes": 629192920,
+      "residentTokensP50": 7917,
+      "wall": {
+        "ingestP50Ms": 0.194,
+        "ingestP99Ms": 0.262,
+        "compileP50Ms": 31.864,
+        "compileP99Ms": 50.265
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 20,
+        "precision": 0.667
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6300
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4152
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "da6d4f2d9b90d93301b45dc66c8dd4d4aef0e94515851d377d146a8da44614e7",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 3,
+          "containsOldRule": true,
+          "packetTokens": 8003
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6335
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4349
+        }
+      }
+    },
+    {
+      "seq": 570000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7998,
+        "queryTokensMax": 7998,
+        "queryTokensP50": 7909
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 395571,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "c427d836dcc91a206335a3a0f816664f793837aafb559479cfaf02f35c89ed26",
+        "checkedTo": 570000
+      },
+      "archiveBytes": 638653056,
+      "residentTokensP50": 7908,
+      "wall": {
+        "ingestP50Ms": 0.193,
+        "ingestP99Ms": 0.226,
+        "compileP50Ms": 10.445,
+        "compileP99Ms": 14.995
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6934
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4149
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "15a643ce6d9384e94d320776157e5adbf894bd838ada5ec4dfdf54bbdc7f183a",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7998
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6968
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4346
+        }
+      }
+    },
+    {
+      "seq": 580000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7997,
+        "queryTokensMax": 7997,
+        "queryTokensP50": 7921
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 402573,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "b79dd95d195cd500a52f711d698a728648acb6d104ccdd4468b6febf9ab43e0e",
+        "checkedTo": 580000
+      },
+      "archiveBytes": 651417600,
+      "residentTokensP50": 7918,
+      "wall": {
+        "ingestP50Ms": 0.198,
+        "ingestP99Ms": 0.27,
+        "compileP50Ms": 10.62,
+        "compileP99Ms": 27.275
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6392
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4153
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "a82e261e21883b6a730a17559fd3ae53041b2b14ca221ba451b0f0307517757c",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7997
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6426
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4347
+        }
+      }
+    },
+    {
+      "seq": 590000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8073,
+        "queryTokensMax": 8073,
+        "queryTokensP50": 7990
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 409516,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "3c55ba72a6c797db24dfdb29cb853d86a73458ff0334bbab688f6410279e037d",
+        "checkedTo": 590000
+      },
+      "archiveBytes": 663828232,
+      "residentTokensP50": 7990,
+      "wall": {
+        "ingestP50Ms": 0.194,
+        "ingestP99Ms": 0.223,
+        "compileP50Ms": 10.931,
+        "compileP99Ms": 15.982
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.333,
+          "tokensMax": 6803
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4199
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "a813256e0002f9e4a2b0c60cee36028593fddb5d5a214bfdb5e6fe48aba4acfa",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8073
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6837
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4393
+        }
+      }
+    },
+    {
+      "seq": 600000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7924,
+        "queryTokensMax": 7924,
+        "queryTokensP50": 7862
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 416366,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "92a520a1ce894f872f3584157b3c04c701f3aeb8dc5ae8e1ecfbea97d68764f4",
+        "checkedTo": 600000
+      },
+      "archiveBytes": 673325424,
+      "residentTokensP50": 7850,
+      "wall": {
+        "ingestP50Ms": 0.197,
+        "ingestP99Ms": 0.248,
+        "compileP50Ms": 10.607,
+        "compileP99Ms": 29.312
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6731
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 3956
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "627ca8e09bc116958b58c71cc2e4943e3dd7a8184a33138d37d1cd2bb410a76d",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7924
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6766
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4152
+        }
+      }
+    },
+    {
+      "seq": 610000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7973,
+        "queryTokensMax": 7973,
+        "queryTokensP50": 7893
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 423281,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ee536e73e54cafff46b219642798afc9a9bc4faf34947a7c946eb1ef38bf657f",
+        "checkedTo": 610000
+      },
+      "archiveBytes": 683478128,
+      "residentTokensP50": 7891,
+      "wall": {
+        "ingestP50Ms": 0.193,
+        "ingestP99Ms": 0.227,
+        "compileP50Ms": 10.422,
+        "compileP99Ms": 13.75
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6868
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4175
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "883648fe2811c3674fb85f5ce2455e5e7d8613ac4f6e7f3c7bfcb2eb200d5e8d",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7973
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6902
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4369
+        }
+      }
+    },
+    {
+      "seq": 620000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7989,
+        "queryTokensMax": 7989,
+        "queryTokensP50": 7906
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 430138,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "c1c42d8d6e11c3301f35dfe5f53656bef68bdd9cde9eb13fa1dd88cf7e569ce4",
+        "checkedTo": 620000
+      },
+      "archiveBytes": 695286976,
+      "residentTokensP50": 7913,
+      "wall": {
+        "ingestP50Ms": 0.2,
+        "ingestP99Ms": 0.261,
+        "compileP50Ms": 10.57,
+        "compileP99Ms": 30.601
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6296
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4162
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "d9af34bf4b7427abe3d01c93f0fa3649739174c4dc1f157dce5ac4375e0e3101",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7989
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6330
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4359
+        }
+      }
+    },
+    {
+      "seq": 630000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7975,
+        "queryTokensMax": 7975,
+        "queryTokensP50": 7875
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 437093,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "47a98592f88ad7e8ea7debeb9256263fff83b997d236113338f37d85115091a8",
+        "checkedTo": 630000
+      },
+      "archiveBytes": 706412792,
+      "residentTokensP50": 7854,
+      "wall": {
+        "ingestP50Ms": 0.197,
+        "ingestP99Ms": 0.262,
+        "compileP50Ms": 10.915,
+        "compileP99Ms": 16.499
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6201
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4174
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "05dd62283c219e6d0a5063bc0f18046c1bdfcc0ad8dd6a7f7433b511977ec7ea",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7975
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6235
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4371
+        }
+      }
+    },
+    {
+      "seq": 640000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7496,
+        "queryTokensMax": 7496,
+        "queryTokensP50": 7398
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 444138,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "e99055bf1acfafaaa64ed393e2469ff777597d8e2b936d70b0202b3678a9781d",
+        "checkedTo": 640000
+      },
+      "archiveBytes": 717482552,
+      "residentTokensP50": 7394,
+      "wall": {
+        "ingestP50Ms": 0.205,
+        "ingestP99Ms": 0.233,
+        "compileP50Ms": 10.468,
+        "compileP99Ms": 30.958
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6124
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 3712
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "232dedfe6acf39270856303e6f15e418aca103b803eebcc6f71c065335612b2f",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7496
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6158
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 3909
+        }
+      }
+    },
+    {
+      "seq": 650000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8031,
+        "queryTokensMax": 8031,
+        "queryTokensP50": 7946
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 451101,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "5fa8fb4afef8a85e49c05069ddc82ae2c837d63d369cfa6b9a920ab3b1591dcb",
+        "checkedTo": 650000
+      },
+      "archiveBytes": 728864168,
+      "residentTokensP50": 7946,
+      "wall": {
+        "ingestP50Ms": 0.207,
+        "ingestP99Ms": 0.22,
+        "compileP50Ms": 10.662,
+        "compileP99Ms": 21.654
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6841
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4169
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "501aa9472f7d7083c1cd204f102ce2666b0bbed89d5170ff88ec17d2a8ad78f5",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8031
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6876
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4371
+        }
+      }
+    },
+    {
+      "seq": 660000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7978,
+        "queryTokensMax": 7978,
+        "queryTokensP50": 7888
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 457884,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "00fb19ad6a85866d7d8cfe451a56c8ea3e7521bc24d90ab78744656a07b3cfd5",
+        "checkedTo": 660000
+      },
+      "archiveBytes": 738616320,
+      "residentTokensP50": 7886,
+      "wall": {
+        "ingestP50Ms": 0.204,
+        "ingestP99Ms": 0.221,
+        "compileP50Ms": 10.866,
+        "compileP99Ms": 19.87
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6406
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4164
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "2c009a5631a10ac26dd2a1ae2be5c4cd1ebe86470d9dfffb8f9d0c0d72c59453",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7978
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6440
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4366
+        }
+      }
+    },
+    {
+      "seq": 670000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7967,
+        "queryTokensMax": 7967,
+        "queryTokensP50": 7884
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 464728,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "3af5b2ac1747d178f2bde89af23b8740ef98f55011c677c2ae3b620bff4b2af9",
+        "checkedTo": 670000
+      },
+      "archiveBytes": 750704328,
+      "residentTokensP50": 7881,
+      "wall": {
+        "ingestP50Ms": 0.197,
+        "ingestP99Ms": 0.238,
+        "compileP50Ms": 10.716,
+        "compileP99Ms": 15.751
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7099
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4138
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "8ead343abf904f4f9f78c5619554371d04cd1df4dc25d4b5f3488bd138a09fc3",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7967
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7134
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4341
+        }
+      }
+    },
+    {
+      "seq": 680000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7958,
+        "queryTokensMax": 7958,
+        "queryTokensP50": 7878
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 471568,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ea2142ffda2eb6a668e0f7664cb4f4145d2a2508deb618a478ab365523112156",
+        "checkedTo": 680000
+      },
+      "archiveBytes": 762138184,
+      "residentTokensP50": 7877,
+      "wall": {
+        "ingestP50Ms": 0.203,
+        "ingestP99Ms": 0.232,
+        "compileP50Ms": 10.826,
+        "compileP99Ms": 31.408
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6480
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4165
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "6562572af0630f7d82f9f55e5c7ea2c450ccb359e0c5bf1d111937dccc53baf0",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7958
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6514
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4364
+        }
+      }
+    },
+    {
+      "seq": 690000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8009,
+        "queryTokensMax": 8009,
+        "queryTokensP50": 7904
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 478298,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "4c8b76d58d52794afbb9c3beaac09d0ddf4388310cb3e6ba88dfb085baa21368",
+        "checkedTo": 690000
+      },
+      "archiveBytes": 772444120,
+      "residentTokensP50": 7887,
+      "wall": {
+        "ingestP50Ms": 0.19,
+        "ingestP99Ms": 0.226,
+        "compileP50Ms": 10.517,
+        "compileP99Ms": 14.057
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6839
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4154
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "8e33c81d2f0cff926ba3f55309c7306d18b4181db2bd8ae8744aefb55fff4288",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8009
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6873
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4353
+        }
+      }
+    },
+    {
+      "seq": 700000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7868,
+        "queryTokensMax": 7868,
+        "queryTokensP50": 7762
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 485209,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "732437efa3ad33fb9a455e176c4c0932d5bcc69f54d2a99b3738df7f2f0c1df4",
+        "checkedTo": 700000
+      },
+      "archiveBytes": 783585528,
+      "residentTokensP50": 7761,
+      "wall": {
+        "ingestP50Ms": 0.201,
+        "ingestP99Ms": 0.245,
+        "compileP50Ms": 10.603,
+        "compileP99Ms": 33.626
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6270
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4071
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "470c678ee7354444b96751f2206a82c4a9c9db1f377d3776ea3ca1c3b417f3a7",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7868
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6305
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4273
+        }
+      }
+    },
+    {
+      "seq": 710000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7660,
+        "queryTokensMax": 7660,
+        "queryTokensP50": 7568
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 492203,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "2eb3fa52bea479a8e01a330dfbbb5ba8894bde54f7ac528c751fecb8844fe06e",
+        "checkedTo": 710000
+      },
+      "archiveBytes": 794404640,
+      "residentTokensP50": 7564,
+      "wall": {
+        "ingestP50Ms": 0.196,
+        "ingestP99Ms": 0.233,
+        "compileP50Ms": 10.628,
+        "compileP99Ms": 14.583
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6167
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 3870
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "4937a3c38646d351aeaf0cab8d619951185ab0a526d1ea50ddba6869414418a3",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7660
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6201
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4070
+        }
+      }
+    },
+    {
+      "seq": 720000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7919,
+        "queryTokensMax": 7919,
+        "queryTokensP50": 7839
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 499254,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "c2951a208dba2eedd4e31c8e5e372b3b84635229454713f219534acf60d0d15a",
+        "checkedTo": 720000
+      },
+      "archiveBytes": 805730944,
+      "residentTokensP50": 7838,
+      "wall": {
+        "ingestP50Ms": 0.209,
+        "ingestP99Ms": 0.255,
+        "compileP50Ms": 43.915,
+        "compileP99Ms": 68.147
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 20,
+        "precision": 0.667
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6785
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4138
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "80acbd435033dba416d864343b5b9b70d5ade7e314c224272843fe57208279be",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 3,
+          "containsOldRule": true,
+          "packetTokens": 7919
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6820
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4337
+        }
+      }
+    },
+    {
+      "seq": 730000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7977,
+        "queryTokensMax": 7977,
+        "queryTokensP50": 7853
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 506122,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "7cd56cefe921c4db50d032666cd4334a19104924475c9be2c9afca2c9b3d8640",
+        "checkedTo": 730000
+      },
+      "archiveBytes": 816674808,
+      "residentTokensP50": 7851,
+      "wall": {
+        "ingestP50Ms": 0.196,
+        "ingestP99Ms": 0.228,
+        "compileP50Ms": 10.855,
+        "compileP99Ms": 14.625
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6445
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4136
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "4df54ada3dc405b54c94e4019b4782d145ffd1e7b77c41a91c3a046cd0078b90",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7977
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6479
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4335
+        }
+      }
+    },
+    {
+      "seq": 740000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7779,
+        "queryTokensMax": 7779,
+        "queryTokensP50": 7708
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 513018,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "25f67b46f6f0678a422c0e008cd1a8a418aaad3a6676c344945e7ccdd983d6a3",
+        "checkedTo": 740000
+      },
+      "archiveBytes": 826408976,
+      "residentTokensP50": 7710,
+      "wall": {
+        "ingestP50Ms": 0.191,
+        "ingestP99Ms": 0.216,
+        "compileP50Ms": 10.613,
+        "compileP99Ms": 14.428
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6956
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4029
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "ea75bffa8dd3a3f71c65450d5431b1fe3e1d337a6e5cdf22c1ec279aa085d12c",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7779
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6990
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4228
+        }
+      }
+    },
+    {
+      "seq": 750000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7981,
+        "queryTokensMax": 7981,
+        "queryTokensP50": 7902
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 519892,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "db005972192e7a1879fa7a389a329f22c9042611058b2496b48cb278743ab932",
+        "checkedTo": 750000
+      },
+      "archiveBytes": 838312728,
+      "residentTokensP50": 7899,
+      "wall": {
+        "ingestP50Ms": 0.186,
+        "ingestP99Ms": 0.202,
+        "compileP50Ms": 10.837,
+        "compileP99Ms": 14.762
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6489
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4173
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "e93091b2698f3cc58141e18c21b102b3099b0e98f6c7a57188012eac725155c4",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7981
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6524
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4376
+        }
+      }
+    },
+    {
+      "seq": 760000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8037,
+        "queryTokensMax": 8037,
+        "queryTokensP50": 7956
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 526856,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "91ddf2ec88cbcd5dccc766f792705bf1a62f47eda7cf2f83bccd67228c02a4c4",
+        "checkedTo": 760000
+      },
+      "archiveBytes": 850397256,
+      "residentTokensP50": 7958,
+      "wall": {
+        "ingestP50Ms": 0.202,
+        "ingestP99Ms": 0.222,
+        "compileP50Ms": 10.805,
+        "compileP99Ms": 31.696
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 7118
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4161
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "144a860e0810b8d2a94150779923ae528dbcdebedcff35cb768aa2746a27f514",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8037
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7152
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4360
+        }
+      }
+    },
+    {
+      "seq": 770000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7958,
+        "queryTokensMax": 7958,
+        "queryTokensP50": 7873
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 533886,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "839bfcbb11c4abfbf2feae8b6a34d654299dc8ac7e122bb820548627f547089c",
+        "checkedTo": 770000
+      },
+      "archiveBytes": 861521368,
+      "residentTokensP50": 7870,
+      "wall": {
+        "ingestP50Ms": 0.204,
+        "ingestP99Ms": 0.232,
+        "compileP50Ms": 11.232,
+        "compileP99Ms": 18.541
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 7082
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4148
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "5ea7d2e0f395c7d5c2e6e12391add4ccdea4fd2fb65d7168bbadce66575ad9ba",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7958
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7116
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4350
+        }
+      }
+    },
+    {
+      "seq": 780000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8031,
+        "queryTokensMax": 8031,
+        "queryTokensP50": 7944
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 540750,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "1ff0d811189e1e990c16b36b229cca75699973d8774e9f725c78fa06c435b814",
+        "checkedTo": 780000
+      },
+      "archiveBytes": 871899976,
+      "residentTokensP50": 7942,
+      "wall": {
+        "ingestP50Ms": 0.208,
+        "ingestP99Ms": 0.245,
+        "compileP50Ms": 10.707,
+        "compileP99Ms": 27.536
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6605
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4168
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "ff30255004ff5f05b6b35d341ecadab9dea33dcd3b9543d8c755e18f24a79aca",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8031
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6639
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4367
+        }
+      }
+    },
+    {
+      "seq": 790000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8000,
+        "queryTokensMax": 8000,
+        "queryTokensP50": 7910
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 547762,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "f58ddc5d307a654bb99d57c5db11b968b448b3f20ed22cc365734fa4dba6b75b",
+        "checkedTo": 790000
+      },
+      "archiveBytes": 882803960,
+      "residentTokensP50": 7908,
+      "wall": {
+        "ingestP50Ms": 0.201,
+        "ingestP99Ms": 0.249,
+        "compileP50Ms": 11.19,
+        "compileP99Ms": 14.552
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7126
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4145
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "1348aff1e81f647cec25252303b7d82fb4b1a8548cf797479785714e7c284fb0",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8000
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7161
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4344
+        }
+      }
+    },
+    {
+      "seq": 800000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7965,
+        "queryTokensMax": 7965,
+        "queryTokensP50": 7897
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 554731,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "e53e893e70eebd42a9168f8fc4752a633b0cdc559d15561c3c62ccd0dfa3ec85",
+        "checkedTo": 800000
+      },
+      "archiveBytes": 894654032,
+      "residentTokensP50": 7894,
+      "wall": {
+        "ingestP50Ms": 0.205,
+        "ingestP99Ms": 0.26,
+        "compileP50Ms": 10.962,
+        "compileP99Ms": 29.681
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6220
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4129
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "baa824677adf17e27d8fa3223419f72b7bd11d933e10befb3b7b5224aa459995",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7965
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6254
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4327
+        }
+      }
+    },
+    {
+      "seq": 810000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7956,
+        "queryTokensMax": 7956,
+        "queryTokensP50": 7864
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 561447,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "b4b788bd1ec1138d0913044fa32bb5b9cfc14ca660e43dd20b6dc7f8327dd49e",
+        "checkedTo": 810000
+      },
+      "archiveBytes": 905437432,
+      "residentTokensP50": 7864,
+      "wall": {
+        "ingestP50Ms": 0.2,
+        "ingestP99Ms": 0.223,
+        "compileP50Ms": 11.084,
+        "compileP99Ms": 14.998
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6942
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4133
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "f904506cc4022c8b1c3f3919abd38714f31907b82decc466a3039f388c01b2b4",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7956
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6977
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4336
+        }
+      }
+    },
+    {
+      "seq": 820000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7966,
+        "queryTokensMax": 7966,
+        "queryTokensP50": 7875
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 568373,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "9ffe22c42b66d6cdceccefe59d42f88c215e7b3f279476734191c0db66263116",
+        "checkedTo": 820000
+      },
+      "archiveBytes": 916950048,
+      "residentTokensP50": 7876,
+      "wall": {
+        "ingestP50Ms": 0.217,
+        "ingestP99Ms": 0.257,
+        "compileP50Ms": 11.091,
+        "compileP99Ms": 28.199
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6186
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4150
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "0ced06bd1176d6ad154af5ceb8b04f5ccd76f851eacb5cdab45f9025687311c8",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7966
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6219
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4349
+        }
+      }
+    },
+    {
+      "seq": 830000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7902,
+        "queryTokensMax": 7964,
+        "queryTokensP50": 7946
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 575261,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "6537ef098abe534e1728b76d126b1ca12a7ffce12f15823bed1c57441f21339f",
+        "checkedTo": 830000
+      },
+      "archiveBytes": 927927040,
+      "residentTokensP50": 7928,
+      "wall": {
+        "ingestP50Ms": 0.205,
+        "ingestP99Ms": 0.254,
+        "compileP50Ms": 11.121,
+        "compileP99Ms": 15.067
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6739
+        },
+        "bm25": {
+          "survival": 0.333,
+          "tokensMax": 4166
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "e6e1c663b54559a2aa794740016cf8e47458c51bf0b2bac247c5ff30718f1be6",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7902
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6773
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4364
+        }
+      }
+    },
+    {
+      "seq": 840000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8040,
+        "queryTokensMax": 8040,
+        "queryTokensP50": 7948
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 582185,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "6a32f762e2250031cef4b1cc797640d02a32d42d32d438de06170ad6165a2b8b",
+        "checkedTo": 840000
+      },
+      "archiveBytes": 937848952,
+      "residentTokensP50": 7946,
+      "wall": {
+        "ingestP50Ms": 0.216,
+        "ingestP99Ms": 0.258,
+        "compileP50Ms": 11.106,
+        "compileP99Ms": 30.713
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6797
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4207
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "99d5f475355d15b59bcc815168340ddcb4329e093cb766cc0fb7cf95e27ef733",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8040
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6831
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4406
+        }
+      }
+    },
+    {
+      "seq": 850000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8047,
+        "queryTokensMax": 8047,
+        "queryTokensP50": 7976
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 589058,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "2dcf67b984162a108751963620e9592b4fe0511c2abdfab0248b07966b524a77",
+        "checkedTo": 850000
+      },
+      "archiveBytes": 950747792,
+      "residentTokensP50": 7977,
+      "wall": {
+        "ingestP50Ms": 0.208,
+        "ingestP99Ms": 0.25,
+        "compileP50Ms": 11.018,
+        "compileP99Ms": 15.574
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6865
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4212
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "9d7126e2a865578d601a3248ef22ebe28507e0da40b21915d5e9e5552c80b335",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8047
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6899
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4411
+        }
+      }
+    },
+    {
+      "seq": 860000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8044,
+        "queryTokensMax": 8044,
+        "queryTokensP50": 7968
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 595870,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "7a2fadfc2d227610196b2e3df5fa2095aa3f06ba6a26d5b524a00b52bc008b88",
+        "checkedTo": 860000
+      },
+      "archiveBytes": 960697408,
+      "residentTokensP50": 7965,
+      "wall": {
+        "ingestP50Ms": 0.212,
+        "ingestP99Ms": 0.269,
+        "compileP50Ms": 11.241,
+        "compileP99Ms": 27.226
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6329
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4203
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "c7ecd7050424d4a5c700ae8ce46bfe5d25cc1b3d8a142bc2cc70522f721627cd",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8044
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6362
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4402
+        }
+      }
+    },
+    {
+      "seq": 870000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7977,
+        "queryTokensMax": 7977,
+        "queryTokensP50": 7891
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 602750,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "3c7478da0b9c923971d95477e3dc8c2d836c13c85b0cfa2be49a2d70434292ef",
+        "checkedTo": 870000
+      },
+      "archiveBytes": 972901536,
+      "residentTokensP50": 7884,
+      "wall": {
+        "ingestP50Ms": 0.213,
+        "ingestP99Ms": 0.257,
+        "compileP50Ms": 11.189,
+        "compileP99Ms": 15.373
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6525
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4181
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "d0cadba109282d481f51bda3c98a8b940c1bc02f4d88802c4942a15b231a8d20",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7977
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6560
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4384
+        }
+      }
+    },
+    {
+      "seq": 880000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7943,
+        "queryTokensMax": 7943,
+        "queryTokensP50": 7912
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 609524,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "9750299a1103e4c36666f3644b30b1801ae3120b341b96b041863ab0882cc3a0",
+        "checkedTo": 880000
+      },
+      "archiveBytes": 982659920,
+      "residentTokensP50": 7903,
+      "wall": {
+        "ingestP50Ms": 0.212,
+        "ingestP99Ms": 0.267,
+        "compileP50Ms": 12.991,
+        "compileP99Ms": 34.857
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 10,
+        "precision": 0.333
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6827
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4134
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "a9ca8a62ad9e45478821db2aec44f71adfc037ee995491dd868d53abb5adae1e",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 3,
+          "containsOldRule": true,
+          "packetTokens": 7943
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6862
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4337
+        }
+      }
+    },
+    {
+      "seq": 890000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7995,
+        "queryTokensMax": 7995,
+        "queryTokensP50": 7890
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 616441,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "feec0ca9a913abf970112471804c1566649ab25317522898cb4c4078e7588885",
+        "checkedTo": 890000
+      },
+      "archiveBytes": 992697624,
+      "residentTokensP50": 7873,
+      "wall": {
+        "ingestP50Ms": 0.212,
+        "ingestP99Ms": 0.252,
+        "compileP50Ms": 11.287,
+        "compileP99Ms": 21.606
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6227
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4144
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "4291caa500f0e7baa1822c6577c4ac750488b64f6ffbc59ede287125440455a1",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7995
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6262
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4347
+        }
+      }
+    },
+    {
+      "seq": 900000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7944,
+        "queryTokensMax": 7944,
+        "queryTokensP50": 7906
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 623308,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "d9d1f146d681d886ee16461b5221a2902d6bc25114a47d74211f56ba7c7d1049",
+        "checkedTo": 900000
+      },
+      "archiveBytes": 1005555896,
+      "residentTokensP50": 7898,
+      "wall": {
+        "ingestP50Ms": 0.213,
+        "ingestP99Ms": 0.268,
+        "compileP50Ms": 11.23,
+        "compileP99Ms": 19.604
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 7231
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4002
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "8ecd3138561f99f5b975af057935d9825480575b8b84154b1eb6093c9a472cf5",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7944
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7266
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4205
+        }
+      }
+    },
+    {
+      "seq": 910000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7984,
+        "queryTokensMax": 7984,
+        "queryTokensP50": 7885
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 630405,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "db1f7a8423594765dbae9f76b8902ba2e1a49ff8a9cfe1ff6541ddeb7b12d06c",
+        "checkedTo": 910000
+      },
+      "archiveBytes": 1016144192,
+      "residentTokensP50": 7922,
+      "wall": {
+        "ingestP50Ms": 0.218,
+        "ingestP99Ms": 0.273,
+        "compileP50Ms": 11.141,
+        "compileP99Ms": 20.488
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6543
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4132
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "92311566049958d31a22a92dcfb25d3893537ec1e263c0bf820a22ea1c8d5cdb",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7984
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6578
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4334
+        }
+      }
+    },
+    {
+      "seq": 920000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7921,
+        "queryTokensMax": 7921,
+        "queryTokensP50": 7817
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 637490,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "c97028daafae5e9d58975005ba7e757170458ad03173932756f402fde72084d7",
+        "checkedTo": 920000
+      },
+      "archiveBytes": 1030175432,
+      "residentTokensP50": 7800,
+      "wall": {
+        "ingestP50Ms": 0.217,
+        "ingestP99Ms": 0.259,
+        "compileP50Ms": 10.968,
+        "compileP99Ms": 36.245
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 7127
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4130
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "ca03b24c9343bc61b4e35c932dbf052114f3224a80616ac42f63ad9e8a9ae1a9",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7921
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 7162
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4332
+        }
+      }
+    },
+    {
+      "seq": 930000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7854,
+        "queryTokensMax": 7888,
+        "queryTokensP50": 7841
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 644514,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "143e4d14f6cd62e73f53f831f969efed43ad405df2ac117193279041ab3d3569",
+        "checkedTo": 930000
+      },
+      "archiveBytes": 1037964440,
+      "residentTokensP50": 7872,
+      "wall": {
+        "ingestP50Ms": 0.212,
+        "ingestP99Ms": 0.253,
+        "compileP50Ms": 10.885,
+        "compileP99Ms": 18.082
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6850
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4131
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "cd1aad11fdfc9884af888eec4e7c9586bcbd58d26dce744cb6ad2c91009e1998",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7854
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6884
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4330
+        }
+      }
+    },
+    {
+      "seq": 940000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8028,
+        "queryTokensMax": 8028,
+        "queryTokensP50": 7946
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 651378,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "df94d2859c617eba491dc52cf85b9fd3cb5f8af91701714ae952a33538e08f40",
+        "checkedTo": 940000
+      },
+      "archiveBytes": 1049411736,
+      "residentTokensP50": 7943,
+      "wall": {
+        "ingestP50Ms": 0.221,
+        "ingestP99Ms": 0.242,
+        "compileP50Ms": 11.098,
+        "compileP99Ms": 34.388
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6358
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4071
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "607e973692b2ae1006a5f7caefe4ad3d66aba8eb218d1359ecc2d8d34d567a32",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8028
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6392
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4271
+        }
+      }
+    },
+    {
+      "seq": 950000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7930,
+        "queryTokensMax": 7930,
+        "queryTokensP50": 7895
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 658090,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "2717624f3e134d856a88f7c3f51f134adc0ff01cec1499045d6102e07e09442b",
+        "checkedTo": 950000
+      },
+      "archiveBytes": 1059610816,
+      "residentTokensP50": 7892,
+      "wall": {
+        "ingestP50Ms": 0.207,
+        "ingestP99Ms": 0.245,
+        "compileP50Ms": 11.229,
+        "compileP99Ms": 18.305
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6211
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 3947
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "b4cf7488d92c735269df5d12a81dd9500995e60dbe473f503e144fe45b8c5fef",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7930
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6245
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4150
+        }
+      }
+    },
+    {
+      "seq": 960000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8028,
+        "queryTokensMax": 8028,
+        "queryTokensP50": 7932
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 665009,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "75bf4109d3175a5e338c3848f9dcc82f5a1846fbc760b446544a41ca42a9ada0",
+        "checkedTo": 960000
+      },
+      "archiveBytes": 1071881440,
+      "residentTokensP50": 7932,
+      "wall": {
+        "ingestP50Ms": 0.222,
+        "ingestP99Ms": 0.247,
+        "compileP50Ms": 10.964,
+        "compileP99Ms": 35.75
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6872
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4054
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "b25716363ccef14a3e8caafd7469218339de063e7e75bf86cb92613a7609665d",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8028
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6906
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4254
+        }
+      }
+    },
+    {
+      "seq": 970000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7997,
+        "queryTokensMax": 7997,
+        "queryTokensP50": 7873
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 672123,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "f704d67090368913bbe5491a40648e32c23aeffc57d070c3c52e05e54286db1f",
+        "checkedTo": 970000
+      },
+      "archiveBytes": 1082807480,
+      "residentTokensP50": 7871,
+      "wall": {
+        "ingestP50Ms": 0.214,
+        "ingestP99Ms": 0.25,
+        "compileP50Ms": 63.11,
+        "compileP99Ms": 83.754
+      },
+      "routing": {
+        "pagesServed": 30,
+        "pagesNeeded": 20,
+        "precision": 0.667
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6615
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4172
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "84b74cc74f809b516f8514e7c2650170fdde7d889b75334385e22359775ab389",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 2,
+          "containsOldRule": true,
+          "packetTokens": 7997
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6649
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4371
+        }
+      }
+    },
+    {
+      "seq": 980000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7960,
+        "queryTokensMax": 7960,
+        "queryTokensP50": 7873
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 679014,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "db116f17dda796ccee01dc8393346852e4d77e213cba5bf3eabcbfce44d45df5",
+        "checkedTo": 980000
+      },
+      "archiveBytes": 1095234520,
+      "residentTokensP50": 7877,
+      "wall": {
+        "ingestP50Ms": 0.22,
+        "ingestP99Ms": 0.248,
+        "compileP50Ms": 11.304,
+        "compileP99Ms": 21.172
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.167,
+          "tokensMax": 6207
+        },
+        "bm25": {
+          "survival": 0.167,
+          "tokensMax": 4145
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "9e9115f14b6bea0fb6449fd621e9fc1b7610501c9c749e95d640e2f0de5b1312",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7960
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6242
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4347
+        }
+      }
+    },
+    {
+      "seq": 990000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 8062,
+        "queryTokensMax": 8062,
+        "queryTokensP50": 7982
+      },
+      "facts": {
+        "checked": 20,
+        "resident": 0,
+        "paged": 20,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 5,
+        "exact": 5,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 5,
+        "paged": 5,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 685771,
+        "parentsChecked": 32,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "3b39b17b5d7e112da7dada89c1ddcd61b935d2ea6847579662541d2c5b1f1101",
+        "checkedTo": 990000
+      },
+      "archiveBytes": 1104995488,
+      "residentTokensP50": 7983,
+      "wall": {
+        "ingestP50Ms": 0.214,
+        "ingestP99Ms": 0.251,
+        "compileP50Ms": 11.252,
+        "compileP99Ms": 15.407
+      },
+      "routing": {
+        "pagesServed": 20,
+        "pagesNeeded": 20,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0,
+          "tokensMax": 6343
+        },
+        "bm25": {
+          "survival": 0,
+          "tokensMax": 4169
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "7496c4650a8a137aa56dfb65d1224572b75be0ecab4c75fce62eda0813e2aec2",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 8062
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6378
+        },
+        "bm25": {
+          "containsException": true,
+          "containsOldRule": true,
+          "tokens": 4372
+        }
+      }
+    },
+    {
+      "seq": 1000000,
+      "budgetCheck": {
+        "ok": true,
+        "trapTokens": 7928,
+        "queryTokensMax": 7928,
+        "queryTokensP50": 7849
+      },
+      "facts": {
+        "checked": 2000,
+        "resident": 0,
+        "paged": 2000,
+        "failed": []
+      },
+      "quotes": {
+        "checked": 200,
+        "exact": 200,
+        "failed": []
+      },
+      "numbers": {
+        "checked": 50,
+        "paged": 50,
+        "failed": []
+      },
+      "ledger": {
+        "entries": 692672,
+        "parentsChecked": 320,
+        "conservationOk": true,
+        "completenessOk": true
+      },
+      "verify": {
+        "ok": true,
+        "headHash": "ffe8e87468114c43fa3ca00dd8fb740a617bbf9f20b502f70f17188a8606b469",
+        "checkedTo": 1000000
+      },
+      "archiveBytes": 1115051160,
+      "residentTokensP50": 7845,
+      "wall": {
+        "ingestP50Ms": 0.216,
+        "ingestP99Ms": 0.324,
+        "compileP50Ms": 11.393,
+        "compileP99Ms": 14.63
+      },
+      "routing": {
+        "pagesServed": 100,
+        "pagesNeeded": 100,
+        "precision": 1
+      },
+      "baselines": {
+        "rolling": {
+          "survival": 0.12,
+          "tokensMax": 6404
+        },
+        "bm25": {
+          "survival": 0.18,
+          "tokensMax": 4167
+        }
+      },
+      "trap": {
+        "pylos": {
+          "packetDigest": "f3594573c7ae204a7512b161634b22dd4f61f2049d3b91e405c3074361ef4fd6",
+          "currentRuleResident": true,
+          "currentRuleSeq": 483112,
+          "historicalListed": true,
+          "pages": 1,
+          "containsOldRule": true,
+          "packetTokens": 7928
+        },
+        "rolling": {
+          "containsException": false,
+          "containsOldRule": true,
+          "tokens": 6437
+        },
+        "bm25": {
+          "containsException": false,
+          "containsOldRule": false,
+          "tokens": 3874
+        }
+      }
+    }
+  ],
+  "final": {
+    "ok": true,
+    "firstFailure": null,
+    "trap": {
+      "pylos": {
+        "packetDigest": "f3594573c7ae204a7512b161634b22dd4f61f2049d3b91e405c3074361ef4fd6",
+        "currentRuleResident": true,
+        "currentRuleSeq": 483112,
+        "historicalListed": true,
+        "pages": 1,
+        "containsOldRule": true,
+        "packetTokens": 7928
+      },
+      "rolling": {
+        "containsException": false,
+        "containsOldRule": true,
+        "tokens": 6437
+      },
+      "bm25": {
+        "containsException": false,
+        "containsOldRule": false,
+        "tokens": 3874
+      }
+    },
+    "residencySlopeTokensPerDecade": -6.66,
+    "archiveBytes": 1115051160,
+    "lossEntries": 692672,
+    "capsules": 35713,
+    "atoms": {
+      "supported": 4218,
+      "historical": 152545
+    },
+    "wall": {
+      "totalSec": 371.1,
+      "turnsPerSec": 2695,
+      "ingestP50Ms": 0.188,
+      "ingestP99Ms": 0.257
+    }
+  },
+  "env": {
+    "bun": "1.3.10",
+    "os": "darwin arm64"
+  },
+  "startedAt": 1787380034872,
+  "finishedAt": 1787380405928,
+  "digest": "ee1b0fe74e849b01f1019a5af42b94ea0c2a55639fd03cf77c2fedf0d486bbe2"
+}

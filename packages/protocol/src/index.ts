@@ -8,6 +8,26 @@ export type ThreadId = string;
 export type Seq = number; // 1-based, monotonic per thread
 export type Sha256 = string; // lowercase hex
 
+// ---------- threads ----------
+/** Per-thread tunables. All optional; the kernel supplies defaults. */
+export interface ThreadSettings {
+  budget?: number; // packet token budget
+  model?: string; // default model
+  shares?: { header?: number; frontier?: number; capsules?: number; paged?: number };
+  capsuleTokens?: { leaf?: number; mid?: number; root?: number };
+  [k: string]: unknown;
+}
+
+/** The one lifelong conversation (KERNEL §0). */
+export interface Thread {
+  id: ThreadId;
+  title: string;
+  createdAt: number;
+  headSeq: Seq;
+  headHash: Sha256;
+  settings: ThreadSettings;
+}
+
 // ---------- episodes (exact archive) ----------
 export type Role = "user" | "assistant" | "tool" | "system" | "attachment" | "handoff";
 
@@ -133,12 +153,27 @@ export interface LedgerDigest {
   historical: Array<{ key: string; current: string; previous: string; changedAtSeq: Seq }>;
 }
 
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: string; // raw JSON arguments exactly as the model emitted them
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   name?: string;
   toolCallId?: string;
+  toolCalls?: ToolCall[]; // assistant messages that requested `recall`; replayed to the provider
 }
+
+export interface ToolDef {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>; // JSON Schema
+}
+
+export type PacketStatus = "pending" | "done";
 
 export interface Packet {
   id: string;
@@ -148,11 +183,14 @@ export interface Packet {
   budget: number;
   tokens: number;
   digest: Sha256;
-  messages: ChatMessage[];
+  messages: ChatMessage[]; // KERNEL A7: empty for packets older than the last 1,000
   resident: ResidentItem[];
   ledger: LedgerDigest;
   pages: PageRecord[];
   createdAt: number;
+  status?: PacketStatus; // KERNEL A6: `pending` until the assistant episode commits
+  compilerVersion?: string;
+  reconstructed?: boolean; // KERNEL A7: messages re-rendered from resident[], digest unverified
 }
 
 export interface ThreadStats {
