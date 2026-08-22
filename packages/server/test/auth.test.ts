@@ -55,11 +55,7 @@ describe("credential custody", () => {
   test("openai-compatible requires a base URL", async () => {
     const auth = service();
     await expect(auth.setApiKey("openai-compatible", "key-123456")).rejects.toThrow();
-    const status = await auth.setApiKey(
-      "openai-compatible",
-      "key-123456",
-      "https://example.test/v1/",
-    );
+    const status = await auth.setApiKey("openai-compatible", "key-123456", "https://example.test/v1/");
     expect(status.ok).toBe(true);
     expect(await auth.baseUrl("openai-compatible")).toBe("https://example.test/v1");
   });

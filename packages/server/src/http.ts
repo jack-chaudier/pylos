@@ -1,3 +1,5 @@
+import { declaredLength, MAX_JSON_BYTES } from "./limits.ts";
+
 export class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -59,27 +61,39 @@ const ORIGIN_PATTERNS = [
 ];
 
 /**
- * Cross-site request forgery gate for mutations. Browsers always send `Origin`
- * on a cross-origin POST; native and CLI clients send none, so a missing header
- * is allowed while a present-and-foreign one is refused.
+ * Cross-site request forgery gate for mutations. Locally (`allowed` omitted)
+ * browsers always send `Origin` on a cross-origin POST while native and CLI
+ * clients send none, so a missing header is allowed and a foreign one refused.
+ * Hosted, only the configured origins pass.
  */
-export function originAllowed(origin: string | null): boolean {
+export function originAllowed(origin: string | null, allowed?: readonly string[]): boolean {
+  if (allowed !== undefined) {
+    return origin !== null && origin !== "null" && allowed.includes(origin);
+  }
   if (origin === null || origin === "null") return true;
   return ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
 }
 
-export function corsHeaders(origin: string | null): Record<string, string> {
-  if (origin === null || !originAllowed(origin)) return {};
+/** Never carries credentials: a session lives in the `Authorization` header, not a cookie. */
+export function corsHeaders(origin: string | null, allowed?: readonly string[]): Record<string, string> {
+  if (origin === null || !originAllowed(origin, allowed)) return {};
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Pylos-Thread, Authorization",
     "Access-Control-Max-Age": "600",
+    Vary: "Origin",
   };
 }
 
-export async function readJson<T>(request: Request): Promise<T> {
+export async function readJson<T>(request: Request, limit = MAX_JSON_BYTES): Promise<T> {
+  if (declaredLength(request) > limit) {
+    throw new HttpError(413, "payload_too_large", "The request body is too large.");
+  }
   const text = await request.text();
+  if (Buffer.byteLength(text, "utf8") > limit) {
+    throw new HttpError(413, "payload_too_large", "The request body is too large.");
+  }
   if (text.trim().length === 0) return {} as T;
   try {
     return JSON.parse(text) as T;
@@ -106,7 +120,10 @@ export function queryNumber(url: URL, key: string): number | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
-/** Server-Sent Events writer for `TurnEvent` streams. */
+/**
+ * Server-Sent Events writer for `TurnEvent` streams. The cache and buffering
+ * headers are what keep a reverse proxy from holding the deltas back.
+ */
 export class SseStream {
   readonly response: Response;
   private controller: ReadableStreamDefaultController<Uint8Array> | undefined;
@@ -125,7 +142,7 @@ export class SseStream {
     this.response = new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-store, no-transform",
+        "Cache-Control": "no-cache, no-store, no-transform",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
         ...extraHeaders,

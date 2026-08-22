@@ -1,6 +1,6 @@
 {
   "name": "@pylos/server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test test",
     "start": "bun run src/index.ts",
-    "build:sidecar": "bun run scripts/build-sidecar.ts"
+    "build:sidecar": "bun run scripts/build-sidecar.ts",
+    "build:linux": "bun run scripts/build-sidecar.ts --target bun-linux-x64"
   },
   "dependencies": {
     "@pylos/protocol": "workspace:*",

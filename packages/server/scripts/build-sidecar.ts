@@ -1,9 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Compiles the server (and `@pylos/core` when it exists) into the single binary
- * Tauri ships as a sidecar:
+ * Compiles the server (and `@pylos/core` when it exists) into one binary.
  *
- *   apps/desktop/src-tauri/binaries/pylos-<target-triple>
+ * Default — the sidecar Tauri ships:
+ *   apps/desktop/src-tauri/binaries/pylos-server-<target-triple>
+ *
+ * With `--target <bun target>` — a cross-compiled server for a host to run:
+ *   packages/server/dist/pylos-server-linux-x64
  */
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -33,9 +36,13 @@ async function hostTriple(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const triple = await hostTriple();
-  await mkdir(outDir, { recursive: true });
-  const outfile = join(outDir, `pylos-server-${triple}`);
+  const target = argValue("--target");
+  const directory = target === undefined ? outDir : join(serverRoot, "dist");
+  await mkdir(directory, { recursive: true });
+  const outfile =
+    target === undefined
+      ? join(directory, `pylos-server-${await hostTriple()}`)
+      : join(directory, `pylos-server-${target.replace(/^bun-/, "")}`);
 
   const hasCore = existsSync(coreEntry);
   let entry = join(serverRoot, "src", "index.ts");
@@ -61,21 +68,37 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write(
-    `building sidecar → ${outfile}\n  kernel: ${hasCore ? "@pylos/core (static)" : "dev-stub (core not built yet)"}\n`,
+    `building ${target ?? "sidecar"} → ${outfile}\n  kernel: ${hasCore ? "@pylos/core (static)" : "dev-stub (core not built yet)"}\n`,
   );
 
   const build = Bun.spawn(
-    ["bun", "build", "--compile", "--minify", "--sourcemap", entry, "--outfile", outfile],
+    [
+      "bun",
+      "build",
+      "--compile",
+      "--minify",
+      "--sourcemap",
+      ...(target === undefined ? [] : [`--target=${target}`]),
+      entry,
+      "--outfile",
+      outfile,
+    ],
     { cwd: serverRoot, stdout: "inherit", stderr: "inherit" },
   );
   const code = await build.exited;
   if (generated !== undefined) await rm(generated, { force: true });
   if (code !== 0) {
-    process.stderr.write(`sidecar build failed (exit ${code})\n`);
+    process.stderr.write(`build failed (exit ${code})\n`);
     process.exit(code);
   }
   await Bun.spawn(["chmod", "755", outfile]).exited;
-  process.stdout.write(`sidecar ready: ${outfile}\n`);
+  process.stdout.write(`ready: ${outfile}\n`);
+}
+
+function argValue(flag: string): string | undefined {
+  const index = process.argv.indexOf(flag);
+  const value = index < 0 ? undefined : process.argv[index + 1];
+  return value !== undefined && value.length > 0 ? value : undefined;
 }
 
 await main();
