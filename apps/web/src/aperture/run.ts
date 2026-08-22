@@ -9,31 +9,45 @@
  * illustrating.
  */
 
+import type { Capsule, Episode, LossEntry, Packet, PageRecord } from "./kernel";
+import { K } from "./kernel";
 import {
   BUDGET,
+  certificatesIn,
+  episodeAt,
   frontierLines,
-  makeEpisode,
-  REVISION_SEQ,
+  QUOTE_PROBE,
   REVISION_TEXT,
-  RULE_SEQ,
-  RULE_TEXT,
-  rng,
-  SEED,
+  ruleAtom,
+  ruleCertificate,
   TOTAL_TURNS,
   TRAP_QUESTION,
-} from "../sim/corpus";
-import type { Capsule, CapsuleAtomLine, Episode, LossEntry, Packet, PageRecord } from "./kernel";
-import { K } from "./kernel";
+} from "./thread";
 
 const RECENT_WINDOW = 140;
 const RECOMPILE_EVERY = 16; // leaf seals — one recompile per 512 turns
 const STRIP_MAX = 16;
 
 export interface Recovered {
+  /** The question that routed. */
+  query: string;
   seq: number;
   text: string;
   trigger: string;
   quote: string;
+}
+
+/**
+ * A certificate that was already in the view, and so needed no page. The trap
+ * ends here: the standing rule is a `preference` atom, kind priority keeps it
+ * resident whatever its age, and the superseded version is labelled rather than
+ * dropped (KERNEL A4). It is the receipt `bench/results` records for the trap.
+ */
+export interface Resident {
+  query: string;
+  seq: number;
+  line: string;
+  historical: string | null;
 }
 
 export interface RunState {
@@ -50,7 +64,9 @@ export interface RunState {
   strip: StripEntry[];
   /** Null once `routed` is true means: nothing in the ledger matched the question. */
   recovered: Recovered | null;
-  /** True once the trap question has been put to the ledger. */
+  /** The trap's answer: the current rule certificate, already resident. */
+  resident: Resident | null;
+  /** True once the closing questions have been put to the view. */
   routed: boolean;
   done: boolean;
 }
@@ -66,7 +82,6 @@ export class ApertureRun {
   readonly total = TOTAL_TURNS;
   readonly budget = BUDGET;
 
-  private next = rng(SEED);
   private seq = 0;
   private archiveBytes = 0;
   private lossRows = 0;
@@ -84,18 +99,20 @@ export class ApertureRun {
   private pageIndex = new Map<string, LossEntry>();
   private watched: Set<string>;
   private recovered: Recovered | null = null;
+  private resident: Resident | null = null;
   private routed = false;
-  private revisionText = "";
 
   constructor() {
+    // Only the names the closing questions can ask about are indexed: the run
+    // keeps a bounded page index, exactly as the vault keeps a bounded working
+    // set over an unbounded loss table.
     this.watched = K.names(TRAP_QUESTION);
-    // the rule and its revision are what the trap turns on; watch their names too
     for (const n of K.names(REVISION_TEXT)) this.watched.add(n);
+    for (const n of K.names(QUOTE_PROBE.query)) this.watched.add(n);
     this.packet = this.compile();
   }
 
   reset(): void {
-    this.next = rng(SEED);
     this.seq = 0;
     this.archiveBytes = 0;
     this.lossRows = 0;
@@ -111,8 +128,8 @@ export class ApertureRun {
     this.sealsSinceCompile = 0;
     this.pageIndex = new Map();
     this.recovered = null;
+    this.resident = null;
     this.routed = false;
-    this.revisionText = "";
     this.frontierCache = null;
     this.packet = this.compile();
   }
@@ -143,24 +160,23 @@ export class ApertureRun {
       }
       if (performance.now() - start >= msBudget) break;
     }
-    if (this.seq >= this.total && !this.routed) this.trap();
+    if (this.seq >= this.total && !this.routed) this.close();
     return appended;
   }
 
   /** Run to completion with no pacing — used for reduced motion and for the build-time snapshot. */
   runToEnd(): RunState {
     while (this.seq < this.total) this.append();
-    if (!this.routed) this.trap();
+    if (!this.routed) this.close();
     return this.state();
   }
 
   // ------------------------------------------------------------------ stream
 
   private append(): void {
-    const ep = makeEpisode(this.seq + 1, this.next);
+    const ep = episodeAt(this.seq + 1);
     this.seq = ep.seq;
     this.archiveBytes += ep.content.length + 96; // content + hash-chain record
-    if (ep.seq === REVISION_SEQ) this.revisionText = ep.content;
 
     // fixed-size ring: the resident window never grows with the archive
     this.recent[this.recentAt] = ep.content;
@@ -173,7 +189,7 @@ export class ApertureRun {
   private sealLeaf(): void {
     const eps = this.leafBuf;
     this.leafBuf = [];
-    const atoms = this.atomLinesFor(eps);
+    const atoms = certificatesIn(eps);
     const capsule = K.sealLeaf(eps, atoms);
     this.record(capsule);
     this.push(0, capsule);
@@ -183,19 +199,6 @@ export class ApertureRun {
       this.sealsSinceCompile = 0;
       this.packet = this.compile();
     }
-  }
-
-  /**
-   * The rules stage of the atomizer (§2), reduced to what the extractive writer
-   * consumes: certificate lines for decisions, corrections and rules.
-   */
-  private atomLinesFor(eps: readonly Episode[]): CapsuleAtomLine[] {
-    const out: CapsuleAtomLine[] = [];
-    for (const ep of eps) {
-      const m = /([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\s*(?:=|should be)\s*([^\s.,;]+)/i.exec(ep.content);
-      if (m?.[1] && m[2]) out.push({ key: m[1], value: m[2], seq: ep.seq });
-    }
-    return out;
   }
 
   private push(level: number, capsule: Capsule): void {
@@ -273,38 +276,58 @@ export class ApertureRun {
     return out;
   }
 
-  // -------------------------------------------------------------------- trap
+  // ----------------------------------------------------------------- closing
 
   /**
-   * Turn 1,000,000. The question names things the capsules no longer contain,
-   * so ledger routing (§5.1) pages the exact span back before the model answers.
+   * The closing questions, answered the way the kernel answers them.
    *
-   * A recovery is only ever shown when the ledger actually routed to the
-   * revision *and* that turn really went through this run. Anything else is a
-   * run that did not recover, and the page says so — a page about not
-   * inventing recall does not get to invent a recall.
+   * The trap — "the dry-run was skipped, can I send it?" — needs no page: the
+   * standing rule is a certificate in the frontier, and the revision at turn
+   * 483,112 replaced its value there, so the current rule is in the view and the
+   * turn-1 version is labelled historical. That is the receipt the live bench
+   * records (`public/bench/trap.json`), and it is the receipt shown here.
+   *
+   * Recovery by paging is a different question, and the exhibit asks one: an
+   * exact quote from a turn hundreds of thousands of episodes back, whose name
+   * the capsules no longer contain. That one routes through the loss ledger.
+   *
+   * Nothing is shown that did not happen: if the route resolves nothing, the
+   * page says so.
    */
-  private trap(): void {
+  private close(): void {
     this.routed = true;
-    const records: PageRecord[] = K.routeByLedger({
-      query: TRAP_QUESTION,
-      index: this.pageIndex,
-    });
-    const hit = records.find((r) => r.seq === REVISION_SEQ);
-    if (hit && this.revisionText) {
-      const text = this.revisionText;
-      const span = hit.span;
-      const quote = span ? text.slice(span[0], Math.min(text.length, span[1])) : hit.name;
-      this.recovered = {
-        seq: hit.seq,
-        text,
-        trigger: `ledger · "${hit.name}"`,
-        quote: quote || hit.name,
-      };
-    } else {
-      this.recovered = null;
-    }
+    const rule = ruleCertificate(this.seq);
+    this.resident = { query: TRAP_QUESTION, ...rule };
+    this.recovered = this.route(QUOTE_PROBE.query);
     this.packet = this.compile();
+  }
+
+  /**
+   * KERNEL §5.1: route a question through the ledger, skipping every name the
+   * view already contains — what is resident is never paged again.
+   */
+  private route(query: string): Recovered | null {
+    const residentNames = K.names(this.residentText());
+    const records: PageRecord[] = K.routeByLedger({ query, index: this.pageIndex });
+    const hit = records.find((r) => !residentNames.has(r.name));
+    if (!hit) return null;
+    const text = episodeAt(hit.seq).content;
+    const span = hit.span;
+    const quote = span ? text.slice(span[0], Math.min(text.length, span[1])) : hit.name;
+    // The locator has to resolve to text that really carries the name, or it is
+    // not a page (KERNEL §5.2). A near miss is a miss.
+    if (!text.toLowerCase().includes(hit.name)) return null;
+    return { query, seq: hit.seq, text, trigger: `ledger · "${hit.name}"`, quote: quote || hit.name };
+  }
+
+  /** Everything the model can already see: frontier, capsules, recent turns. */
+  private residentText(): string {
+    const parts = this.frontier(Math.max(1, this.seq));
+    for (let lvl = this.spine.length - 1; lvl >= 0; lvl--) {
+      const c = this.spine[lvl];
+      if (c) parts.push(c.text);
+    }
+    return [...parts, ...this.recentNewestFirst()].join("\n");
   }
 
   // ------------------------------------------------------------------- state
@@ -320,6 +343,7 @@ export class ApertureRun {
       packet: this.packet,
       strip: this.strip.slice().reverse(),
       recovered: this.recovered,
+      resident: this.resident,
       routed: this.routed,
       done: this.seq >= this.total,
     };
@@ -327,9 +351,10 @@ export class ApertureRun {
 }
 
 function header(seq: number, bytes: number): string {
+  const rule = ruleAtom(seq);
   return [
     `You are continuing one long conversation. Archive: ${seq.toLocaleString("en-US")} turns, ${(bytes / 1e9).toFixed(2)} GB, exact and hash-chained.`,
-    `Rule in force: ${RULE_TEXT} ⟨#${RULE_SEQ}⟩`,
+    `Rule in force: ${rule.value} ⟨#${rule.seq}⟩`,
     "You see a bounded view of that archive. Lines marked ⟨lost: …⟩ name things the view no longer contains.",
     "If your answer depends on one of them, call recall first or say that you would need to check.",
     "Never state a lost value from memory. Things marked ⟨historical⟩ were true earlier and have changed.",

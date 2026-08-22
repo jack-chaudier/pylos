@@ -4,12 +4,6 @@
  * lands where the page just travelled.
  */
 
-/**
- * The hosted app. `vercel.json` rewrites /app/* (and /api/*, /v1/*) to the
- * backend, so the landing page and the app share an origin. One place.
- */
-export const APP_URL = "/app/";
-
 const LIVE_ID = "pylos-live";
 
 function live(): HTMLElement {
@@ -149,15 +143,8 @@ function wireAnchors(): void {
   });
 }
 
-function wireAppLinks(): void {
-  for (const link of document.querySelectorAll<HTMLAnchorElement>("[data-app-url]")) {
-    link.href = APP_URL;
-  }
-}
-
 export function mountPage(): void {
   wireCopy();
   markPlatform();
   wireAnchors();
-  wireAppLinks();
 }

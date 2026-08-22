@@ -13,7 +13,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENGINE } from "../src/aperture/kernel";
 import { ApertureRun } from "../src/aperture/run";
-import { REVISION_SEQ, RULE_SEQ, SEED, TRAP_QUESTION } from "../src/sim/corpus";
+import { REVISION_SEQ, RULE_SEQ, SEED, TRAP_QUESTION } from "../src/aperture/thread";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(here, "../public/aperture/final.json");
@@ -39,6 +39,7 @@ const payload = {
   packet: state.packet,
   strip: state.strip,
   recovered: state.recovered,
+  resident: state.resident,
   routed: state.routed,
 };
 

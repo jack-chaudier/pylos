@@ -26,6 +26,26 @@ export {
   writeCapsule,
 } from "./capsule.ts";
 export {
+  type Corpus,
+  type CorpusEpisode,
+  type CorpusManifest,
+  type CorpusOptions,
+  createCorpus,
+  type Planted,
+  type PlantedFact,
+  type PlantedMemory,
+  type PlantedNumber,
+  type PlantedPerson,
+  type PlantedQuote,
+  type PoisonVariant,
+  REVISION_TEXT,
+  Rng,
+  RULE_TEXT,
+  stream,
+  TRAP_TEXT,
+  vocabSha256,
+} from "./corpus/index.ts";
+export {
   conservationViolations,
   deriveLedger,
   type LedgerResult,
@@ -77,6 +97,7 @@ export {
   slug,
   splitSentences,
 } from "./rules.ts";
+export { ftsTerms } from "./terms.ts";
 export {
   approxTokens,
   CHARS_PER_TOKEN,

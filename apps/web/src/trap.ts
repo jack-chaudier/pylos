@@ -41,16 +41,22 @@ export interface Probes {
 
 const nf = new Intl.NumberFormat("en-US");
 
+let pending: Promise<TrapArtifact | null> | null = null;
+
+/** The bench artifact, fetched once and shared: the trap section and the console both quote it. */
+export function loadTrap(): Promise<TrapArtifact | null> {
+  pending ??= fetch("/bench/trap.json", { cache: "no-cache" })
+    .then((res) => (res.ok ? (res.json() as Promise<TrapArtifact>) : null))
+    .catch(() => null);
+  return pending;
+}
+
 export async function mountTrap(): Promise<void> {
   const body = document.querySelector<HTMLElement>("[data-trap-body]");
   if (!body) return;
 
-  let data: TrapArtifact;
-  try {
-    const res = await fetch("/bench/trap.json", { cache: "no-cache" });
-    if (!res.ok) throw new Error(String(res.status));
-    data = (await res.json()) as TrapArtifact;
-  } catch {
+  const data = await loadTrap();
+  if (data === null) {
     body.innerHTML = `<p class="mono">The bench artifact could not be loaded. It lives at <a class="link" href="/bench/trap.json">/bench/trap.json</a>.</p>`;
     return;
   }

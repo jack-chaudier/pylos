@@ -61,7 +61,7 @@ export {
 // The pure layer is re-exported for convenience; `@pylos/core/pure` is the
 // browser-safe entry point that carries no Bun or SQLite import.
 export * from "./pure/index.ts";
-export { ftsQuery, ftsTerms } from "./rows.ts";
+export { ftsQuery } from "./rows.ts";
 export { COUNTERS, MIGRATIONS } from "./schema.ts";
 export { stats } from "./stats.ts";
 export {
