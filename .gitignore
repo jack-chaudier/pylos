@@ -1,15 +1,28 @@
+# dependencies
 node_modules/
+
+# build output
 dist/
 build/
-.DS_Store
-*.log
-.env
-.env.*
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/binaries/
+packages/server/.sidecar-entry.ts
+*.tsbuildinfo
+
+# local environments and deploy state
+.env
+.env.*
+.vercel/
+.claude/settings.local.json
+
+# bench scratch (reports in bench/results/*.md|json are tracked)
 bench/results/*.sqlite*
 bench/results/tmp/
-.vercel/
+
+# user data — vault exports must never be committed
 *.pylos
-~/.pylos
+
+# logs and OS noise
+*.log
+.DS_Store
