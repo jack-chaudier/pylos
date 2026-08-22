@@ -296,8 +296,11 @@ At checkpoints (every 10,000 turns, plus 1,000,000) the bench asserts:
 4. Ledger conservation holds across all capsule parents (sampled exhaustively at the end).
 5. `verify()` passes; archive bytes and resident tokens are reported side by side.
 6. Wall-clock per turn stays flat (amortized), reported as p50/p99.
+7. **Sequence probes** (schema `pylos.bench.million.v2`, A9.3): 100 turn numbers drawn per checkpoint and asked for by position; passes only if the packet holds that episode's text byte-exact under a `sequence` page record. At the final checkpoint two draws are forced to turn 1 and turn 345.
+8. **Name-free memories** (A9.4): 2,000 planted sentences carrying no routing name (`names()` empty, 0 ledger rows), asked for by a question that withholds the one distinguishing word; passes only if a `search` page record returns the exact episode.
+9. **Authority poison** (A9.1): three variants — user-first (A), assistant-only (B), user-corrects (C) — assert the user's value always holds the atom's slot and an assistant-only claim never becomes a certificate.
 
-It writes `bench/results/million-<seed>.json` plus a markdown report, and the
+It writes `bench/results/million-<seed>.json` (schema `pylos.bench.million.v2` as of kernel 1.1.0) plus a markdown report, and the
 landing page renders the same numbers. A live variant (`--live --model grok-4.3
 --turns 2000`) then asks the trap question through two packet builders —
 rolling-summary baseline vs Pylos — against the real provider and records both

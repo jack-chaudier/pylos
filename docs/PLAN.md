@@ -28,7 +28,7 @@ pylos/
 
 ## Milestones
 
-Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) is in progress: `pylos serve --hosted` and the app served at `/app/` exist, along with the sign-in screen, evidence bar, and landing rewrites; the deployed hosted URL is not yet up.
+Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15. Milestone 8 (v1.1, the web app) is in progress: deployment. `pylos serve --hosted` and the app served at `/app/` exist, along with the sign-in screen, evidence bar, landing rewrites, and the `million-2` bench artifact (kernel 1.1.0, `bench/results/million-2.md`); the deployed hosted URL is not yet up.
 
 | # | Milestone | Done means |
 | --- | --- | --- |

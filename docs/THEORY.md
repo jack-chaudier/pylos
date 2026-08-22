@@ -139,8 +139,9 @@ a unit, only when `x` is immediately followed by the same unit token
 scaffolding, not evidence that `48250.37` survived. Everything else still
 matches by exact normalized string. The direction of the change is
 conservative — it can only add pages, never remove one that the 1% window
-would have suppressed — and its effect on precision is unmeasured pending
-`million-2`.
+would have suppressed. `bench/results/million-2.md` (kernel 1.1.0) measured
+ledger-routing precision at 1.00 on the 1,000,000-turn checkpoint's 100-query
+sample (`routing.precision` in the results JSON).
 
 **Mechanism.** Pylos generalizes "policy params named in the query" to
 `names(q_t)` and "absent from the artifact" to "absent from the resident packet":
@@ -334,9 +335,11 @@ it pages it.
 8. **The lexical route (KERNEL A9.4) is an address, not a guarantee.** It finds
    an episode only when the query shares ≥ 2 stemmed content words with it and
    either the query names something unknown or no name route resolved a page
-   this turn. This has been measured only on planted name-free memories
-   (`million-2`, pending); paraphrase without lexical overlap is not found
-   deterministically.
+   this turn. `bench/results/million-2.md` measured 2,000/2,000 planted
+   name-free memories (0 ledger rows, no routing name at all) found by this
+   route at the 1,000,000-turn checkpoint; paraphrase without lexical overlap
+   is still not found deterministically, and precision on real conversation is
+   unmeasured.
 9. **The verification round (KERNEL A9.5) fires only for names the ledger
    recorded as dropped.** Its effect on answers is unmeasured: row 12 shows
    reader-facing manifests help some models and not others, and that is the
