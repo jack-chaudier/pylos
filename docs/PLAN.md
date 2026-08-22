@@ -28,6 +28,8 @@ pylos/
 
 ## Milestones
 
+Status 2026-08-22: 1–7 done for v1.0.0 (see `bench/results/` and the GitHub release). Open: Linux AppImage is best-effort in CI (deb ships), notarization, and the natural-conversation benchmark (MirageBench) — see DREAM.md §15.
+
 | # | Milestone | Done means |
 | --- | --- | --- |
 | 1 | Contract | `docs/KERNEL.md`, `packages/protocol` typecheck; repo public on GitHub. |
