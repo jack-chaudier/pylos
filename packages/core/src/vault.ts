@@ -51,12 +51,15 @@ import {
   toThread,
   toTombstone,
 } from "./rows.ts";
-import { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
+import { ATOM_NAME_REBUILD, AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
 
 /** Chain checkpoint interval (KERNEL §1). */
 export const CHECKPOINT_EVERY = 4096;
 /** Number of recent packets that keep their full `messages` array (KERNEL A7). */
 export const PACKET_MESSAGE_RETENTION = 1000;
+
+/** Atoms indexed per transaction by the `atom_name` rebuild (KERNEL A11.4). */
+const ATOM_NAME_BATCH = 512;
 
 export interface VaultOptions {
   /** Profile directory; defaults to `$PYLOS_HOME` or `~/.pylos`. */
@@ -212,6 +215,7 @@ export class Vault {
       })();
     }
     if (!applied.has(AUTHORITY_REPLAY)) this.replayAuthority();
+    if (!applied.has(ATOM_NAME_REBUILD)) this.rebuildAtomNames();
   }
 
   /**
@@ -225,6 +229,35 @@ export class Vault {
       if (needsAuthorityReplay(this, thread.id)) replayAtoms(this, thread.id);
     }
     this.db.query("INSERT INTO migration (name, applied_at) VALUES (?, ?)").run(AUTHORITY_REPLAY, Date.now());
+  }
+
+  /**
+   * KERNEL A11.4. `atom_name` is derived, so nothing carries it: a thread
+   * imported under 1.1 or 1.2 holds atoms that no question can route to by
+   * subject. One indexed probe per thread finds them; a thread this version
+   * wrote already has its rows, and a vault created by this version has no
+   * threads at all and is marked without work.
+   */
+  private rebuildAtomNames(): void {
+    for (const thread of this.threads.list()) {
+      const indexed = this.db.query("SELECT 1 FROM atom_name WHERE thread_id = ? LIMIT 1").get(thread.id);
+      const holdsAtoms = this.db.query("SELECT 1 FROM atom WHERE thread_id = ? LIMIT 1").get(thread.id);
+      if (indexed !== null || holdsAtoms === null) continue;
+      for (let from = 1; from <= thread.headSeq; from += ATOM_NAME_BATCH) {
+        const atoms = this.atoms.inRange(
+          thread.id,
+          from,
+          Math.min(thread.headSeq, from + ATOM_NAME_BATCH - 1),
+        );
+        if (atoms.length === 0) continue;
+        this.tx(() => {
+          for (const atom of atoms) this.atoms.indexNames(atom);
+        });
+      }
+    }
+    this.db
+      .query("INSERT INTO migration (name, applied_at) VALUES (?, ?)")
+      .run(ATOM_NAME_REBUILD, Date.now());
   }
 
   /** Cached prepared statement. */
@@ -441,17 +474,31 @@ export class Vault {
 
     count: (threadId: string): number => this.counter(threadId, COUNTERS.episodes),
 
-    /** FTS5/BM25 lexical search (KERNEL §5.3). Returns best matches first. */
-    search: (threadId: string, query: string, limit = 10): Episode[] => {
+    /**
+     * FTS5/BM25 lexical search (KERNEL §5.3, A9.4), best matches first: every
+     * term (AND) first, the rarest terms (OR) only when that found nothing.
+     * `mode: "strict"` runs the AND pass alone — for asking whether a turn holds
+     * *every* word of a question, not merely one of them. `exclude` drops one
+     * seq from both passes; the turn being asked is indexed like any other, and
+     * a question that matched itself would report a hit and so suppress the
+     * fallback that reaches the answer (KERNEL A10.1).
+     */
+    search: (
+      threadId: string,
+      query: string,
+      limit = 10,
+      opts: { mode?: "both" | "strict"; exclude?: Seq } = {},
+    ): Episode[] => {
       const run = (match: string): Episode[] => {
         try {
           const rows = this.stmt(
             "SELECT e.* FROM episode_fts f JOIN episode e ON e.rowid = f.rowid " +
-              "WHERE episode_fts MATCH ? AND e.thread_id = ? " +
+              // `IS NOT` so a bound NULL — nothing to exclude — keeps every row.
+              "WHERE episode_fts MATCH ? AND e.thread_id = ? AND e.seq IS NOT ? " +
               // Equal scores must not depend on how SQLite happened to walk the
               // index: the newest matching turn wins, always.
               "ORDER BY bm25(episode_fts) ASC, e.seq DESC LIMIT ?",
-          ).all(match, threadId, limit) as EpisodeRow[];
+          ).all(match, threadId, opts.exclude ?? null, limit) as EpisodeRow[];
           return rows.map(toEpisode);
         } catch {
           return [];
@@ -459,7 +506,7 @@ export class Vault {
       };
       const strict = ftsQuery(query, "and");
       const found = strict === null ? [] : run(strict);
-      if (found.length > 0) return found;
+      if (found.length > 0 || opts.mode === "strict") return found;
       const loose = ftsQuery(query, "or");
       return loose === null ? [] : run(loose);
     },
@@ -539,15 +586,22 @@ export class Vault {
         atom.createdBy,
         atom.createdAt,
       );
-      // Index the names this atom is *about*, so a query naming the subject can
-      // reach the current certificate even when the frontier is over capacity.
+      this.atoms.indexNames(atom);
+      this.bump(atom.threadId, { [phaseCounter(atom.phase)]: 1 });
+    },
+
+    /**
+     * Index the names this atom is *about*, so a query naming the subject can
+     * reach the current certificate even when the frontier is over capacity.
+     * Derived, never exported: import rebuilds it row by row (KERNEL A11.4).
+     */
+    indexNames: (atom: Atom): void => {
       const link = this.stmt("INSERT OR IGNORE INTO atom_name (thread_id, name, atom_id) VALUES (?, ?, ?)");
       const seen = new Set<string>([atom.key.toLowerCase()]);
       for (const hit of names(atom.text, { max: 6 })) seen.add(hit.name);
       const value = atom.value.replace(/\s+/g, " ").trim().toLowerCase();
       if (value.length > 1 && value.length <= 96) seen.add(value);
       for (const name of seen) link.run(atom.threadId, name.slice(0, 96), atom.id);
-      this.bump(atom.threadId, { [phaseCounter(atom.phase)]: 1 });
     },
 
     /** Current atoms for a key, most recent first. */

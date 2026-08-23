@@ -3,15 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pylos — one conversation, every model, nothing forgotten silently</title>
+    <title>Pylos — the conversation that does not end</title>
     <meta
       name="description"
-      content="Pylos is a chat that never has to end — in the browser or on your desktop. It keeps the exact, hash-chained archive of every turn, compiles a bounded view for whatever model you are using now, and records what each compaction lost so it can page the exact material back before the model answers."
+      content="Pylos is one conversation that never has to end. It keeps the exact, hash-chained archive of every turn, compiles a bounded view for whatever model you are using now, and records what each compaction lost so it can page the exact material back before the model answers."
     />
     <link rel="canonical" href="https://pylos.vercel.app/" />
-    <meta name="theme-color" content="#F4F1EA" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#121310" media="(prefers-color-scheme: dark)" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#D9450E" />
+    <meta name="color-scheme" content="light" />
 
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -20,34 +19,36 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://pylos.vercel.app/" />
     <meta property="og:site_name" content="Pylos" />
-    <meta property="og:title" content="Pylos — talk forever" />
+    <meta property="og:title" content="Pylos — the conversation that does not end" />
     <meta
       property="og:description"
-      content="One conversation. Every model. Nothing forgotten silently. An exact archive, a bounded view, and a loss ledger that makes recovery exact."
+      content="One thread. Every model. A million turns deep — ask about anything you ever said and the exact words come back."
     />
     <meta property="og:image" content="https://pylos.vercel.app/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Pylos — talk forever. One conversation, every model, nothing forgotten silently." />
+    <meta
+      property="og:image:alt"
+      content="Pylos — one conversation, every model, nothing forgotten silently."
+    />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Pylos — talk forever" />
+    <meta name="twitter:title" content="Pylos — the conversation that does not end" />
     <meta
       name="twitter:description"
-      content="One conversation. Every model. Nothing forgotten silently."
+      content="One thread. Every model. A million turns deep — ask about anything you ever said and the exact words come back."
     />
     <meta name="twitter:image" content="https://pylos.vercel.app/og.png" />
 
     <link
       rel="preload"
-      href="/fonts/newsreader-latin-var.woff2"
+      href="/fonts/instrument-serif-latin.woff2"
       as="font"
       type="font/woff2"
       crossorigin
     />
-    <link rel="preload" href="/fonts/geist-latin-var.woff2" as="font" type="font/woff2" crossorigin />
     <link
       rel="preload"
-      href="/fonts/geist-mono-latin-var.woff2"
+      href="/fonts/courier-prime-latin.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -57,46 +58,155 @@
   </head>
 
   <body>
-    <a class="skip" href="#console">Skip to the demo</a>
+    <a class="skip" href="#main">Skip to the content</a>
+    <div class="frame" aria-hidden="true"></div>
 
     <!-- ── nav ────────────────────────────────────────────────────────── -->
     <header class="nav">
       <div class="wrap nav__in">
-        <a class="wordmark" href="/" aria-label="Pylos, home">
-          <svg class="wordmark__mark" viewBox="0 0 24 24" aria-hidden="true" fill="none">
-            <circle cx="12" cy="12" r="9" stroke="var(--verdigris)" stroke-width="2.2" stroke-dasharray="46 12" transform="rotate(-58 12 12)" />
-            <circle cx="12" cy="12" r="2.4" fill="var(--ember)" />
-          </svg>
-          pylos
-        </a>
+        <a class="wordmark" href="/" aria-label="Pylos, home">Pylos</a>
         <nav class="nav__links" aria-label="Primary">
-          <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
+          <a
+            class="is-hide-sm"
+            href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md"
+            >Theory</a
+          >
           <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos">GitHub</a>
-          <a href="#download">Download</a>
-          <a class="is-accent" href="#console">Try it</a>
+          <a href="#install">Install</a>
+          <a class="btn btn--bone btn--sm" href="#console">Ask the thread</a>
         </nav>
       </div>
     </header>
 
-    <main id="main">
+    <main id="main" tabindex="-1">
       <!-- ── hero ─────────────────────────────────────────────────────── -->
       <section class="hero">
-        <div class="wrap">
-          <p class="mono hero__overline">Open source · Apache-2.0 · Web · Mac + Linux</p>
-          <h1 class="hero__title">Talk forever.</h1>
-          <p class="hero__lede">
-            A conversation that outlives every model. Pylos keeps the exact record, compiles only
-            what the current model needs, and recovers what it lost before memory becomes
-            invention.
-          </p>
-          <div class="hero__cta">
-            <a class="btn btn--primary" href="#console">Try the impossible thread →</a>
-            <a class="btn btn--ghost" href="#download">Install</a>
-            <button class="btn btn--quiet" type="button" data-play-aperture>
-              Watch turn 1,000,000
-            </button>
+        <div class="wrap hero__in">
+          <div class="hero__copy">
+            <p class="mono eyebrow">Open source · Apache-2.0 · macOS + Linux</p>
+            <h1 class="hero__title">
+              The conversation<br /><em>that does not end</em>
+            </h1>
+            <p class="lede">
+              One thread. Every model. A million turns deep — ask about anything you ever said and
+              the exact words come back.
+            </p>
+            <div class="cta">
+              <a class="btn btn--bone" href="#console">Ask the million-turn thread</a>
+              <a class="btn btn--ghost" href="#install">Install</a>
+            </div>
+            <p class="cmd">
+              <code id="install-cmd"
+                ><span class="sigil" aria-hidden="true">$ </span>curl -fsSL
+                https://pylos.vercel.app/install.sh | bash</code
+              >
+              <button
+                class="btn btn--quiet"
+                type="button"
+                data-copy="#install-cmd"
+                data-copied-label="Copied"
+              >
+                <span class="copy__label">Copy</span>
+              </button>
+            </p>
           </div>
-          <p class="mono hero__line">One conversation · Every model · Nothing forgotten silently</p>
+          <figure class="hero__plate">
+            <img
+              src="/art/empyrean.webp"
+              width="1600"
+              height="1974"
+              alt="Gustave Doré, Paradiso XXXI: two figures beneath the rings of the Empyrean."
+              fetchpriority="high"
+              decoding="async"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <!-- ── the story ────────────────────────────────────────────────── -->
+      <section class="story" id="story" aria-labelledby="story-title">
+        <div class="wrap">
+          <p class="mono eyebrow">The story</p>
+          <h2 class="sec__title" id="story-title">
+            A rule changed.<br /><em>Only one of them noticed.</em
+            ><span class="tag" data-trap-tag hidden>preliminary — bench pending</span>
+          </h2>
+          <div class="story__body" data-trap-body>
+            <p class="mono">Loading the bench artifact…</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── the features ─────────────────────────────────────────────── -->
+      <section class="features" id="features" aria-labelledby="features-title">
+        <h2 class="sr" id="features-title">What Pylos does</h2>
+        <div class="panel">
+          <ol class="features__grid">
+            <li class="feature">
+              <p class="mono feature__eyebrow">#1 Remember</p>
+              <h3 class="feature__head">Ask, don't scroll</h3>
+              <img
+                class="feature__plate"
+                src="/art/mnemosyne.webp"
+                width="1000"
+                height="1685"
+                alt="Mnemosyne, mother of the Muses, holding a vessel."
+                loading="lazy"
+                decoding="async"
+              />
+              <p class="mono feature__caption">
+                Every turn is kept exactly and hashed into a chain; ask for turn 61,234 or for where
+                Esme Whitlock lives now and the bytes come back.
+              </p>
+            </li>
+            <li class="feature">
+              <p class="mono feature__eyebrow">#2 Bounded</p>
+              <h3 class="feature__head">The view never grows</h3>
+              <img
+                class="feature__plate"
+                src="/art/ninth-heaven.webp"
+                width="1200"
+                height="1534"
+                alt="Gustave Doré, Paradiso XXVIII: two figures at a fixed horizon of light."
+                loading="lazy"
+                decoding="async"
+              />
+              <p class="mono feature__caption">
+                The model reads a fixed budget no matter how long the thread is; what the budget
+                could not hold is written to a ledger, never dropped in silence.
+              </p>
+            </li>
+            <li class="feature">
+              <p class="mono feature__eyebrow">#3 Every model</p>
+              <h3 class="feature__head">One thread</h3>
+              <img
+                class="feature__plate"
+                src="/art/babel.webp"
+                width="1200"
+                height="1494"
+                alt="Gustave Doré, The Confusion of Tongues: a crowd beneath the tower of Babel."
+                loading="lazy"
+                decoding="async"
+              />
+              <p class="mono feature__caption">
+                Grok stops, Claude continues, a local model finishes; the thread is the agent, the
+                model is the visitor.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ── the proof ────────────────────────────────────────────────── -->
+      <section class="proof" id="proof" aria-labelledby="proof-title">
+        <div class="wrap">
+          <p class="mono eyebrow">The proof · deterministic · zero model calls</p>
+          <h2 class="sec__title" id="proof-title">
+            1,000,000 turns.<br /><em>The view never grew.</em>
+          </h2>
+          <div class="proof__body" data-proof>
+            <p class="mono">Loading the bench series…</p>
+          </div>
         </div>
       </section>
 
@@ -105,11 +215,46 @@
         <div class="wrap">
           <div class="ap__head">
             <div>
-              <p class="mono">The aperture · live, in this browser</p>
-              <h2 class="ap__title" id="ap-title">A million turns, one bounded view.</h2>
+              <p class="mono eyebrow">The aperture · live, in this browser</p>
+              <h2 class="sec__title" id="ap-title">
+                A million turns,<br /><em>one bounded view.</em>
+              </h2>
             </div>
             <p class="mono" data-ap-engine>engine · booting</p>
           </div>
+
+          <p class="mono glosses">
+            <dfn
+              title="A capsule is an extractive summary of a fixed run of turns; capsules of capsules cover the whole archive in O(log n) of them."
+              >Capsule</dfn
+            >
+            a summary of a run of turns ·
+            <dfn
+              title="The loss ledger records every name, value and quote a capsule's text no longer contains, each with the exact turn and span it came from."
+              >Ledger</dfn
+            >
+            what a capsule no longer contains, with locators ·
+            <dfn
+              title="The frontier is the set of certificates that are currently true — standing rules and the newest value of every fact — carried in the packet whatever their age."
+              >Frontier</dfn
+            >
+            what is currently true, as certificates ·
+            <dfn
+              title="A certificate is a fact you stated. The kernel holds it true until you revise it, and never promotes a fact the model merely proposed."
+              >Certificate</dfn
+            >
+            a fact the user stated, kept as true until the user revises it ·
+            <dfn
+              title="Paging is fetching the exact archived turn a question needs and putting it in the packet before the model answers."
+              >Page</dfn
+            >
+            bringing an exact turn back before the model answers ·
+            <dfn
+              title="The packet is the text the compiler hands the model for one turn — header, frontier, capsules, paged material and the newest turns — inside a fixed token budget."
+              >Packet</dfn
+            >
+            the bounded text the model actually reads
+          </p>
 
           <div class="ap__panel">
             <div class="ap__grid">
@@ -155,8 +300,8 @@
             <div class="ap__timeline">
               <canvas data-ap-canvas height="46" aria-hidden="true"></canvas>
               <span class="mono" data-ap-levels
-                >Compaction hierarchy · level 4 → level 0 · the ember mark is turn 483,112, where the
-                rule changed</span
+                >Compaction hierarchy · level 4 → level 0 · the full-height mark is turn 483,112,
+                where the rule changed</span
               >
             </div>
 
@@ -172,7 +317,9 @@
             <p class="mono" data-ap-status>Ready · seed 1 · deterministic</p>
             <button class="btn btn--quiet" type="button" data-ap-replay>Replay</button>
           </div>
-          <p class="ap__note">
+          <!-- The two bench figures in this note are `final` in public/bench/series.json,
+               derived at build from bench/results/million-5.json. -->
+          <p class="note">
             This is an exhibit, not the proof: the browser-safe subset of the compiler
             (<code>@pylos/core/pure</code> — no vault, no chain, no index) run in this tab over the
             bench's own corpus at seed <code>1</code> — the same million turns
@@ -180,32 +327,34 @@
             computes real capsules, a real ledger and a real packet, and reports what actually
             happened: the closing question about the migration rule needs no page, because the rule
             is a certificate the frontier keeps resident; the closing question about an exact quote
-            does, and the ledger returns the turn it is on. The proof is the deterministic
+            does, and the ledger returns the turn it is on. Keeping no vault and no index also makes
+            its counters smaller than the bench's — 676,593 ledger entries and 1,054 MiB of archive
+            there, less of both here; the turns are the same million. The proof is the deterministic
             million-turn bench artifact in
             <a class="link" href="https://github.com/jack-chaudier/pylos/tree/main/bench/results"
               >bench/results</a
             >. How long the run takes depends on your machine; the size of the packet does not.
-            Archive bytes are the text of the episodes plus their chain records; nothing is written
-            to disk.
           </p>
           <p class="sr" role="status" data-ap-live></p>
         </div>
       </section>
 
-      <!-- ── the console ──────────────────────────────────────────────── -->
+      <!-- ── ask the thread ───────────────────────────────────────────── -->
       <section class="console" id="console" tabindex="-1" aria-labelledby="console-title">
         <div class="wrap">
-          <div class="sec__head">
-            <p class="mono">Try it · in this tab · no sign-in, no account, no upload</p>
-            <h2 class="sec__title" id="console-title">The impossible thread.</h2>
-            <p class="sec__lede">
-              The million turns above are still here. Ask them something. The kernel answering is the
-              real one — <code>@pylos/core/pure</code>, running in your browser over the same thread
-              the published bench ingests. <strong>No model is called.</strong> Every line below is
-              archived text, or a certificate the kernel derived from archived text, and it says
-              which route found it.
-            </p>
-          </div>
+          <p class="mono eyebrow">Ask the thread · in this tab · no sign-in, no account, no upload</p>
+          <h2 class="sec__title" id="console-title">
+            The thread is still here.<br /><em>Ask it something.</em>
+          </h2>
+          <p class="lede">
+            The kernel answering is the real one — <code>@pylos/core/pure</code>, running in your
+            browser over the same thread the published bench ingests. No model is called. Every line
+            below is archived text, or a certificate the kernel derived from archived text, and it
+            says which route found it. The live sample in the story above replays the migration rule
+            at turn 966 of a 2,000-turn thread; the million-turn thread here plants the same revision
+            at turn 483,112. You can add to the thread too: start a line with
+            <code>remember:</code> and it becomes turn 1,000,001.
+          </p>
 
           <div class="console__panel">
             <form class="console__form" data-console-form>
@@ -219,7 +368,7 @@
                 placeholder="What did I say on turn 345?"
                 data-console-input
               />
-              <button class="btn btn--primary" type="submit">Ask</button>
+              <button class="btn btn--bone" type="submit">Ask</button>
             </form>
             <div class="console__chips" data-console-chips>
               <span class="mono">Try</span>
@@ -229,184 +378,87 @@
 
           <div class="console__cards" data-console-cards></div>
 
-          <p class="ap__note">
+          <p class="note">
             The routes are the kernel's: a turn number is an address; a standing rule is a
             certificate that stays resident however old it is; a name a capsule dropped has an exact
             locator in the loss ledger; a fact you stated outranks a fact the assistant stated; and a
             sentence with no name in it can only be found by searching for its words. Each card says
-            which one fired. The two model answers in the migration card are recorded — they come
-            from <a class="link" href="/bench/trap.json">/bench/trap.json</a>, the artifact the live
-            bench wrote, with the packet hash beside them. Nothing on this page asks a model
-            anything.
+            which one fired. A question that never refers back to the conversation is answered
+            <code>⟦not a memory⟧</code> — the thread has no turn about it, and that is not a fault.
+            The two model answers in the migration card are recorded — they come from
+            <a class="link" href="/bench/trap.json">/bench/trap.json</a>, the artifact the live bench
+            wrote, with the packet hash beside them. Nothing on this page asks a model anything.
           </p>
         </div>
       </section>
 
-      <!-- ── three statements ─────────────────────────────────────────── -->
-      <section class="statements">
-        <div class="wrap statements__grid">
-          <article class="statement">
-            <h3>The archive is exact.</h3>
-            <p>
-              Every turn is stored verbatim in an append-only, hash-chained vault. Compaction never
-              touches it. Export it, destroy the machine, import it on another one — the chain still
-              verifies.
-            </p>
-            <span class="mono">hash_i = sha256(hash_i−1 ‖ canonical(seq, ts, role, model, content_hash, meta_hash))</span>
-          </article>
-          <article class="statement">
-            <h3>The view is bounded.</h3>
-            <p>
-              On every turn the compiler builds one packet within a fixed token budget: header,
-              frontier, a fixed set of capsules covering the past (a rolling root plus the newest leaves), anything paged back, and the recent
-              turns verbatim. It never grows with the archive.
-            </p>
-            <span class="mono">‖K_t‖ ≤ B, for all t</span>
-          </article>
-          <article class="statement">
-            <h3>Nothing is forgotten silently.</h3>
-            <p>
-              Each compaction emits a loss ledger — the names, values and quotes its text no longer
-              contains, each with an exact locator. Ledgers are conserved upward. When a question
-              touches one, the exact source is paged back before the model answers.
-            </p>
-            <span class="mono">names(episodes) ⊆ names(capsule) ∪ ledger(capsule) · ledger(parent) ⊇ ⋃ ledger(child)</span>
-          </article>
-        </div>
-      </section>
-
-      <!-- ── the trap ─────────────────────────────────────────────────── -->
-      <section class="trap" id="trap" aria-labelledby="trap-title">
+      <!-- ── install ──────────────────────────────────────────────────── -->
+      <section class="install" id="install" tabindex="-1" aria-labelledby="install-title">
         <div class="wrap">
-          <div class="sec__head">
-            <p class="mono">The trap · same model, same question, live sample at turn 2,000</p>
-            <h2 class="sec__title" id="trap-title">
-              A summary answers confidently. Pylos checks first.<span
-                class="tag"
-                data-trap-tag
-                hidden
-                >preliminary — bench pending</span
-              >
-            </h2>
-            <p class="sec__lede">
-              A rule is set on turn 1 and revised on turn 966. A thousand turns later both
-              systems are asked the same question with the same model. Only one of them still has
-              a way to know the rule changed. The deterministic million-turn bench above is the
-              proof; this is the behavioural sample, labelled as one.
-            </p>
-          </div>
+          <p class="mono eyebrow">Install · v1.3.0 · Apache-2.0</p>
+          <h2 class="sec__title" id="install-title">
+            One window. One composer.<br /><em>No vocabulary.</em>
+          </h2>
 
-          <div data-trap-body>
-            <p class="mono">Loading the bench artifact…</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- ── how it works ─────────────────────────────────────────────── -->
-      <section class="how" aria-labelledby="how-title">
-        <div class="wrap">
-          <div class="sec__head">
-            <p class="mono">How it works</p>
-            <h2 class="sec__title" id="how-title">Four moves, repeated forever.</h2>
-          </div>
-          <ol class="how__grid">
-            <li class="step">
-              <h3>01 · Archive</h3>
-              <p>
-                Every turn is appended verbatim to a hash-chained vault. The user turn commits with a pending
-                packet, the answer commits with its derivation; a crash can never leave one without the other.
-              </p>
-            </li>
-            <li class="step">
-              <h3>02 · Compile</h3>
-              <p>
-                Before each reply the kernel builds one packet within a fixed budget — header,
-                frontier, capsules, pages, recent — and records its digest.
-              </p>
-            </li>
-            <li class="step">
-              <h3>03 · Ledger</h3>
-              <p>
-                Each capsule records what its text no longer contains, with exact locators. Losses
-                are conserved upward; a re-summary may add entries, never remove one.
-              </p>
-            </li>
-            <li class="step">
-              <h3>04 · Page</h3>
-              <p>
-                When a question names something in the ledger, the exact span comes back before the
-                model answers. When it cannot, the model is told so.
-              </p>
-            </li>
-          </ol>
-          <p class="how__math">
-            The bound is a counting argument, not a hope: a bounded reader with <code>b</code> bits
-            of resident context and <code>t</code> lookups of <code>w</code> bits can only
-            distinguish the archive's states while <code>b + t·w ≥ log₂(N − F − E)</code>. Pylos
-            spends its lookups where the ledger says the artifact is missing a value, which is
-            exactly where a compressed reader would otherwise improvise.
-            <a class="link" href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md"
-              >Read the theory →</a
-            >
-          </p>
-        </div>
-      </section>
-
-      <!-- ── download ─────────────────────────────────────────────────── -->
-      <section class="download" id="download" tabindex="-1" aria-labelledby="dl-title">
-        <div class="wrap">
-          <div class="sec__head">
-            <p class="mono">Install · v1.2.0 · Apache-2.0</p>
-            <h2 class="sec__title" id="dl-title">One window. One composer. No vocabulary.</h2>
-            <p class="sec__lede">
-              Pylos runs on your machine. Install it, run <code>pylos serve</code>, and open
-              <code>http://127.0.0.1:7334/app/</code> — the same one-composer app, against a vault in
-              your own home directory. The desktop build wraps exactly that. Serving it to a machine
-              you own is supported too: <code>pylos serve --hosted</code>.
-            </p>
-          </div>
-
+          <h3 class="mono sub">Download Pylos Desktop</h3>
           <div class="dl__grid">
             <article class="card" data-os="mac">
-              <p class="card__meta">macOS 13+ · Apple silicon &amp; Intel</p>
-              <h3 class="card__os">macOS</h3>
-              <p class="card__meta">pylos-1.2.0.dmg</p>
-              <a
-                class="btn btn--primary"
-                href="https://github.com/jack-chaudier/pylos/releases"
+              <h4 class="card__os">macOS</h4>
+              <p class="mono card__meta">Apple silicon · macOS 13+</p>
+              <p class="mono card__meta">pylos-1.3.0.dmg</p>
+              <a class="btn btn--bone" href="https://github.com/jack-chaudier/pylos/releases/latest"
                 >Download for macOS</a
               >
             </article>
             <article class="card" data-os="linux">
-              <p class="card__meta">Debian / Ubuntu · .deb (AppImage soon)</p>
-              <h3 class="card__os">Linux</h3>
-              <p class="card__meta">pylos-1.2.0.deb</p>
-              <a
-                class="btn btn--primary"
-                href="https://github.com/jack-chaudier/pylos/releases"
+              <h4 class="card__os">Linux</h4>
+              <p class="mono card__meta">x64 · Debian / Ubuntu .deb</p>
+              <p class="mono card__meta">pylos-1.3.0.deb</p>
+              <a class="btn btn--bone" href="https://github.com/jack-chaudier/pylos/releases/latest"
                 >Download for Linux</a
               >
             </article>
           </div>
 
-          <div class="install">
-            <code id="install-cmd"
-              ><span class="sigil" aria-hidden="true">$ </span>curl -fsSL https://pylos.vercel.app/install.sh | sh</code
+          <h3 class="mono sub">Install via terminal</h3>
+          <p class="cmd cmd--wide">
+            <code id="install-cmd-2"
+              ><span class="sigil" aria-hidden="true">$ </span>curl -fsSL
+              https://pylos.vercel.app/install.sh | bash</code
             >
             <button
               class="btn btn--quiet"
               type="button"
-              data-copy="#install-cmd"
+              data-copy="#install-cmd-2"
               data-copied-label="Copied"
             >
               <span class="copy__label">Copy</span>
             </button>
-          </div>
-          <p class="dl__note">
+          </p>
+          <ol class="steps">
+            <li>
+              <span class="mono steps__n">01</span>
+              <span><code>curl … | bash</code> — installs <code>pylos</code> to <code>~/.local/bin</code>.</span>
+            </li>
+            <li>
+              <span class="mono steps__n">02</span>
+              <span><code>pylos serve</code> — the API on <code>127.0.0.1:7334</code>, loopback only.</span>
+            </li>
+            <li>
+              <span class="mono steps__n">03</span>
+              <span
+                >Open <code>http://127.0.0.1:7334/app/</code> — the same one composer, against a
+                vault in your own home directory.</span
+              >
+            </li>
+          </ol>
+          <p class="note">
             The desktop app and <code>pylos serve</code> share one vault format: a thread exported
             from either imports into the other, and the <code>.pylos</code> bundle verifies its hash
-            chain on the way in. Builds are unsigned for now; on macOS, right-click → Open the first
-            time. Source, checksums and every release live on
+            chain on the way in. Serving it to a machine you own is supported too —
+            <code>pylos serve --hosted</code> binds beyond loopback and asks for a token. Builds are
+            unsigned for now; on macOS, right-click → Open the first time. Source, checksums and
+            every release live on
             <a class="link" href="https://github.com/jack-chaudier/pylos/releases">GitHub</a>.
           </p>
         </div>
@@ -417,13 +469,21 @@
     <footer class="footer">
       <div class="wrap">
         <p class="footer__line">The tablets survived because the palace burned.</p>
-        <ul class="footer__meta">
-          <li>Pylos v1.2.0</li>
-          <li>Apache-2.0</li>
-          <li><a href="https://github.com/jack-chaudier/pylos">GitHub</a></li>
+        <ul class="mono footer__credits">
           <li>
-            <a href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a>
+            Gustave Doré, <i>Paradiso</i> XXXI and XXVIII, and <i>The Confusion of Tongues</i> —
+            public domain
           </li>
+          <li>The Flammarion engraving (1888) — public domain</li>
+          <li>Mnemosyne plate — Rijksmuseum RP-P-1926-675, CC0</li>
+          <li>Instrument Serif and Courier Prime — SIL Open Font License</li>
+        </ul>
+        <ul class="mono footer__meta">
+          <li>Pylos v1.3.0</li>
+          <li>Apache-2.0</li>
+          <li>2026</li>
+          <li><a href="https://github.com/jack-chaudier/pylos">GitHub</a></li>
+          <li><a href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md">Theory</a></li>
         </ul>
       </div>
       <p class="footer__wordmark wrap" aria-hidden="true">pylos</p>

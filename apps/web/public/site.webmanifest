@@ -4,8 +4,8 @@
   "description": "One conversation. Every model. Nothing forgotten silently.",
   "start_url": "/",
   "display": "browser",
-  "background_color": "#F4F1EA",
-  "theme_color": "#F4F1EA",
+  "background_color": "#D9450E",
+  "theme_color": "#D9450E",
   "icons": [
     {
       "src": "/favicon.svg",

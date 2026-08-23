@@ -83,7 +83,6 @@ interface CoreModule {
     threadId: string,
     options: Record<string, unknown>,
   ): Promise<{ assistantEpisode: Episode; usage?: unknown }>;
-  handoff(vault: Vault, threadId: string, from: string, to: string): Episode;
   forget(
     vault: Vault,
     threadId: string,
@@ -113,6 +112,10 @@ interface CoreModule {
     options: { passphrase: string; threadId?: string },
   ): Promise<{ threadId: string }>;
 }
+
+/** Episodes read per step, and the most steps taken, looking back for the last reply. */
+const SPEAKER_PAGE = 8;
+const SPEAKER_STEPS = 64;
 
 export function bindCore(module: unknown, home: string): Kernel {
   const core = module as CoreModule;
@@ -249,19 +252,58 @@ class CoreKernel implements Kernel {
   }
 
   /**
+   * Switches the model an API client will run the next turn with. The divider is
+   * written only if a model has already spoken and it was a different one — a
+   * chip moved before anyone spoke divides nothing (KERNEL §6).
+   */
+  async handoff(threadId: ThreadId, model: string, provider: ProviderId): Promise<Episode | undefined> {
+    const settings = this.thread(threadId).settings;
+    const spoke = this.lastSpokenModel(threadId);
+    if (spoke === undefined) {
+      throw Object.assign(new Error("No model has spoken in this thread yet."), {
+        status: 409,
+        code: "no_speaker",
+      });
+    }
+    this.vault.threads.setSettings(threadId, { ...settings, model, provider });
+    return spoke === model ? undefined : this.appendHandoff(threadId, spoke, model);
+  }
+
+  /**
    * The divider sentence reads in plain names; `meta` keeps the exact model ids
    * so the transcript and the model list stay machine-checkable.
    */
-  async handoff(threadId: ThreadId, model: string, provider: ProviderId): Promise<Episode> {
-    const settings = this.thread(threadId).settings;
-    const from = typeof settings.model === "string" ? settings.model : "the previous model";
-    const episode = this.vault.episodes.append(threadId, {
+  private appendHandoff(threadId: ThreadId, from: string, to: string): Episode {
+    return this.vault.episodes.append(threadId, {
       role: "handoff",
-      content: `${shortName(from)} stopped here. ${shortName(model)} continued from the same thread.`,
-      meta: { from, to: model },
+      content: `${shortName(from)} stopped here. ${shortName(to)} continued from the same thread.`,
+      meta: { from, to },
     });
-    this.vault.threads.setSettings(threadId, { ...settings, model, provider });
-    return episode;
+  }
+
+  /**
+   * The model that last spoke here, read from the archive rather than from the
+   * thread's settings: settings record what was asked for, and a turn that never
+   * reached a model must not look like a speaker. Attachments, tool results and
+   * removals are stepped over; the walk back is bounded, so a thread with no
+   * reply in its last `SPEAKER_PAGE * SPEAKER_STEPS` episodes has no speaker.
+   */
+  private lastSpokenModel(threadId: ThreadId): string | undefined {
+    let before: Seq | undefined;
+    for (let step = 0; step < SPEAKER_STEPS; step += 1) {
+      const batch = this.vault.episodes.list(threadId, {
+        ...(before === undefined ? {} : { before }),
+        limit: SPEAKER_PAGE,
+      });
+      for (let i = batch.length - 1; i >= 0; i -= 1) {
+        const episode = batch[i];
+        if (episode?.role === "assistant") return episode.model;
+      }
+      const earliest = batch[0];
+      if (earliest === undefined || earliest.seq <= 1) return undefined;
+      before = earliest.seq;
+    }
+    return undefined;
   }
 
   async forget(threadId: ThreadId, target: ForgetTarget): Promise<ForgetOutcome> {
@@ -307,13 +349,27 @@ class CoreKernel implements Kernel {
   }
 
   /**
-   * Claims the thread's next turn slot now — a full queue is a `429` here,
-   * before the caller has opened a stream — and streams the turn once the turns
-   * ahead of it have committed.
+   * The thread must exist before a slot is claimed for it, so a turn on a thread
+   * that is not there is a `404` rather than a place in a queue nobody owns.
    */
-  runTurn(threadId: ThreadId, input: TurnInput, provider: ProviderFn): AsyncIterable<TurnEvent> {
+  enterTurn(threadId: ThreadId): Ticket {
     this.thread(threadId);
-    return this.streamTurn(this.turns.enter(threadId), threadId, input, provider);
+    return this.turns.enter(threadId);
+  }
+
+  /**
+   * Streams the turn once the turns ahead of it have committed, on the lane the
+   * route already claimed. Without a ticket the slot is claimed here — a full
+   * queue is a `429` before the caller has opened a stream.
+   */
+  runTurn(
+    threadId: ThreadId,
+    input: TurnInput,
+    provider: ProviderFn,
+    ticket?: Ticket,
+  ): AsyncIterable<TurnEvent> {
+    this.thread(threadId);
+    return this.streamTurn(ticket ?? this.turns.enter(threadId), threadId, input, provider);
   }
 
   /**
@@ -330,6 +386,16 @@ class CoreKernel implements Kernel {
     try {
       await ticket.ready(input.signal);
       if (input.signal?.aborted === true) return;
+      // Inside the lane: the thread's model and budget are read, merged and
+      // written where no other turn on this thread can come between them.
+      await this.setSettings(threadId, { model: input.model, budget: input.budget });
+      // The divider belongs to the turn that changes speaker, not to the moment
+      // a model was picked: it is written here, once a model has spoken and the
+      // next turn is going to a different one (KERNEL §6).
+      const spoke = this.lastSpokenModel(threadId);
+      if (spoke !== undefined && spoke !== input.model) {
+        yield { type: "episode", episode: this.appendHandoff(threadId, spoke, input.model) };
+      }
       yield* this.turnEvents(threadId, input, provider);
     } finally {
       ticket.release();

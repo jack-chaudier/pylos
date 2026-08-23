@@ -1,4 +1,4 @@
-import type { Episode, ModelInfo } from "@pylos/protocol";
+import type { Episode, ModelInfo, ProviderId } from "@pylos/protocol";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { bytesLabel, providerLabel } from "../format.ts";
 
@@ -11,6 +11,10 @@ export interface ComposerProps {
   onSend: (text: string) => void;
   onStop: () => void;
   onPickModel: (model: string) => void;
+  /** A model whose provider is not connected: connect it, then switch. */
+  onConnectModel: (provider: ProviderId, model: string) => void;
+  /** `↑` on an empty composer opens the archive. */
+  onEarlier: () => void;
   onAttach: (files: File[]) => void;
   onRemoveAttachment: (seq: number) => void;
   onBudget: (budget: number) => void;
@@ -87,7 +91,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           className="composer-input"
           rows={1}
           value={text}
-          placeholder="Say anything. The thread remembers."
+          placeholder="Ask it, or tell it something."
           spellCheck
           onFocus={() => setFocus(true)}
           onBlur={() => setFocus(false)}
@@ -103,6 +107,10 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
               send();
+            }
+            if (event.key === "ArrowUp" && text.length === 0) {
+              event.preventDefault();
+              props.onEarlier();
             }
           }}
         />
@@ -160,10 +168,10 @@ export function Composer(props: ComposerProps): React.JSX.Element {
               {current?.label ?? props.model}
               {current !== undefined && !current.supportsTools ? (
                 <span className="no-tools" title="This model cannot call the recall tool">
-                  no recall tool
+                  no recall
                 </span>
               ) : null}
-              <Caret />
+              <span aria-hidden="true">▾</span>
             </button>
             {menu === "model" ? (
               <ModelMenu
@@ -172,6 +180,10 @@ export function Composer(props: ComposerProps): React.JSX.Element {
                 onPick={(model) => {
                   setMenu(undefined);
                   props.onPickModel(model);
+                }}
+                onConnect={(provider, model) => {
+                  setMenu(undefined);
+                  props.onConnectModel(provider, model);
                 }}
                 onClose={() => setMenu(undefined)}
               />
@@ -203,12 +215,26 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           </span>
 
           {props.busy ? (
-            <button type="button" className="send" data-stop="true" onClick={props.onStop}>
-              Stop
+            <button
+              type="button"
+              className="send"
+              data-stop="true"
+              aria-label="Stop"
+              title="Stop"
+              onClick={props.onStop}
+            >
+              <StopGlyph />
             </button>
           ) : (
-            <button type="button" className="send" disabled={text.trim().length === 0} onClick={send}>
-              Send
+            <button
+              type="button"
+              className="send"
+              disabled={text.trim().length === 0}
+              aria-label="Send"
+              title="Send"
+              onClick={send}
+            >
+              <SendGlyph />
             </button>
           )}
         </div>
@@ -217,52 +243,78 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   );
 }
 
+/**
+ * Connected providers first and selectable; the rest sit under a rule and open
+ * the Connect sheet instead of switching (docs/DESIGN.md, the composer).
+ */
 function ModelMenu({
   models,
   current,
   onPick,
+  onConnect,
   onClose,
 }: {
   models: ModelInfo[];
   current: string;
   onPick: (model: string) => void;
+  onConnect: (provider: ProviderId, model: string) => void;
   onClose: () => void;
 }): React.JSX.Element {
   useDismiss(onClose);
-  const groups = new Map<string, ModelInfo[]>();
+  const ready = models.filter((model) => model.available);
+  const waiting = models.filter((model) => !model.available);
+
+  return (
+    <div className="menu menu-up" role="menu">
+      {byProvider(ready).map(([provider, list]) => (
+        <div key={provider}>
+          <div className="menu-group">{providerLabel(provider)}</div>
+          {list.map((model) => (
+            <button
+              key={model.id}
+              type="button"
+              className="menu-item"
+              role="menuitem"
+              data-active={model.id === current}
+              onClick={() => onPick(model.id)}
+            >
+              {model.label}
+              {model.supportsTools ? null : <small className="warn">no recall</small>}
+            </button>
+          ))}
+        </div>
+      ))}
+      {waiting.length > 0 ? (
+        <>
+          <div className="menu-rule">connect ▸</div>
+          {waiting.map((model) => (
+            <button
+              key={model.id}
+              type="button"
+              className="menu-item"
+              role="menuitem"
+              data-disabled="true"
+              onClick={() => onConnect(model.provider, model.id)}
+            >
+              {model.label}
+              <small>{providerLabel(model.provider)}</small>
+            </button>
+          ))}
+        </>
+      ) : null}
+      {models.length === 0 ? <div className="empty">No models available.</div> : null}
+    </div>
+  );
+}
+
+function byProvider(models: ModelInfo[]): Array<[ProviderId, ModelInfo[]]> {
+  const groups = new Map<ProviderId, ModelInfo[]>();
   for (const model of models) {
     const list = groups.get(model.provider) ?? [];
     list.push(model);
     groups.set(model.provider, list);
   }
-  return (
-    <div className="menu menu-up" role="menu">
-      {[...groups.entries()].map(([provider, list]) => (
-        <div key={provider}>
-          <div className="menu-group">{providerLabel(provider)}</div>
-          {list.map((model) => (
-            <button
-              key={`${provider}/${model.id}`}
-              type="button"
-              className="menu-item"
-              role="menuitem"
-              data-active={model.id === current}
-              data-disabled={!model.available}
-              onClick={() => onPick(model.id)}
-            >
-              {model.label}
-              {!model.available ? (
-                <small>connect</small>
-              ) : !model.supportsTools ? (
-                <small className="warn">no recall</small>
-              ) : null}
-            </button>
-          ))}
-        </div>
-      ))}
-      {models.length === 0 ? <div className="empty">No models available.</div> : null}
-    </div>
-  );
+  return [...groups.entries()];
 }
 
 function BudgetPopover({
@@ -337,10 +389,24 @@ function Gauge(): React.JSX.Element {
   );
 }
 
-function Caret(): React.JSX.Element {
+function SendGlyph(): React.JSX.Element {
   return (
-    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-      <path d="M2 4 5 7 8 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 19V5M12 5 6 11M12 5l6 6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StopGlyph(): React.JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
     </svg>
   );
 }

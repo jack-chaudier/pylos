@@ -14,6 +14,7 @@
  * ```
  */
 
+import { join } from "node:path";
 import { exportBundle, importBundle } from "./bundle.ts";
 import { stats } from "./stats.ts";
 import { openVault } from "./vault.ts";
@@ -78,7 +79,30 @@ async function readPassphrase(args: Args): Promise<string> {
   return "";
 }
 
-async function main(argv: string[]): Promise<number> {
+interface ServerModule {
+  main(argv: string[]): Promise<void>;
+}
+
+/**
+ * The kernel does not depend on the API layer, so `@pylos/server` is only
+ * resolvable from here when something else installed it. In a checkout it is
+ * the sibling workspace, found by path; anywhere else `serve` says so plainly.
+ */
+async function loadServer(): Promise<ServerModule | undefined> {
+  const candidates = ["@pylos/server", join(import.meta.dir, "..", "..", "server", "src", "index.ts")];
+  for (const specifier of candidates) {
+    try {
+      const module = (await import(specifier)) as Partial<ServerModule>;
+      if (typeof module.main === "function") return module as ServerModule;
+    } catch {
+      // Not resolvable from here; try the next candidate.
+    }
+  }
+  return undefined;
+}
+
+/** Resolves to the process exit code, or to `null` when the command owns the process. */
+async function main(argv: string[]): Promise<number | null> {
   const args = parseArgs(argv);
   const command = args.positional[0];
   if (command === undefined || args.flags.help === true) {
@@ -90,22 +114,23 @@ async function main(argv: string[]): Promise<number> {
 
   switch (command) {
     case "serve": {
-      try {
-        const specifier = "@pylos/server";
-        const server = (await import(specifier)) as { serve?: (opts: unknown) => unknown };
-        if (typeof server.serve !== "function") {
-          process.stderr.write("@pylos/server is installed but exports no serve()\n");
-          return 1;
-        }
-        await server.serve({ port: num(args, "port"), ...vaultOptions });
-        return 0;
-      } catch (error) {
+      const server = await loadServer();
+      if (server === undefined) {
         process.stderr.write(
-          `pylos serve needs @pylos/server, which is not available here.\n` +
-            `Install it, or run the desktop app. (${(error as Error).message})\n`,
+          "pylos serve needs @pylos/server, which is not available here.\n" +
+            "Run `bun install` in a Pylos checkout, then `bun packages/core/src/cli.ts serve`.\n",
         );
         return 1;
       }
+      try {
+        // The server owns the process from here: it binds the port and stops on
+        // SIGINT/SIGTERM. Returning would exit before the first request.
+        await server.main(argv);
+      } catch (error) {
+        process.stderr.write(`pylos: ${(error as Error).message}\n`);
+        return 1;
+      }
+      return null;
     }
 
     case "verify": {
@@ -214,7 +239,8 @@ async function main(argv: string[]): Promise<number> {
 }
 
 if (import.meta.main) {
-  process.exit(await main(process.argv.slice(2)));
+  const code = await main(process.argv.slice(2));
+  if (code !== null) process.exit(code);
 }
 
 export { main };

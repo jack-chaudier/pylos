@@ -7,6 +7,10 @@
  * can state the run's numbers before the run has produced them. Same seed, same
  * kernel, same numbers as the live run — if they ever disagree, one of them is
  * lying, and the snapshot is regenerated on every build so it cannot drift.
+ *
+ * The file carries no timestamp and no wall clock: it is tracked, so a rebuild
+ * on an unchanged kernel must produce a byte-identical file. The run's cost is
+ * reported on stdout instead.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -25,8 +29,6 @@ const ms = Math.round(performance.now() - t0);
 const payload = {
   engine: ENGINE,
   seed: SEED,
-  generatedAt: new Date().toISOString().slice(0, 10),
-  runtimeMs: ms,
   ruleSeq: RULE_SEQ,
   revisionSeq: REVISION_SEQ,
   question: TRAP_QUESTION,

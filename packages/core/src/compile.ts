@@ -34,6 +34,7 @@ import {
   type PagedBlock,
   packetText,
   renderCapsules,
+  renderFault,
   renderFrontier,
   renderHeader,
   renderPaged,
@@ -175,6 +176,9 @@ export function compileView(vault: Vault, threadId: string, options: CompileOpti
   residentSeqs.add(turnSeq);
 
   const prevAssistant = findPreviousAssistant(vault, threadId, turnSeq);
+  // Nothing has been compacted and the window reaches turn 1: the view is the
+  // archive, so a question the index could not route is not a miss (KERNEL A11.1).
+  const archiveInView = coveredTo === 0 && (recent[0]?.seq ?? turnSeq) <= 1;
   const maxPages = Math.max(1, Math.floor(allocation.paged / TOKENS_PER_PAGE)) + (supportsTools ? 0 : 1);
   const paged =
     options.noPages === true || query.length === 0
@@ -187,10 +191,22 @@ export function compileView(vault: Vault, threadId: string, options: CompileOpti
           residentNames,
           residentSeqs,
           residentText: preSupport,
+          archiveInView,
+          ...(queryEpisode === null ? {} : { querySeq: turnSeq }),
           tokenizer,
         });
 
   const pagedRender = renderPaged(paged.blocks, allocation.paged, tokenizer);
+  // A fault is a receipt for the whole turn, not a page, so it is never priced
+  // out of the paged slot: it is rendered whatever the slot held and its ~70
+  // tokens come off the recent window, like every other fixed cost (KERNEL A11.1).
+  const faultText = renderFault(paged.records, supportsTools);
+  const faultTokens = faultText.length === 0 ? 0 : tokenizer(faultText);
+  // The fault costs what its notice costs; only the compiler knows which wording
+  // this model gets, so the record is priced here (KERNEL A11.1).
+  for (const record of paged.records) {
+    if (record.trigger === "fault") record.tokens = faultTokens;
+  }
 
   // ---- refill the recent window with whatever the bounded slots did not use
   const headerInfo = {
@@ -210,7 +226,7 @@ export function compileView(vault: Vault, threadId: string, options: CompileOpti
   // part of the recent window, so it can never stand as its own witness.
   const queryMessages = queryEpisode === null ? [] : renderRecent([queryEpisode]);
   const queryTokens = queryMessages.length === 0 ? 0 : tokenizer(packetText(queryMessages));
-  const fixed = tokenizer(headerText) + frontier.tokens + pagedRender.tokens + queryTokens;
+  const fixed = tokenizer(headerText) + frontier.tokens + pagedRender.tokens + faultTokens + queryTokens;
   const capsuleBudget = Math.min(allocation.capsules, Math.max(0, budget - fixed - 200));
   const capsules = renderCapsules(capsuleViews, capsuleBudget, tokenizer);
   const recentBudget = Math.max(0, budget - fixed - capsules.tokens - 64);
@@ -257,6 +273,7 @@ export function compileView(vault: Vault, threadId: string, options: CompileOpti
     capsules: capsules2.text,
     paged: pagedRender.text,
     unknown: renderUnknownPages(paged.records),
+    fault: faultText,
     ledger: probeLedger,
     coveredTo,
     recent,
@@ -289,6 +306,7 @@ export function compileView(vault: Vault, threadId: string, options: CompileOpti
       capsules: withCapsules ? capsules2.text : "",
       paged: pagedRender.text,
       unknown: renderUnknownPages(paged.records),
+      fault: faultText,
       ledger,
       coveredTo,
       recent: window,
@@ -322,6 +340,16 @@ export function compileView(vault: Vault, threadId: string, options: CompileOpti
       tokens: 0,
       epistemic: block.epistemic,
     })),
+    ...(faultText.length === 0
+      ? []
+      : [
+          {
+            type: "paged" as const,
+            ref: "fault",
+            tokens: faultTokens,
+            epistemic: "NON_AUTHORITATIVE" as const,
+          },
+        ]),
     ...recent.map((e) => ({
       type: "recent" as const,
       ref: `ep:${e.seq}`,
@@ -379,6 +407,8 @@ interface AssembleInput {
   capsules: string;
   paged: string;
   unknown: string;
+  /** The page fault line, when every route of this turn came back empty (KERNEL A11.1). */
+  fault: string;
   ledger: LedgerDigest;
   coveredTo: Seq;
   recent: Episode[];
@@ -413,6 +443,7 @@ function assemble(input: AssembleInput): ChatMessage[] {
   }
   if (input.paged.length > 0) parts.push(input.paged);
   if (input.unknown.length > 0) parts.push(input.unknown);
+  if (input.fault.length > 0) parts.push(input.fault);
   return [{ role: "system", content: parts.join("\n\n") }, ...renderRecent(input.recent), ...input.query];
 }
 

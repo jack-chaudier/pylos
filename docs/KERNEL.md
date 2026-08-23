@@ -26,7 +26,9 @@ test suite is the referee.
 
 One SQLite database per user profile: `~/.pylos/vault.sqlite` (WAL, `0600`),
 blobs in `~/.pylos/objects/<sha256>` (content-addressed). `PYLOS_HOME`
-overrides. All writes that belong to one turn commit in **one transaction**
+overrides. `--home <dir>` (or `PYLOS_HOME`) also owns `<dir>/auth.json`,
+unless `PYLOS_AUTH_PATH` overrides that path independently. All writes that
+belong to one turn commit in **one transaction**
 (episode + atoms + capsules + packet + pages): a crash can never leave an answer
 without its derivation.
 
@@ -249,7 +251,7 @@ turn(thread, text, attachments?, model) :
 Provider sessions are caches. Step 3 must work on a brand-new provider session
 every time; no provider conversation id is ever required to continue.
 
-**Model switch** = a `handoff` episode (`"Grok stopped here. Claude continued from the same thread."`) followed by an ordinary turn.
+**Model switch** = a `handoff` episode (`"Grok stopped here. Claude continued from the same thread."`) followed by an ordinary turn. The turn lane appends the handoff episode immediately before a turn whose model differs from the last assistant episode's model, and never when no assistant episode exists yet — the first turn of a thread gets no handoff, whatever model answers it. `POST /api/threads/:id/handoff` remains for integrators: it appends the same episode on demand, answers `409 no_speaker` when no assistant episode exists, and `200 { ok, changed: false }` when the last speaker is already the requested model.
 
 ## 7. Export / import — `.pylos` bundle
 
@@ -318,8 +320,11 @@ At checkpoints (every 10,000 turns, plus 1,000,000) the bench asserts:
 7. **Sequence probes** (schema `pylos.bench.million.v2`, A9.3): 100 turn numbers drawn per checkpoint and asked for by position; passes only if the packet holds that episode's text byte-exact under a `sequence` page record. At the final checkpoint two draws are forced to turn 1 and turn 345.
 8. **Name-free memories** (A9.4): 2,000 planted sentences carrying no routing name (`names()` empty, 0 ledger rows), asked for by a question that withholds the one distinguishing word; passes only if a `search` page record returns the exact episode.
 9. **Authority poison** (A9.1): three variants — user-first (A), assistant-only (B), user-corrects (C) — assert the user's value always holds the atom's slot and an assistant-only claim never becomes a certificate.
+10. **Faults** (A11.1): 20 probes per checkpoint, each a question carrying a conversational cue word and two words invented for that probe, absent from the whole corpus; passes only if the packet holds exactly one unresolved `fault` page record, none of the question's own routes resolved, and no probe in any other family faulted (0 false faults).
 
-It writes `bench/results/million-<seed>.json` (schema `pylos.bench.million.v2` as of kernel 1.1.0) plus a markdown report, and the
+It writes `bench/results/million-<seed>.json` (schema `pylos.bench.million.v3` as
+of kernel 1.3.0, adding the `faults` family above; `--rerender` tolerates
+`pylos.bench.million.v2` files) plus a markdown report, and the
 landing page renders the same numbers. A live variant (`--live --model grok-4.3
 --turns 2000`) then asks the trap question through two packet builders —
 rolling-summary baseline vs Pylos — against the real provider and records both
@@ -486,11 +491,16 @@ routing vocabulary, so "turn 345" never ledger-routes on the number 345.
   is a legitimate address: the model rewords, the kernel returns exact spans or
   `UNKNOWN`. Paraphrase without lexical overlap is not found deterministically,
   and that is the model's job to fix by rewording.
+* The strict AND-mode pass and the OR-mode fallback are both decided
+  over the archive **excluding the question's own episode** (`PageRequest.querySeq`)
+  — for the compile-time lexical route and for a `recall` issued during the
+  same turn alike. The question is never its own witness (A10.1); the index
+  enforces this directly rather than leaving it to the caller.
 * `episode_fts` uses `tokenize = 'porter unicode61'` so "tasted" reaches
   "taste"; existing vaults rebuild the index in the migration. FTS terms are ≥ 3
   characters, stoplisted, capped at 6; the OR-mode fallback uses the longest ≥ 5
   character terms. Results are ordered `bm25(episode_fts), seq DESC` — equal
-  scores resolve to the newest turn, never to whatever the index walked first.
+  scores resolve to the newest turn, never to whatever the index walked first. When the strict pass matches only turns the view already holds, the view is the answer: no page is served, no `search` record is written, and no `⟨UNKNOWN⟩` line is rendered (the receipt would say the material was not found while the packet holds it); a loose match on fewer than all terms still writes the unresolved record and does not silence the fault (A11.1).
 
 ### A9.5 The verification round (§6)
 
@@ -736,3 +746,158 @@ X-ray survives a Laptop Funeral: an imported thread can still show what each tur
 was compiled from, and re-render older packets from `resident[]` (A7). Import
 checks the restored packet count against `manifest.counts.packets` and refuses on
 disagreement, as it does for the per-file digests.
+
+## A11. v1.3 amendments
+
+Three changes adopted after the v1.2 product audit, which found that the
+kernel remembers everything it can address and says nothing when it cannot
+address something. Each subsection names the earlier text it amends; where
+they conflict, A11 wins.
+
+### A11.1 A miss is a receipt: the page fault (§5, A9.4)
+
+When a turn's routes all come back empty, the packet used to carry no trace of
+the attempt: `pages = []`, no line for the model, nothing in the X-ray. The
+model was left to infer that the archive had been searched for it, when only
+the question's own words had been tried.
+
+A **fault** is recorded when, at turn-time paging, all of the following hold:
+
+* the query asks something (`?` or an interrogative) **and refers to the
+  conversation or the past** — a first-person possessive (`my`, `mine`,
+  `our`), a past-tense auxiliary (`did`, `was`, `were`, `had`), a time
+  reference (`ago`, `earlier`, `before`, `previously`, `last`, `back`), or a
+  memory verb (`remember`, `recall`, `remind`, `mention`, `said`, `told`,
+  `discuss`, `talk`, `decided`, `agreed`, `promised`, `chose`, `named`,
+  `called`), matched as whole words, case-insensitively, common inflections
+  included. The cue list is a heuristic and its precision on natural questions
+  is unmeasured (THEORY §15); the design makes a false positive cheap rather
+  than pretending the gate is exact;
+* no record **of the question's own routes** resolved — the sequence route,
+  the routes for the query's names, and the lexical route; a route that
+  resolved on the previous reply's names (§5.1) answered the model's sentence,
+  not the user's question, and does not suppress the fault;
+* the lexical route found nothing to serve — it ran and returned no hit
+  outside the view, or it could not run for lack of two searchable terms — and
+  the query has at least one searchable term. A turn the view already holds
+  that carries **every** searchable term of the question is the view
+  answering: it is not served again, and it is not a miss. A loose match on
+  one word is a guess, not an answer, and does not silence the fault; nor
+  does the question's own episode, which is resident and indexed but is never
+  its own witness (A10.1);
+* no turn reference addressed material already in the view, and the view does
+  not already hold the whole archive (no capsule resident and the recent window
+  reaches turn 1): "what did I just say?" on turn two is answered by the view;
+* the call is turn-time paging: not a `recall` (trigger `model`), not the check
+  round (`hits` supplied).
+
+The fault is one `PageRecord{trigger:"fault", query, seqs:[], tokens,
+resolved:false}` where `tokens` is the rendered cost of the notice below. It
+consumes no page of `P_max`. The `⟨UNKNOWN …⟩` line never lists it (a named
+miss alongside it still renders UNKNOWN as before); the notice is rendered once,
+in the paged slot, as a resident span of type `paged`, epistemic
+`NON_AUTHORITATIVE`:
+
+> ⟨pylos fault⟩ Nothing in this question matched the archive's index: no turn
+> number, no recorded name, no search term reached a turn. That says nothing
+> about whether the archive holds the answer. If this question is about
+> something from this conversation and the answer is not already in the view,
+> call `recall` with other words for the same thing before answering; if
+> nothing comes back, say that you could not find it in the archive. If it is
+> not about this conversation, answer it normally. Never present a guess as a
+> memory.
+
+For `supportsTools=false` the recall sentence reads: *If this question is
+about something from this conversation and the answer is not already in the
+view, say that you would need to check, and ask for a word from the original
+conversation.*
+
+The fault states a fact about routing, not about the view and not about the
+archive: the answer may be resident, and the archive may hold it under other
+words. What the fault forbids is the silent third option — answering a
+question about the archive from the shape of the question. The handler is the
+model's own `recall` (A9.4): free text is its address, rewording is its job,
+and every round stays bounded and receipted (A10.3). A fault whose later
+`recall` rounds recovered material is shown by the interface as a fault that
+was handled; a fault that nothing answered is a receipt in the X-ray and a
+sentence in the reply, never a line in the transcript pretending to recovery.
+
+### A11.2 The thread remembers how it answered: the path route (§5.3, A9.4)
+
+A question that was once answered from the archive leaves two episodes behind
+— the question and the reply — and a packet that records exactly which turns
+were recovered to answer it (`packet.pages`, `meta.pages`). Those episodes are
+written in the user's and the model's *own* words for the memory, which are
+rarely the words of the original turn. They are therefore the natural index a
+paraphrase reaches when the original is out of lexical range, and the packet
+is the edge from that index back to the evidence.
+
+When the lexical route (turn-time or `recall`) serves a hit `h` that is an
+`assistant` episode, or a `user` episode that asks something, the pager
+follows the edge: it reads the page records of the turn that produced `h` —
+for a `user` hit, the packet whose `turn_seq` is `h.seq`; for an `assistant`
+hit, `meta.pages` or the packet named by `meta.packetId` — and serves, as
+**path** pages, the **locator** of each *resolved* record (its first seq; the
+neighbours a record also served are not followed), records taken in the
+priority `model`, `search`, `ledger`, `sequence`, `check`, `path`, and, for a
+`ledger` or `historical` record, only when its `name` is among the names of
+the question turn (the `user` episode at the packet's `turn_seq`) or of `h`
+itself — a route that fired on the previous reply's names is not the
+question's evidence. A followed seq must (a) exist and not be removed, (b) have
+role `user`, `tool` or `attachment`, and (c) be neither resident nor already
+served. At most two path pages per hit, within `P_max` and the paged budget
+like every other page. Each block reads `⟦recovered #450 · user · via #61234⟧`;
+the record is `{trigger:"path", query:"#61234", seqs, tokens, resolved}`, and
+is recorded only when a page was served (a hit with nothing to follow is not
+UNKNOWN). Depth is one: a path page is served, not followed, in the turn that
+serves it — the packet now recording it is the next turn's edge. The paged
+slot's head line names the label: *via #n — reached by way of the turn that
+once answered a question with it.*
+
+The path is an **address, not an authority**: it pages exact episodes that
+keep their role label and their `epistemic` (A10.1), so a source reached by
+way of the model's earlier reply is still the user's word or the model's word
+as the archive holds it, and the reply that pointed to it is `PROPOSED` as it
+always was. Nothing is written to make this work: the edge is the receipt the
+turn already kept, which is why it is conserved by export (A10.7, `packets`
+travel), closed by forgetting (A10.6: a removed source fails `resolves()`; a
+removed question or reply leaves the index with its FTS row — note that
+removing only the question leaves the reply's `meta.pages` intact, so the
+source stays reachable by way of the reply until the reply, or the source, is
+removed too), and bounded by the same `P_max`. Nothing in `bench/results`
+measures the path; the kernel tests are its referee for this release, and
+"a recurring question gets cheaper" is the mechanism's intent, not a measured
+result (THEORY §15).
+
+### A11.3 The sequence route is speaker-aware (A9.3)
+
+"What did I say on turn 450?" paged episode #450 whatever its role, plus the
+`+1` neighbour. The address is exact and stays exact: `#n` is the archive
+sequence number. What changes is the neighbour: when the query carries a
+first-person cue (`I`, `me`, `my`, `mine`, case-insensitive) and the
+referenced episode is an `assistant` turn, the neighbour served is the nearest
+*preceding* `user` episode — skipping `tool`, `attachment`, `system` and
+`handoff` episodes, within 12 seqs, not removed — the turn the reply answered;
+when it carries a second-person cue (`you`, `your`) and the referenced
+episode is a `user` turn, the neighbour is the nearest *following*
+`assistant` episode under the same skip rule. Without a cue, or when no such
+episode is found, `+1` as before. The neighbour block keeps the
+`sequence:neighbour` trigger; the record is unchanged.
+
+Turn numbers may be written with thousands separators — `turn 483,112`,
+`#483,112` — as the interface prints them; the cue table accepts
+`\d{1,3}(?:,\d{3})+` wherever it accepted `\d{1,9}`. `sequenceRefs` moves to
+`@pylos/core/pure` so the landing page's console and the pager parse
+addresses with one function.
+
+### A11.4 Import restores the atom name index (A10.7)
+
+`importBundle` wrote `atom` rows directly and never repopulated `atom_name`,
+the reverse index that atom routing (A9.1 trigger 0) and the historical route
+(§5.2) read. An imported thread therefore certified the frontier but could not
+route a question naming an atom's subject when the frontier was over capacity,
+nor show a proposal. Import now indexes every restored atom's names exactly as
+`vault.atoms.insert` does, and migration `010-atom-name-rebuild` indexes, on
+first open, every thread that holds atoms but no `atom_name` rows — a vault
+imported under 1.1 or 1.2 is repaired the same way, once. A test asserts
+`atoms.byName` after a round-trip.

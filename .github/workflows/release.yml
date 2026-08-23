@@ -32,7 +32,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libssl-dev libfuse2 file
       - run: bun install --frozen-lockfile
+      - run: bun run typecheck
       - run: bun run test
+      - run: bun run lint
+      - run: bun run scripts/scan-secrets.ts
+      - run: bun run --cwd apps/web build
+      - run: bun test --cwd apps/web
+      - run: bun test --cwd apps/app
       - name: Build sidecar (kernel + server, single binary)
         run: PYLOS_TARGET_TRIPLE=${{ matrix.target }} bun run --cwd packages/server build:sidecar
       - name: Build desktop (macOS)

@@ -12,11 +12,8 @@
     },
     "apps/app": {
       "name": "@pylos/app",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "dependencies": {
-        "@fontsource-variable/newsreader": "^5.2.5",
-        "@fontsource/geist-mono": "^5.2.5",
-        "@fontsource/geist-sans": "^5.2.5",
         "@pylos/protocol": "workspace:*",
         "@tauri-apps/api": "^2.9.0",
         "@tauri-apps/plugin-dialog": "^2.4.0",
@@ -34,7 +31,7 @@
     },
     "apps/desktop": {
       "name": "@pylos/desktop",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "devDependencies": {
         "@tauri-apps/cli": "^2.9.0",
         "typescript": "^5.9.3",
@@ -42,7 +39,7 @@
     },
     "apps/web": {
       "name": "@pylos/web",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "dependencies": {
         "@pylos/core": "workspace:*",
       },
@@ -53,7 +50,7 @@
     },
     "bench": {
       "name": "@pylos/bench",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "dependencies": {
         "@pylos/core": "workspace:*",
         "@pylos/protocol": "workspace:*",
@@ -61,7 +58,7 @@
     },
     "packages/core": {
       "name": "@pylos/core",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "bin": {
         "pylos": "./src/cli.ts",
       },
@@ -71,11 +68,11 @@
     },
     "packages/protocol": {
       "name": "@pylos/protocol",
-      "version": "1.0.0",
+      "version": "1.2.0",
     },
     "packages/server": {
       "name": "@pylos/server",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "dependencies": {
         "@pylos/core": "workspace:*",
         "@pylos/protocol": "workspace:*",
@@ -190,12 +187,6 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.28.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
-
-    "@fontsource-variable/newsreader": ["@fontsource-variable/newsreader@5.3.0", "", {}, "sha512-rrzYi43qMpbzwuFtf9OkWH8sxAPVPcQQQEwXpPtwaKYeJ8yVg5aLs5kawmo1f2Q1t1M38TLmEKCkGVDsYwgdFw=="],
-
-    "@fontsource/geist-mono": ["@fontsource/geist-mono@5.3.0", "", {}, "sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg=="],
-
-    "@fontsource/geist-sans": ["@fontsource/geist-sans@5.3.0", "", {}, "sha512-AmG7cE1AvE4NHROPaOl1sN+a02cB5xy6pA/ZV76HXqWTCsJTV2SCBc9DTFHfJqnVOODm7HhXIYtUIb75NP5QXQ=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 

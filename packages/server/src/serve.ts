@@ -231,15 +231,23 @@ async function loginRoutes(
   if (segments[2] !== "xai" || method !== "POST") {
     throw new HttpError(404, "not_found", "No such login route.");
   }
-  if (!mode.logins.take(clientKey(request, server))) {
-    throw new HttpError(429, "rate_limited", "Too many sign-in attempts. Try again shortly.");
-  }
+  const spend = (): void => {
+    if (!mode.logins.take(clientKey(request, server))) {
+      throw new HttpError(429, "rate_limited", "Too many sign-in attempts. Try again shortly.");
+    }
+  };
   if (segments[3] === "start" && segments.length === 4) {
+    spend();
     return json(await mode.registry.startLogin());
   }
   if (segments[3] === "poll" && segments.length === 4) {
     const body = await readJson<{ handle?: string }>(request);
-    return json(await mode.registry.pollLogin(requireString(body.handle, "handle")));
+    const handle = requireString(body.handle, "handle");
+    // A poll of a grant this server started is already interval-gated by the
+    // device flow; only starting a sign-in — or guessing at a handle — counts
+    // against the address, so a patient browser is never locked out of its own.
+    if (!mode.registry.knowsLogin(handle)) spend();
+    return json(await mode.registry.pollLogin(handle));
   }
   throw new HttpError(404, "not_found", "No such login route.");
 }
@@ -437,12 +445,15 @@ async function localRoute(context: ServerContext, request: Request, url: URL): P
     return json(await context.kernel.attach(threadId, files));
   }
 
+  // The divider is written by the next turn, once a model has actually spoken
+  // (KERNEL §6). The route stays for API clients: it switches the thread's model
+  // and writes the divider only when the model that last spoke is a different one.
   if (action === "handoff" && method === "POST") {
     const body = await readJson<{ model?: string }>(request);
     const model = requireString(body.model, "model");
     const resolved = await context.registry.resolve(model);
     const episode = await context.kernel.handoff(threadId, resolved.model, resolved.provider);
-    return json(episode);
+    return episode === undefined ? json({ ok: true, changed: false }) : json(episode);
   }
 
   if (action === "forget" && method === "POST") {
@@ -492,60 +503,73 @@ function checkUpload(request: Request): void {
 // ---------- the turn ----------
 
 async function turnRoute(context: ServerContext, request: Request, threadId: string): Promise<Response> {
-  const body = await readJson<TurnRequest>(request);
-  const text = requireString(body.text, "text");
-  const settings = await context.kernel.settings(threadId);
-  const model = body.model ?? settings.model ?? DEFAULT_MODEL;
-  const budget = optionalNumber(body.budget) ?? settings.budget ?? DEFAULT_BUDGET;
+  // The lane is claimed at arrival: everything that can reorder two requests —
+  // reading the body, resolving the model, checking the provider — happens while
+  // the ticket is already held, so two turns commit in the order they arrived
+  // rather than the order they finished preparing. A thread with eight turns
+  // already waiting answers `429 thread_busy` here, before the stream opens.
+  const ticket = context.kernel.enterTurn(threadId);
+  try {
+    const body = await readJson<TurnRequest>(request);
+    const text = requireString(body.text, "text");
+    const settings = await context.kernel.settings(threadId);
+    const model = body.model ?? settings.model ?? DEFAULT_MODEL;
+    const budget = optionalNumber(body.budget) ?? settings.budget ?? DEFAULT_BUDGET;
 
-  const resolved = await context.registry.resolve(model);
-  if (resolved.provider !== "ollama" && !(await context.auth.configured(resolved.provider))) {
-    throw new HttpError(401, "no_provider", `Connect ${resolved.provider} before sending a turn.`);
-  }
-  const bound = await context.registry.providerFn(model);
-  const catalogue = await context.registry.models();
-  const supportsTools = catalogue.find((entry) => entry.id === bound.model)?.supportsTools !== false;
-  await context.kernel.setSettings(threadId, { model: bound.model, budget });
-
-  // Claimed before the stream opens, so a thread with eight turns already
-  // waiting answers `429 thread_busy` instead of a stream that says so.
-  const turn = context.kernel.runTurn(
-    threadId,
-    {
-      text,
-      model: bound.model,
-      provider: bound.provider,
-      budget,
-      supportsTools,
-      signal: request.signal,
-      ...(body.attachmentSeqs === undefined ? {} : { attachmentSeqs: body.attachmentSeqs }),
-    },
-    bound.fn,
-  );
-
-  const stream = new SseStream();
-  const heartbeat = setInterval(() => stream.comment("keep-alive"), 15_000);
-
-  void (async () => {
-    try {
-      for await (const event of turn) {
-        if (request.signal.aborted || stream.isClosed) break;
-        stream.send(event);
-      }
-    } catch (error) {
-      const normalized = normalizeError(error) as { message?: string; code?: string };
-      stream.send({
-        type: "error",
-        message: normalized.message ?? "The turn failed.",
-        ...(normalized.code === undefined ? {} : { code: normalized.code }),
-      });
-    } finally {
-      clearInterval(heartbeat);
-      stream.close();
+    const resolved = await context.registry.resolve(model);
+    if (resolved.provider !== "ollama" && !(await context.auth.configured(resolved.provider))) {
+      // Not 401: the session is fine, the thread is not ready to run a turn.
+      throw new HttpError(409, "no_provider", `Connect ${resolved.provider} before sending a turn.`);
     }
-  })();
+    const bound = await context.registry.providerFn(model);
+    const catalogue = await context.registry.models();
+    const supportsTools = catalogue.find((entry) => entry.id === bound.model)?.supportsTools !== false;
 
-  return stream.response;
+    // From here the turn owns the ticket and releases it when it ends.
+    const turn = context.kernel.runTurn(
+      threadId,
+      {
+        text,
+        model: bound.model,
+        provider: bound.provider,
+        budget,
+        supportsTools,
+        signal: request.signal,
+      },
+      bound.fn,
+      ticket,
+    );
+
+    const stream = new SseStream();
+    const heartbeat = setInterval(() => stream.comment("keep-alive"), 15_000);
+
+    void (async () => {
+      try {
+        for await (const event of turn) {
+          if (request.signal.aborted || stream.isClosed) break;
+          stream.send(event);
+        }
+      } catch (error) {
+        const normalized = normalizeError(error) as { message?: string; code?: string };
+        stream.send({
+          type: "error",
+          message: normalized.message ?? "The turn failed.",
+          ...(normalized.code === undefined ? {} : { code: normalized.code }),
+        });
+      } finally {
+        clearInterval(heartbeat);
+        stream.close();
+      }
+    })();
+
+    return stream.response;
+  } catch (error) {
+    // Nothing was streamed, so nothing will release the lane: a bad body or an
+    // unconfigured provider must not leave the thread blocked. Releasing twice
+    // is a no-op, so a throw after the handoff is safe here too.
+    ticket.release();
+    throw error;
+  }
 }
 
 // ---------- auth ----------

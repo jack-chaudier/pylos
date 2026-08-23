@@ -22,13 +22,21 @@
  * wider than the budget, the answer is recovered exactly rather than dropped —
  * and it must come first, because otherwise a query about a revised fact would
  * spend the paged slot on the episode that stated the *old* value.
+ *
+ * A hit the lexical route serves is also an index: the turn that produced it
+ * recorded which turns it was answered from, and the **path route** (KERNEL
+ * A11.2) follows that receipt back to the evidence. When no route reaches
+ * anything at all, the miss itself is recorded as a **fault** (KERNEL A11.1),
+ * so a question about the archive is never answered from the shape of the
+ * question alone.
  */
 
-import type { Atom, Epistemic, LossEntry, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
+import type { Atom, Episode, Epistemic, LossEntry, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
 import { KIND_PRIORITY, type NameHit, names, parseNumberName, retained } from "./pure/names.ts";
-import { epistemicOfRole, type PagedBlock } from "./pure/render.ts";
+import { epistemicOfRole, type PagedBlock, VIA_LABEL } from "./pure/render.ts";
+import { consumeRefs, sequenceRefs } from "./pure/sequence.ts";
+import { ftsTerms } from "./pure/terms.ts";
 import { approxTokens, type Tokenizer } from "./pure/tokens.ts";
-import { ftsTerms } from "./rows.ts";
 import type { Vault } from "./vault.ts";
 
 /** Tokens assumed per served page when sizing `P_max` (KERNEL A4). */
@@ -58,6 +66,14 @@ export interface PageRequest {
   /** Disable the lexical fallback (KERNEL §5.3). */
   search?: boolean;
   /**
+   * The view already holds the whole archive — no capsule resident and the
+   * recent window reaching turn 1. "What did I just say?" on turn two is
+   * answered by the view, so a miss on the index is not a fault (KERNEL A11.1).
+   */
+  archiveInView?: boolean;
+  /** The current question's own episode, when it has been appended: never its own witness (A10.1). */
+  querySeq?: Seq;
+  /**
    * Routing names to use instead of the ones read from `query` / `prevAssistant`.
    * The verification round supplies the draft's names directly (KERNEL A9.5).
    */
@@ -77,9 +93,49 @@ export interface PageResult {
 const INTERROGATIVE = /\b(?:what|where|when|who|which|why|how|did|do|does|is|are|was|were|can|could)\b/i;
 
 /**
+ * A question about the conversation rather than about the world (KERNEL A11.1):
+ * a first-person possessive, a past-tense auxiliary, a time reference or a memory
+ * verb, whole words with their obvious inflections. "What is a monad?" asks the
+ * world and gets no fault; "what did we decide?" asks the archive and does.
+ */
+const REFERS_BACK =
+  /\b(?:my|mine|our|did|was|were|had|ago|earlier|before|previously|last|back|remember(?:ed|s)?|recall(?:ed|s)?|remind(?:ed|s)?|mention(?:ed|s)?|said|told|discuss(?:ed|ing|es)?|talk(?:ed|ing|s)?|decide[ds]?|agree[ds]?|promise[ds]?|chose|name[ds]?|call(?:ed|s)?)\b/i;
+
+/** A first-person cue: the reply's own question is what "what did I say" wants. */
+const FIRST_PERSON = /\b(?:i|me|my|mine)\b/i;
+/** A second-person cue: the reply to a turn, not the turn after it. */
+const SECOND_PERSON = /\b(?:you|your)\b/i;
+
+/**
+ * The order a receipt's records are followed in (KERNEL A11.2). A trigger absent
+ * from this table is not an address back to evidence: `historical` and `fault`
+ * point at derived state and at nothing respectively.
+ */
+const PATH_PRIORITY: Partial<Record<PageTrigger, number>> = {
+  model: 0,
+  search: 1,
+  ledger: 2,
+  sequence: 3,
+  check: 4,
+  path: 5,
+};
+
+/** Nearest neighbour search radius for the speaker-aware rule (KERNEL A11.3). */
+const NEIGHBOUR_SPAN = 12;
+
+/** Roles the neighbour walk steps over: retrieved data and bookkeeping, not speech. */
+const NOT_SPEECH: ReadonlySet<string> = new Set(["tool", "attachment", "system", "handoff"]);
+
+/** The question test, applied to the query and to a `user` hit the search served. */
+function asks(text: string): boolean {
+  return text.includes("?") || INTERROGATIVE.test(text);
+}
+
+/**
  * Serve pages for one turn. Triggers run in order and share one budget:
  * explicit/model recall → sequence → atom routing → ledger routing →
- * historical keys → lexical search.
+ * historical keys → lexical search → path. If every one of them came back
+ * empty, the turn records a fault.
  */
 export function page(vault: Vault, threadId: string, request: PageRequest): PageResult {
   const tokenizer = request.tokenizer ?? approxTokens;
@@ -140,6 +196,8 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   // answer at any archive size. It runs before every other trigger because a
   // named position leaves nothing to infer.
   const references = request.hits === undefined ? sequenceRefs(queryText) : [];
+  /** A reference the packet already held: the view was addressed, so nothing faulted. */
+  let addressedInView = false;
   for (const reference of references) {
     if (!canServe()) break;
     const started = performance.now();
@@ -154,7 +212,10 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
       if (!servedSeqs.has(seq)) wanted.push(seq);
     }
     // Nothing to fetch and nothing missing: the turn is already in the view.
-    if (wanted.length === 0 && !missing) continue;
+    if (wanted.length === 0 && !missing) {
+      addressedInView = true;
+      continue;
+    }
     const seqs: Seq[] = [];
     let tokens = 0;
     for (const seq of wanted) {
@@ -176,7 +237,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     }
     // The neighbour is context for a single named turn, not for a range.
     if (seqs.length === 1 && room() - tokens > 200) {
-      const neighbour = vault.episodes.get(threadId, (seqs[0] as Seq) + 1);
+      const neighbour = neighbourOf(vault, threadId, queryText, seqs[0] as Seq);
       if (neighbour !== null && !servedSeqs.has(neighbour.seq) && neighbour.meta.removed !== true) {
         const text = excerpt(neighbour.content, undefined, 160, tokenizer);
         blocks.push({
@@ -204,7 +265,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
 
   // The sequence route consumed its own spans: "turn 345" was an address, and an
   // address must not re-enter the vocabulary as the number 345 (KERNEL A9.3).
-  const routableQuery = consume(queryText, references);
+  const routableQuery = consumeRefs(queryText, references);
   // The user's question routes first; the previous assistant turn's names
   // (the model may be mid-task, KERNEL §5.1) route last, with whatever budget is
   // left — they must never starve the question being asked (KERNEL A9.4).
@@ -423,19 +484,37 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   const unknownName = queryHits.some(
     (hit) => !isResident(hit, residentNames, residentText) && !vault.losses.has(threadId, hit.name),
   );
-  const asksSomething = queryText.includes("?") || INTERROGATIVE.test(queryText);
+  const asksSomething = asks(queryText);
+  const terms = ftsTerms(queryText);
   const noRouteResolved = records.every((record) => !record.resolved);
   // A question that names nothing routable is exactly the case the lexical
   // route exists for; routes that resolved on the previous assistant turn's
   // names answered the model's sentence, not the user's question.
   const nothingNamed = references.length === 0 && queryHits.length === 0;
   const fires =
-    byModel ||
-    (asksSomething && ftsTerms(queryText).length >= 2 && (unknownName || noRouteResolved || nothingNamed));
+    byModel || (asksSomething && terms.length >= 2 && (unknownName || noRouteResolved || nothingNamed));
+  /** The lexical search found every term of the question in a turn the view already holds. */
+  let answeredInView = false;
   if (request.search !== false && fires && canServe()) {
     const started = performance.now();
-    const found = vault.episodes.search(threadId, queryText, 8).filter((e) => !servedSeqs.has(e.seq));
+    // The question's own episode is resident and indexed, but it is never its
+    // own witness (KERNEL A10.1): counted as a match it would report that every
+    // term was found and suppress the broader pass that reaches the older turn
+    // actually being asked for.
+    const self = request.querySeq === undefined ? {} : { exclude: request.querySeq };
+    const matched = vault.episodes.search(threadId, queryText, 8, self);
+    const found = matched.filter((e) => !servedSeqs.has(e.seq));
+    // A hit the view already holds is the view answering the question — but
+    // only when it holds every searchable term. A loose match on one word is a
+    // guess, not an answer, and must not silence the fault (KERNEL A11.1).
+    answeredInView =
+      found.length === 0 &&
+      matched.length > 0 &&
+      vault.episodes
+        .search(threadId, queryText, 8, { ...self, mode: "strict" })
+        .some((e) => servedSeqs.has(e.seq));
     const seqs: Seq[] = [];
+    const hits: Episode[] = [];
     let tokens = 0;
     for (const episode of found.slice(0, byModel ? 4 : 2)) {
       const text = excerpt(episode.content, undefined, Math.min(TOKENS_PER_PAGE, room() - tokens), tokenizer);
@@ -448,21 +527,119 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
         epistemic: epistemicOfRole(episode.role),
       });
       seqs.push(episode.seq);
+      hits.push(episode);
       servedSeqs.add(episode.seq);
       tokens += tokenizer(text) + 8;
     }
     used += tokens;
-    records.push({
-      trigger: "search",
-      query: queryText.slice(0, 120),
-      seqs,
-      tokens,
-      latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
-      resolved: seqs.length > 0,
-    });
+    // The view already holds every term of the question: the view is the
+    // answer, so there is nothing to serve and nothing UNKNOWN (KERNEL A10.1) —
+    // a receipt here would tell the model the material was not found while it
+    // sits in the packet.
+    if (!answeredInView) {
+      records.push({
+        trigger: "search",
+        query: queryText.slice(0, 120),
+        seqs,
+        tokens,
+        latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+        resolved: seqs.length > 0,
+      });
+    }
+
+    // ---- 3b. the path route (KERNEL A11.2)
+    //
+    // A question and its reply are written in the words the thread uses for a
+    // memory, which is what a paraphrase reaches when the original turn is out of
+    // lexical range. The packet that answered it recorded exactly which turns it
+    // was answered from, so the hit is an index and the receipt is the edge back
+    // to the evidence — its locators only, never the neighbours those records
+    // also served. Depth is one: a path page is served, never followed.
+    for (const hit of hits) {
+      if (!canServe()) break;
+      if (hit.role !== "assistant" && !(hit.role === "user" && asks(hit.content))) continue;
+      const startedPath = performance.now();
+      const pathSeqs: Seq[] = [];
+      let pathTokens = 0;
+      for (const source of sourcesOf(vault, threadId, hit)) {
+        if (pathSeqs.length >= 2 || room() - pathTokens <= 60) break;
+        if (servedSeqs.has(source)) continue;
+        const episode = vault.episodes.get(threadId, source);
+        if (episode === null || episode.meta.removed === true) continue;
+        // The path is an address, not an authority: only the archive's own
+        // evidence is served, and it keeps its role label (KERNEL A11.2).
+        if (episode.role !== "user" && episode.role !== "tool" && episode.role !== "attachment") continue;
+        const text = excerpt(
+          episode.content,
+          undefined,
+          Math.min(TOKENS_PER_PAGE, room() - pathTokens),
+          tokenizer,
+        );
+        if (text.length === 0) break;
+        blocks.push({
+          seq: episode.seq,
+          role: episode.role,
+          trigger: `${VIA_LABEL}${hit.seq}`,
+          text,
+          epistemic: epistemicOfRole(episode.role),
+        });
+        pathSeqs.push(episode.seq);
+        servedSeqs.add(episode.seq);
+        pathTokens += tokenizer(text) + 8;
+      }
+      used += pathTokens;
+      // A hit whose turn recovered nothing followable records nothing: there was
+      // no locator to fail, so this is not UNKNOWN.
+      if (pathSeqs.length === 0) continue;
+      records.push({
+        trigger: "path",
+        query: `#${hit.seq}`,
+        seqs: pathSeqs,
+        tokens: pathTokens,
+        latencyMs: Math.round((performance.now() - startedPath) * 1000) / 1000,
+        resolved: true,
+      });
+    }
   }
 
+  // ---- 4. the fault (KERNEL A11.1)
+  //
+  // A turn whose every route came back empty used to leave no trace: the model
+  // was left to infer that the archive had been searched, when only the
+  // question's own words had been tried. The miss is a receipt — for the model,
+  // for the X-ray — and it costs no page of `P_max`.
+  //
+  // Decided here, before the previous reply's names route: a route that resolved
+  // on the model's own last sentence answered that sentence, not this question,
+  // so it must not silence the fault. The record is pushed last all the same.
+  const searchRecord = records.find((record) => record.trigger === "search");
+  const searchFoundNothing = terms.length < 2 || (searchRecord !== undefined && !searchRecord.resolved);
+  const faulted =
+    request.hits === undefined &&
+    request.trigger !== "model" &&
+    request.archiveInView !== true &&
+    asksSomething &&
+    REFERS_BACK.test(queryText) &&
+    terms.length >= 1 &&
+    searchFoundNothing &&
+    !addressedInView &&
+    !answeredInView &&
+    records.every((record) => !record.resolved);
+
   route(prevHits);
+
+  if (faulted) {
+    // No retrieval was attempted, so no latency; the compiler sets `tokens` to
+    // the rendered cost of the notice once it knows the model's tool support.
+    records.push({
+      trigger: "fault",
+      query: queryText.slice(0, 120),
+      seqs: [],
+      tokens: 0,
+      latencyMs: 0,
+      resolved: false,
+    });
+  }
 
   return { blocks, records, historical, tokens: used };
 }
@@ -472,7 +649,13 @@ export function recall(
   vault: Vault,
   threadId: string,
   args: { query?: string; seq?: number; range?: [number, number] },
-  options: { budget: number; residentSeqs?: Set<Seq>; tokenizer?: Tokenizer } = { budget: 1200 },
+  options: {
+    budget: number;
+    residentSeqs?: Set<Seq>;
+    /** The question this recall serves: never its own witness (KERNEL A10.1). */
+    querySeq?: Seq;
+    tokenizer?: Tokenizer;
+  } = { budget: 1200 },
 ): { text: string; result: PageResult } {
   const result = page(vault, threadId, {
     ...(args.query === undefined ? {} : { query: args.query }),
@@ -481,9 +664,14 @@ export function recall(
     budget: options.budget,
     trigger: "model",
     ...(options.residentSeqs ? { residentSeqs: options.residentSeqs } : {}),
+    ...(options.querySeq === undefined ? {} : { querySeq: options.querySeq }),
     ...(options.tokenizer ? { tokenizer: options.tokenizer } : {}),
   });
-  for (const record of result.records) record.trigger = "model";
+  // The model asked, so the records are the model's — except a path record,
+  // which is the receipt of how the hit was reached, not of who asked (A11.2).
+  for (const record of result.records) {
+    if (record.trigger !== "path") record.trigger = "model";
+  }
   if (result.blocks.length === 0) {
     return { text: "UNKNOWN — no exact archive material matches that request.", result };
   }
@@ -494,76 +682,104 @@ export function recall(
   };
 }
 
-/** At most this many turn references per query, and this many episodes per range. */
-const MAX_SEQUENCE_REFS = 3;
-const MAX_SEQUENCE_SPAN = 6;
-
-const SEQUENCE_CUES = [
-  // "#345", "#345-350"
-  /#(\d{1,9})(?:\s*(?:-|–|—|to|through)\s*#?(\d{1,9}))?/g,
-  // "turn 345", "turns 345-350", "message 345", "episode 345", "seq 345"
-  /\b(?:turns?|messages?|episodes?|seq)\s*#?\s*(\d{1,9})(?:\s*(?:-|–|—|to|through)\s*#?(\d{1,9}))?/gi,
-  // "the 345th turn"
-  /\bthe\s+(\d{1,9})(?:st|nd|rd|th)\s+(?:turn|message|episode)\b/gi,
-];
-
-/** "issue #12", "PR #12", "gh #12" number somebody else's archive, not ours. */
-const FOREIGN_HASH = /(?:issue|pr|pull|ticket|bug|gh)\s?$/i;
-
-/** One turn reference, with the span of the query text that produced it. */
-export interface SequenceRef {
-  from: Seq;
-  to: Seq;
-  /** `[start, end)` in the query — consumed before `names()` sees it. */
-  start: number;
-  end: number;
+/**
+ * The turn served beside a named one (KERNEL A11.3). "What did I say on #450?"
+ * about an assistant turn wants the question that reply answered, not the turn
+ * after it; "what did you say to #450?" about a user turn wants the reply. The
+ * address itself stays exact — only the neighbour is read from the speaker cue.
+ */
+function neighbourOf(vault: Vault, threadId: string, query: string, seq: Seq): Episode | null {
+  const target = vault.episodes.get(threadId, seq);
+  if (target?.role === "assistant" && FIRST_PERSON.test(query)) {
+    const answered = nearestSpeaker(vault, threadId, seq, -1, "user");
+    if (answered !== null) return answered;
+  } else if (target?.role === "user" && SECOND_PERSON.test(query)) {
+    const reply = nearestSpeaker(vault, threadId, seq, 1, "assistant");
+    if (reply !== null) return reply;
+  }
+  return vault.episodes.get(threadId, seq + 1);
 }
 
 /**
- * Explicit turn references in a query (KERNEL A9.3). A bare number is never a
- * reference — "I have 345 apples" addresses no turn — so a cue word or `#` is
- * required, and a `#` that belongs to an issue or pull-request number is not
- * ours. Returned in the order they were written, deduplicated by target.
+ * The nearest episode of `role` within `NEIGHBOUR_SPAN` seqs in one direction.
+ * Tool results, attachments, system notes and handoffs are stepped over: a turn
+ * and the turn it answered can have retrieved data between them, and a removed
+ * episode is not a neighbour — it has nothing to show.
  */
-export function sequenceRefs(query: string): SequenceRef[] {
-  if (query.length === 0) return [];
-  const found: SequenceRef[] = [];
-  for (const pattern of SEQUENCE_CUES) {
-    pattern.lastIndex = 0;
-    let match = pattern.exec(query);
-    while (match !== null) {
-      const from = Number(match[1]);
-      const to = match[2] === undefined || match[2] === "" ? from : Number(match[2]);
-      if (from >= 1 && to >= from && !FOREIGN_HASH.test(query.slice(0, match.index))) {
-        found.push({
-          from,
-          to: Math.min(to, from + MAX_SEQUENCE_SPAN - 1),
-          start: match.index,
-          end: match.index + match[0].length,
-        });
-      }
-      match = pattern.exec(query);
-    }
+function nearestSpeaker(
+  vault: Vault,
+  threadId: string,
+  seq: Seq,
+  step: 1 | -1,
+  role: "user" | "assistant",
+): Episode | null {
+  for (let distance = 1; distance <= NEIGHBOUR_SPAN; distance += 1) {
+    const at = seq + step * distance;
+    if (at < 1) return null;
+    const episode = vault.episodes.get(threadId, at);
+    if (episode === null) return null;
+    if (episode.meta.removed === true) continue;
+    if (episode.role === role) return episode;
+    if (!NOT_SPEECH.has(episode.role)) continue;
   }
-  found.sort((a, b) => a.start - b.start);
-  const out: SequenceRef[] = [];
-  for (const reference of found) {
-    if (out.some((r) => r.from === reference.from && r.to === reference.to)) continue;
-    out.push(reference);
-    if (out.length >= MAX_SEQUENCE_REFS) break;
-  }
-  return out;
+  return null;
+}
+
+/** The receipt of the turn an episode belongs to, and the turn it answered. */
+interface Receipt {
+  pages: readonly PageRecord[];
+  /** The user turn the packet was compiled for; `null` when it cannot be named. */
+  turnSeq: Seq | null;
 }
 
 /**
- * Blank out the spans a trigger has already consumed, keeping every offset. A
- * turn reference is an address, not a value: "turn 345" must not also enter the
- * routing vocabulary as the number 345 (KERNEL A9.3).
+ * An assistant episode carries its turn's records in meta and names its packet;
+ * a user episode is the `turn_seq` of the packet compiled to answer it (A11.2).
  */
-function consume(text: string, spans: readonly SequenceRef[]): string {
-  let out = text;
-  for (const span of spans) {
-    out = out.slice(0, span.start) + " ".repeat(span.end - span.start) + out.slice(span.end);
+function receiptOf(vault: Vault, threadId: string, episode: Episode): Receipt {
+  if (episode.role !== "assistant") {
+    return { pages: vault.packets.get(threadId, episode.seq)?.pages ?? [], turnSeq: episode.seq };
+  }
+  const packetId = episode.meta.packetId;
+  const packet = typeof packetId === "string" ? vault.packets.byId(packetId) : null;
+  const carried = episode.meta.pages;
+  return {
+    pages: Array.isArray(carried) ? carried : (packet?.pages ?? []),
+    turnSeq: packet?.turnSeq ?? null,
+  };
+}
+
+/**
+ * The turns an episode's own turn was answered from (KERNEL A11.2): the
+ * **locator** of each resolved record — its first seq, never the neighbours the
+ * record also served — in the order a receipt is worth following. A name route
+ * counts only when the question, or the hit itself, named it: a route that fired
+ * on the previous reply's names answered the model's sentence, not the question.
+ */
+function sourcesOf(vault: Vault, threadId: string, hit: Episode): Seq[] {
+  const receipt = receiptOf(vault, threadId, hit);
+  if (receipt.pages.length === 0) return [];
+  const asked = new Set<string>();
+  for (const found of names(hit.content, { max: 64 })) asked.add(found.name);
+  const question = receipt.turnSeq === null ? null : vault.episodes.get(threadId, receipt.turnSeq);
+  if (question !== null) {
+    for (const found of names(question.content, { max: 64 })) asked.add(found.name);
+  }
+  const ordered = receipt.pages
+    .map((record, index) => ({ record, index }))
+    .filter((row) => row.record.resolved && PATH_PRIORITY[row.record.trigger] !== undefined)
+    .sort(
+      (a, b) =>
+        (PATH_PRIORITY[a.record.trigger] as number) - (PATH_PRIORITY[b.record.trigger] as number) ||
+        a.index - b.index,
+    );
+  const out: Seq[] = [];
+  for (const { record } of ordered) {
+    // Only a name-bearing record (ledger, historical) can have fired on someone
+    // else's words, and only that record needs the question's vocabulary.
+    if (record.name !== undefined && !asked.has(record.name)) continue;
+    const locator = record.seqs[0];
+    if (locator !== undefined && !out.includes(locator)) out.push(locator);
   }
   return out;
 }

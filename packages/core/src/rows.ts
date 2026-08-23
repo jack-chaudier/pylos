@@ -232,9 +232,6 @@ export function toPacket(row: PacketRow): Packet {
   };
 }
 
-/** The tokenizer lives in `pure/terms.ts`; `page.ts` and `index.ts` take it from here. */
-export { ftsTerms };
-
 /** Build a safe FTS5 MATCH expression from free text. */
 export function ftsQuery(query: string, mode: "and" | "or" = "and"): string | null {
   const unique = ftsTerms(query);

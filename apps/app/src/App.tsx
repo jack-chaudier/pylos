@@ -5,6 +5,7 @@ import type {
   Me,
   ModelInfo,
   PageRecord,
+  ProviderId,
   Seq,
   ThreadStats,
 } from "@pylos/protocol";
@@ -12,19 +13,26 @@ import { DEFAULT_BUDGET } from "@pylos/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ApiError, api, onSessionExpired, resolveBase, session, setSession, streamTurn } from "./api.ts";
 import { Account } from "./components/Account.tsx";
+import { Archive } from "./components/Archive.tsx";
 import { Composer } from "./components/Composer.tsx";
 import { Connect } from "./components/Connect.tsx";
-import { EvidenceBar, SealMark } from "./components/Seal.tsx";
+import { EvidenceFigures } from "./components/Evidence.tsx";
+import { Exchange } from "./components/Exchange.tsx";
+import { Gate } from "./components/Gate.tsx";
+import { Presence, type Pulse } from "./components/Presence.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 import { ConfirmSheet, PassphraseSheet, ThreadMenu } from "./components/ThreadMenu.tsx";
-import { TimelineRail } from "./components/TimelineRail.tsx";
-import { type StreamingTurn, Transcript } from "./components/Transcript.tsx";
+import type { StreamingTurn } from "./components/Transcript.tsx";
 import { Xray } from "./components/Xray.tsx";
+import { PULSE_MS } from "./ring.ts";
 import { inTauri, isMac, pickBundle, saveBytes, showWindow } from "./tauri.ts";
 
 const PAGE = 60;
 const MAX_LOADED = 400;
 const THREAD_KEY = "pylos.threadId";
+
+/** The evidence counts what came back, not what was tried: a fault recovers nothing. */
+const resolvedPages = (pages: PageRecord[]): number => pages.filter((page) => page.resolved).length;
 
 interface Window_ {
   episodes: Episode[];
@@ -33,7 +41,7 @@ interface Window_ {
 }
 
 type Sheet =
-  | { kind: "connect" }
+  | { kind: "connect"; provider: ProviderId | undefined; select: string | undefined }
   | { kind: "export" }
   | { kind: "import"; name: string; bytes: Uint8Array }
   | { kind: "forget"; episode: Episode }
@@ -65,17 +73,20 @@ export function App(): React.JSX.Element {
   const [viewRounds, setViewRounds] = useState<number | undefined>(undefined);
   const [building, setBuilding] = useState<number | undefined>(undefined);
   const [recovered, setRecovered] = useState(0);
+  const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [faults, setFaults] = useState<number[]>([]);
+  const [flickerAt, setFlickerAt] = useState<number | undefined>(undefined);
   const [lastTurnSeq, setLastTurnSeq] = useState<number | undefined>(undefined);
   const [attachments, setAttachments] = useState<Episode[]>([]);
   const [sheet, setSheet] = useState<Sheet>(undefined);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState<string | undefined>(undefined);
   const [xray, setXray] = useState(false);
+  const [archive, setArchive] = useState(false);
   const [titleMenu, setTitleMenu] = useState(false);
   const [toast, setToast] = useState<{ text: string; tone?: "bad" } | undefined>(undefined);
   const [view, setView] = useState({ firstSeq: 1, lastSeq: 1 });
   const [jumpTo, setJumpTo] = useState<number | undefined>(undefined);
-  const [scrolled, setScrolled] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [pendingText, setPendingText] = useState<string | undefined>(undefined);
 
@@ -86,6 +97,24 @@ export function App(): React.JSX.Element {
   const say = useCallback((text: string, tone?: "bad"): void => {
     setToast(tone === undefined ? { text } : { text, tone });
     setTimeout(() => setToast(undefined), tone === "bad" ? 6500 : 3200);
+  }, []);
+
+  const currentTurn = useRef<number | undefined>(undefined);
+
+  /** Every span that came back lights its own angle on the ring. */
+  const light = useCallback((pages: PageRecord[]): void => {
+    const at = performance.now();
+    const lit = pages.flatMap((page) => (page.resolved ? page.seqs.map((seq) => ({ seq, at })) : []));
+    if (lit.length > 0) {
+      setPulses((current) => [...current.filter((pulse) => at - pulse.at < PULSE_MS), ...lit]);
+    }
+    // KERNEL A11.1: a fault the model's own recall did not answer stays on the
+    // rim at this turn's angle — the receipt that no route reached the archive.
+    const seq = currentTurn.current;
+    const answered = pages.some((page) => page.resolved && page.trigger === "model");
+    if (seq !== undefined && !answered && pages.some((page) => page.trigger === "fault")) {
+      setFaults((current) => (current.includes(seq) ? current : [...current, seq]));
+    }
   }, []);
 
   // ---------- boot ----------
@@ -108,6 +137,8 @@ export function App(): React.JSX.Element {
     setViewTokens(thread.lastPacket?.tokens);
     setViewRounds(undefined);
     setRecovered(thread.lastPacket?.pages ?? 0);
+    setPulses([]);
+    setFaults([]);
     const lastUser = [...episodes].reverse().find((episode) => episode.role === "user");
     setLastTurnSeq(lastUser?.seq);
     if (thread.models.length > 0) {
@@ -278,93 +309,101 @@ export function App(): React.JSX.Element {
     [models, auth],
   );
 
+  const providerOf = useCallback(
+    (modelId: string): ProviderId | undefined => models.find((entry) => entry.id === modelId)?.provider,
+    [models],
+  );
+
   const send = useCallback(
     (text: string): void => {
       if (threadId === undefined || streaming !== undefined) return;
       if (!providerConfigured(model)) {
         setPendingText(text);
-        setSheet({ kind: "connect" });
+        setSheet({ kind: "connect", provider: providerOf(model), select: undefined });
         return;
       }
       setStreaming({ text: "", model, pages: [] });
       setBuilding(0.08);
       setRecovered(0);
       setViewRounds(undefined);
+      setFaults([]);
 
-      const handle = streamTurn(
-        threadId,
-        { text, model, budget, attachmentSeqs: attachments.map((item) => item.seq) },
-        (event) => {
-          if (event.type === "episode") {
-            if (event.episode.role === "user") setLastTurnSeq(event.episode.seq);
-            setWindow((current) =>
-              current.hasNewer
-                ? current
-                : { ...current, episodes: [...current.episodes, event.episode].slice(-MAX_LOADED) },
-            );
-            setAttachments([]);
-          } else if (event.type === "packet") {
-            setViewTokens(event.tokens);
-            setBuilding(undefined);
-            setRecovered(event.pages.length);
-            if (event.pages.length > 0) {
-              setStreaming((current) =>
-                current === undefined ? current : { ...current, pages: event.pages },
-              );
-            }
-          } else if (event.type === "page") {
-            const page: PageRecord = event.page;
-            setRecovered((count) => count + 1);
-            setStreaming((current) =>
-              current === undefined ? current : { ...current, pages: [...current.pages, page] },
-            );
-          } else if (event.type === "delta") {
-            setStreaming((current) =>
-              current === undefined ? current : { ...current, text: current.text + event.text },
-            );
-          } else if (event.type === "check") {
-            // The draft named lost values: everything streamed so far is void,
-            // and the deltas after this one are the answer that was checked.
-            setRecovered((count) => count + event.pages.length);
-            setStreaming((current) =>
-              current === undefined
-                ? current
-                : {
-                    ...current,
-                    text: "",
-                    check: { names: event.names },
-                    pages: [...current.pages, ...event.pages],
-                  },
-            );
-          } else if (event.type === "done") {
-            const finished = event.episode;
-            setWindow((current) =>
-              current.hasNewer
-                ? current
-                : { ...current, episodes: [...current.episodes, finished].slice(-MAX_LOADED) },
-            );
-            setStreaming(undefined);
-            setBuilding(undefined);
-            void refreshThread();
-          } else if (event.type === "error") {
-            setStreaming(undefined);
-            setBuilding(undefined);
-            if (event.code === "no_provider") {
-              setPendingText(text);
-              setSheet({ kind: "connect" });
-            } else if (event.code !== "unauthorized") {
-              say(event.message, "bad");
-            }
-            void refreshThread();
+      const handle = streamTurn(threadId, { text, model, budget }, (event) => {
+        if (event.type === "episode") {
+          if (event.episode.role === "user") {
+            setLastTurnSeq(event.episode.seq);
+            currentTurn.current = event.episode.seq;
           }
-        },
-      );
+          if (event.episode.role === "handoff") setFlickerAt(performance.now());
+          setWindow((current) =>
+            current.hasNewer
+              ? current
+              : { ...current, episodes: [...current.episodes, event.episode].slice(-MAX_LOADED) },
+          );
+          setAttachments([]);
+        } else if (event.type === "packet") {
+          setViewTokens(event.tokens);
+          setBuilding(Math.min(1, event.tokens / Math.max(1, event.budget)));
+          setRecovered(resolvedPages(event.pages));
+          light(event.pages);
+          if (event.pages.length > 0) {
+            setStreaming((current) => (current === undefined ? current : { ...current, pages: event.pages }));
+          }
+        } else if (event.type === "page") {
+          const page: PageRecord = event.page;
+          setRecovered((count) => count + (page.resolved ? 1 : 0));
+          light([page]);
+          setStreaming((current) =>
+            current === undefined ? current : { ...current, pages: [...current.pages, page] },
+          );
+        } else if (event.type === "delta") {
+          setBuilding(undefined);
+          setStreaming((current) =>
+            current === undefined ? current : { ...current, text: current.text + event.text },
+          );
+        } else if (event.type === "check") {
+          // The draft named lost values: everything streamed so far is void,
+          // and the deltas after this one are the answer that was checked.
+          setRecovered((count) => count + resolvedPages(event.pages));
+          light(event.pages);
+          setStreaming((current) =>
+            current === undefined
+              ? current
+              : {
+                  ...current,
+                  text: "",
+                  check: { names: event.names },
+                  pages: [...current.pages, ...event.pages],
+                },
+          );
+        } else if (event.type === "done") {
+          const finished = event.episode;
+          setWindow((current) =>
+            current.hasNewer
+              ? current
+              : { ...current, episodes: [...current.episodes, finished].slice(-MAX_LOADED) },
+          );
+          setStreaming(undefined);
+          setBuilding(undefined);
+          void refreshThread();
+        } else if (event.type === "error") {
+          setStreaming(undefined);
+          setBuilding(undefined);
+          if (event.code === "no_provider") {
+            setPendingText(text);
+            setSheet({ kind: "connect", provider: providerOf(model), select: undefined });
+          } else if (event.code !== "unauthorized") {
+            say(event.message, "bad");
+          }
+          void refreshThread();
+        }
+      });
       turn.current = handle;
       void handle.done.then(() => {
         turn.current = undefined;
       });
     },
-    [threadId, streaming, model, budget, attachments, providerConfigured, refreshThread, say],
+    [threadId, streaming, model, budget, providerConfigured, providerOf, refreshThread, say, light],
   );
 
   const stop = useCallback((): void => {
@@ -377,31 +416,15 @@ export function App(): React.JSX.Element {
 
   // ---------- actions ----------
 
+  /** The handoff line is the server's to write, once the next turn actually runs. */
   const pickModel = useCallback(
     (next: string): void => {
       if (next === model) return;
-      const previous = model;
       setModel(next);
       if (threadId === undefined) return;
       void api.settings(threadId, { model: next }).catch(() => undefined);
-      if ((stats?.turns ?? 0) > 0) {
-        void api
-          .handoff(threadId, next)
-          .then((episode) => {
-            setWindow((current) =>
-              current.hasNewer
-                ? current
-                : { ...current, episodes: [...current.episodes, episode].slice(-MAX_LOADED) },
-            );
-            void refreshThread();
-          })
-          .catch((error: Error) => {
-            setModel(previous);
-            say(error.message, "bad");
-          });
-      }
     },
-    [model, threadId, stats?.turns, refreshThread, say],
+    [model, threadId],
   );
 
   const attach = useCallback(
@@ -523,14 +546,33 @@ export function App(): React.JSX.Element {
     [window_.episodes],
   );
 
+  /** The exchange on screen: the last thing you said, and the answer to it. */
+  const exchange = useMemo(() => {
+    const list = window_.episodes;
+    let question: Episode | undefined;
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const episode = list[i];
+      if (episode?.role === "user") {
+        question = episode;
+        break;
+      }
+    }
+    const answer =
+      question === undefined
+        ? undefined
+        : [...list].reverse().find((item) => item.role === "assistant" && item.seq > question.seq);
+    return { question, answer };
+  }, [window_.episodes]);
+
   /** KERNEL A6: a user turn with no answer after it renders as *no reply*. */
-  const danglingTurn = useMemo(() => {
-    if (streaming !== undefined || window_.hasNewer) return undefined;
-    const last = window_.episodes.at(-1);
-    return last?.role === "user" ? last : undefined;
-  }, [streaming, window_]);
+  const awaitingReply =
+    streaming === undefined &&
+    !window_.hasNewer &&
+    exchange.question !== undefined &&
+    exchange.answer === undefined;
 
   const empty = window_.episodes.length === 0 && streaming === undefined;
+  const presenceState = streaming === undefined ? "idle" : building === undefined ? "streaming" : "building";
 
   // KERNEL A10.3: a turn may cost more than one request. The receipt says how
   // many, so the view figure can say it too once the turn has settled.
@@ -562,9 +604,9 @@ export function App(): React.JSX.Element {
   if (!booted) {
     return (
       <div className="app solo">
-        <div className="coldstart">
-          <SealMark className="seal-emblem" />
-        </div>
+        <Gate label="Pylos">
+          <p className="gate-note">Opening the archive…</p>
+        </Gate>
       </div>
     );
   }
@@ -573,17 +615,15 @@ export function App(): React.JSX.Element {
     const local = inTauri || me?.hosted === false;
     return (
       <div className="app solo">
-        <div className="coldstart">
-          <SealMark className="seal-emblem" />
-          <h1>Pylos is unreachable.</h1>
-          <p>
+        <Gate label="Pylos is unreachable">
+          <p className="gate-note">
             {local
               ? "The Pylos server is not running. Start it with pylos serve, then try again."
               : "Retrying the connection."}
           </p>
           <button
             type="button"
-            className="pill"
+            className="pill gate-cta"
             onClick={() => {
               setOffline(false);
               setBooted(false);
@@ -592,7 +632,7 @@ export function App(): React.JSX.Element {
           >
             Retry
           </button>
-        </div>
+        </Gate>
       </div>
     );
   }
@@ -614,7 +654,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="app">
-      <header className={`titlebar${isMac && inTauri ? " macos" : ""}`} data-scrolled={scrolled}>
+      <header className={`titlebar${isMac && inTauri ? " macos" : ""}`}>
         <span className="menu-anchor title-slot">
           <button type="button" className="thread-title" onClick={() => setTitleMenu((value) => !value)}>
             {stats?.title ?? "Pylos"}
@@ -652,66 +692,45 @@ export function App(): React.JSX.Element {
           ) : null}
         </span>
         <span className="titlebar-spacer" />
-        {window_.hasNewer ? (
-          <button type="button" className="ghost" onClick={jumpToNow}>
-            Now
-          </button>
-        ) : null}
-        <EvidenceBar
-          stats={stats}
-          building={building}
-          recovered={recovered}
-          viewTokens={viewTokens}
-          viewRounds={viewRounds}
-          budget={budget}
-          open={xray}
-          onOpen={() => setXray(true)}
-        />
         {hosted && me !== undefined ? <Account me={me} onSignOut={signOut} /> : null}
       </header>
 
-      <div className="transcript-wrap">
+      <main className="stage">
+        <div className="presence-stage">
+          <div className="presence-frame">
+            <Presence
+              turns={stats?.turns ?? 0}
+              state={presenceState}
+              fill={building ?? 0}
+              pulses={pulses}
+              faults={faults}
+              flickerAt={flickerAt}
+            />
+          </div>
+          <EvidenceFigures
+            stats={stats}
+            recovered={recovered}
+            viewTokens={viewTokens}
+            viewRounds={viewRounds}
+            budget={budget}
+            onOpen={() => setXray(true)}
+          />
+        </div>
+
         {empty ? (
-          <div className="coldstart">
-            <SealMark className="seal-emblem" />
-            <h1>Talk forever.</h1>
-            <ul className="thesis">
-              <li>The archive is exact.</li>
-              <li>The view is bounded.</li>
-              <li>Nothing is forgotten silently.</li>
-            </ul>
-          </div>
+          <p className="coldstart-line">Say anything. It will be kept.</p>
         ) : (
-          <>
-            <Transcript
-              threadId={threadId ?? ""}
-              episodes={window_.episodes}
-              capsules={capsules}
-              hasOlder={window_.hasOlder}
-              loadingOlder={loadingOlder}
-              streaming={streaming}
-              jumpTo={jumpTo}
-              onNearTop={loadOlder}
-              onViewportChange={(next) => setView({ firstSeq: next.firstSeq, lastSeq: next.lastSeq })}
-              onForget={(episode) => setSheet({ kind: "forget", episode })}
-              onScrolledChange={setScrolled}
-            />
-            <TimelineRail
-              turns={stats?.turns ?? 1}
-              capsules={capsules}
-              handoffs={handoffs}
-              view={view}
-              onJump={jump}
-              dateFor={dateFor}
-            />
-          </>
+          <Exchange
+            threadId={threadId ?? ""}
+            question={exchange.question}
+            answer={exchange.answer}
+            streaming={streaming}
+            awaitingReply={awaitingReply}
+            hasEarlier={window_.hasOlder || window_.episodes.length > 2}
+            onEarlier={() => setArchive(true)}
+          />
         )}
-        {danglingTurn !== undefined ? (
-          <div className="measure dangling">
-            <div className="no-reply">no reply · send again to retry this turn</div>
-          </div>
-        ) : null}
-      </div>
+      </main>
 
       <Composer
         models={models}
@@ -722,6 +741,11 @@ export function App(): React.JSX.Element {
         onSend={send}
         onStop={stop}
         onPickModel={pickModel}
+        onConnectModel={(provider, next) => {
+          setSheetError(undefined);
+          setSheet({ kind: "connect", provider, select: next });
+        }}
+        onEarlier={() => setArchive(true)}
         onAttach={attach}
         onRemoveAttachment={(seq) => setAttachments((current) => current.filter((item) => item.seq !== seq))}
         onBudget={(next) => {
@@ -735,6 +759,29 @@ export function App(): React.JSX.Element {
             .catch(() => undefined);
         }}
       />
+
+      {archive ? (
+        <Archive
+          threadId={threadId ?? ""}
+          turns={stats?.turns ?? 0}
+          episodes={window_.episodes}
+          capsules={capsules}
+          handoffs={handoffs}
+          hasOlder={window_.hasOlder}
+          hasNewer={window_.hasNewer}
+          loadingOlder={loadingOlder}
+          streaming={streaming}
+          jumpTo={jumpTo}
+          view={view}
+          dateFor={dateFor}
+          onNearTop={loadOlder}
+          onViewportChange={setView}
+          onForget={(episode) => setSheet({ kind: "forget", episode })}
+          onJump={jump}
+          onNow={jumpToNow}
+          onClose={() => setArchive(false)}
+        />
+      ) : null}
 
       {xray && threadId !== undefined ? (
         <Xray
@@ -750,16 +797,19 @@ export function App(): React.JSX.Element {
         <Connect
           statuses={auth}
           grokCliAvailable={grokCli}
+          focus={sheet.provider}
           onClose={() => {
             setSheet(undefined);
             setPendingText(undefined);
           }}
           onDone={() => {
+            const next = sheet.select;
             void (async () => {
               await refreshAuth();
               const list = await api.models(true).catch(() => models);
               setModels(list);
               setSheet(undefined);
+              if (next !== undefined) pickModel(next);
               const text = pendingText;
               setPendingText(undefined);
               if (text !== undefined) setTimeout(() => send(text), 60);

@@ -74,6 +74,8 @@ export {
   type CapsuleRender,
   type CapsuleView,
   epistemicOfRole,
+  FAULT_NOTICE_NO_TOOLS,
+  FAULT_NOTICE_TOOLS,
   type FrontierRender,
   fitRound,
   type HeaderInfo,
@@ -84,6 +86,7 @@ export {
   RECALL_CLAUSE_TOOLS,
   RECALL_TOOL,
   renderCapsules,
+  renderFault,
   renderFrontier,
   renderHeader,
   renderPaged,
@@ -100,6 +103,7 @@ export {
   slug,
   splitSentences,
 } from "./rules.ts";
+export { consumeRefs, type SequenceRef, sequenceRefs } from "./sequence.ts";
 export { ftsTerms } from "./terms.ts";
 export {
   approxTokens,

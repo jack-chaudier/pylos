@@ -3,7 +3,14 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS, needsAuthorityReplay, openVault } from "../src/index.ts";
+import {
+  ATOM_NAME_REBUILD,
+  AUTHORITY_REPLAY,
+  COUNTERS,
+  MIGRATIONS,
+  needsAuthorityReplay,
+  openVault,
+} from "../src/index.ts";
 
 /**
  * A vault written by an earlier build: migrations 001–004 only, so no
@@ -155,6 +162,31 @@ test("a vault with no poisoned atom is marked without being replayed", () => {
     expect(vault.atoms.get("at1")?.value).toBe("Lisbon");
     expect(needsAuthorityReplay(vault, "t1")).toBe(false);
     vault.close();
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("an old vault's atom name index is rebuilt on first open (KERNEL A11.4)", () => {
+  const { home, file } = oldVault();
+  try {
+    const vault = openVault({ home, file, fast: true });
+    // The index is derived, so nothing carried it; it is rebuilt from the atoms.
+    expect(vault.atoms.byName("t1", "user.location").map((a) => a.id)).toEqual(["at1"]);
+    expect(vault.atoms.byName("t1", "lisbon").map((a) => a.id)).toEqual(["at1"]);
+
+    // Once, and never again: reopening neither repeats the work nor undoes it.
+    vault.close();
+    const again = openVault({ home, file, fast: true });
+    expect(again.atoms.byName("t1", "lisbon")).toHaveLength(1);
+    expect(
+      (
+        again.db.query("SELECT COUNT(*) AS n FROM migration WHERE name = ?").get(ATOM_NAME_REBUILD) as {
+          n: number;
+        }
+      ).n,
+    ).toBe(1);
+    again.close();
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

@@ -1,7 +1,7 @@
 import type { Capsule, Episode, PageRecord } from "@pylos/protocol";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api.ts";
-import { bytesLabel, fullStamp, groupedNumber, pageLabel, shortTime, spelled } from "../format.ts";
+import { bytesLabel, fullStamp, groupedNumber, shortTime } from "../format.ts";
+import { CheckLine, RecoveryLine } from "./EvidenceLines.tsx";
 
 export interface StreamingTurn {
   text: string;
@@ -24,7 +24,6 @@ export interface TranscriptProps {
   onNearTop: () => void;
   onViewportChange: (view: { firstSeq: number; lastSeq: number; ratio: number }) => void;
   onForget: (episode: Episode) => void;
-  onScrolledChange: (scrolled: boolean) => void;
 }
 
 const ESTIMATED_ROW = 96;
@@ -35,7 +34,7 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
   const { episodes, capsules, streaming } = props;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const heights = useRef(new Map<number, number>());
-  const [, forceMeasure] = useState(0);
+  const [measured, forceMeasure] = useState(0);
   const [range, setRange] = useState({ start: 0, end: 30 });
   const pinnedToBottom = useRef(true);
   const previousFirstSeq = useRef<number | undefined>(undefined);
@@ -63,8 +62,8 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
       out[i + 1] = (out[i] ?? 0) + (heights.current.get(seq) ?? ESTIMATED_ROW);
     }
     return out;
-    // `forceMeasure` intentionally participates: measuring changes the offsets.
-  }, [episodes, forceMeasure]);
+    // `measured` intentionally participates: measuring changes the offsets.
+  }, [episodes, measured]);
 
   const totalHeight = offsets[episodes.length] ?? 0;
 
@@ -90,7 +89,6 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
         ratio: Math.min(1, Math.max(0, top / scrollable)),
       });
     }
-    props.onScrolledChange(top > 4);
 
     pinnedToBottom.current = element.scrollHeight - bottom < 80;
     if (top < 900 && props.hasOlder && !props.loadingOlder) props.onNearTop();
@@ -134,7 +132,8 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
     const element = scrollRef.current;
     if (element === null || !pinnedToBottom.current) return;
     element.scrollTop = element.scrollHeight;
-  }, [streaming?.text, episodes]);
+    // Measuring shrinks estimated rows, so the foot moves: follow it.
+  }, [streaming?.text, episodes, measured]);
 
   useEffect(() => {
     const seq = props.jumpTo;
@@ -274,99 +273,6 @@ function RowMeta({ episode }: { episode: Episode }): React.JSX.Element {
         </>
       ) : null}
     </div>
-  );
-}
-
-/**
- * What the check round did (KERNEL A9.5, A10.4). Episodes written before 1.2
- * carry `{names, revised}` instead of a status; a check that ran and changed
- * nothing reads the same under either shape. `none` carries no names and says
- * nothing: there was nothing to reopen.
- */
-function CheckLine({ meta }: { meta: unknown }): React.JSX.Element | null {
-  if (meta === null || typeof meta !== "object") return null;
-  const receipt = meta as { names?: unknown; status?: unknown; revised?: unknown };
-  const names = Array.isArray(receipt.names) ? receipt.names.filter((name) => typeof name === "string") : [];
-  if (names.length === 0) return null;
-  const status =
-    typeof receipt.status === "string" ? receipt.status : receipt.revised === true ? "revised" : "confirmed";
-  if (status === "check-failed") {
-    return (
-      <div className="checked" data-failed="true">
-        archive could not be re-read · {names.join(", ")} — unverified
-      </div>
-    );
-  }
-  return (
-    <div className="checked">
-      ↺ reopened the archive · {names.join(", ")}
-      {status === "confirmed" ? " · answer stood" : ""}
-    </div>
-  );
-}
-
-function RecoveryLine({
-  threadId,
-  pages,
-}: {
-  threadId: string;
-  pages: PageRecord[];
-}): React.JSX.Element | null {
-  const [open, setOpen] = useState(false);
-  const [spans, setSpans] = useState<Array<{ seq: number; text: string; ts: number }>>([]);
-  const seqs = useMemo(() => {
-    const all = pages.flatMap((page) => page.seqs);
-    return [...new Set(all)].sort((a, b) => a - b);
-  }, [pages]);
-
-  useEffect(() => {
-    if (!open || spans.length > 0) return;
-    let cancelled = false;
-    void (async () => {
-      const loaded = await Promise.all(
-        seqs.slice(0, 12).map(async (seq) => {
-          try {
-            const episode = await api.episode(threadId, seq);
-            return { seq, text: episode.content, ts: episode.ts };
-          } catch {
-            return { seq, text: "UNKNOWN — the locator did not resolve.", ts: 0 };
-          }
-        }),
-      );
-      if (!cancelled) setSpans(loaded);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, seqs, threadId, spans.length]);
-
-  const resolved = pages.filter((page) => page.resolved).length;
-  const unresolved = pages.length - resolved;
-  const why = useMemo(() => [...new Set(pages.map(pageLabel))].slice(0, 3).join(" · "), [pages]);
-  if (seqs.length === 0 && unresolved === 0) return null;
-
-  return (
-    <>
-      <button type="button" className="recovery" onClick={() => setOpen((value) => !value)}>
-        ↺ recovered {spelled(seqs.length)} earlier {seqs.length === 1 ? "moment" : "moments"}
-        {why.length > 0 ? ` · ${why}` : ""}
-        {unresolved > 0 ? ` · ${unresolved} unknown` : ""}
-      </button>
-      {open ? (
-        <div className="recovery-spans">
-          {spans.map((span) => (
-            <div key={span.seq} className="recovery-span">
-              <b>
-                #{span.seq}
-                {span.ts > 0 ? ` · ${fullStamp(span.ts)}` : ""}
-              </b>
-              {span.text}
-            </div>
-          ))}
-          {spans.length === 0 ? <div className="recovery-span">recovering…</div> : null}
-        </div>
-      ) : null}
-    </>
   );
 }
 

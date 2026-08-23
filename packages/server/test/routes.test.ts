@@ -2,10 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Capsule, Episode, Me, ModelInfo, Packet, ThreadStats, TurnEvent } from "@pylos/protocol";
+import type {
+  AuthStatus,
+  Capsule,
+  Episode,
+  Me,
+  ModelInfo,
+  Packet,
+  ThreadStats,
+  TurnEvent,
+} from "@pylos/protocol";
 import type { ForgetOutcome } from "../src/kernel.ts";
 import { FakeProvider } from "./fake-provider.ts";
-import { type Harness, harness, jsonPost } from "./harness.ts";
+import { type Fetcher, type Harness, harness, jsonPost } from "./harness.ts";
 
 let h: Harness;
 let provider: FakeProvider;
@@ -214,14 +223,99 @@ describe("the turn", () => {
     expect(packet.resident.some((item) => item.type === "header")).toBe(true);
   });
 
+  // 409, not 401: the session is fine and the client should not treat this as
+  // a sign-out — the thread simply cannot run a turn until a provider is added.
   test("a turn without a configured provider asks the UI to connect", async () => {
     const thread = await newThread();
     const response = await h.fetch(
       `/api/threads/${thread.threadId}/turn`,
       jsonPost({ text: "hi", model: "claude-opus-4-5-20251101" }),
     );
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "no_provider" });
+  });
+});
+
+describe("signing in to xAI on the device flow", () => {
+  /** The device grant: one `authorization_pending`, then the token. */
+  const grant = (): { fetch: Fetcher; now: () => number; polls: () => number } => {
+    let polls = 0;
+    return {
+      polls: () => polls,
+      // The flow's own interval gates the second poll; the clock moves past it.
+      now: () => 1_000_000 + polls * 10_000,
+      fetch: async (url) => {
+        if (url.endsWith("/oauth2/device/code")) {
+          return Response.json({
+            device_code: "SECRET-DEVICE-CODE",
+            user_code: "ABCD-EFGH",
+            verification_uri: "https://x.ai/device",
+            verification_uri_complete: "https://x.ai/device?code=ABCD-EFGH",
+            expires_in: 600,
+            interval: 5,
+          });
+        }
+        if (url.endsWith("/oauth2/token")) {
+          polls += 1;
+          return polls === 1
+            ? Response.json({ error: "authorization_pending" }, { status: 400 })
+            : Response.json({ access_token: "at-1", refresh_token: "rt-1", expires_in: 3600 });
+        }
+        return new Response("no", { status: 404 });
+      },
+    };
+  };
+
+  test("start hands the app a code and a URL, and never the device code", async () => {
+    const xai = grant();
+    const device = await harness({ authFetch: xai.fetch, authNow: xai.now });
+    try {
+      const started = await device.json<{
+        handle: string;
+        userCode: string;
+        verificationUrl: string;
+        expiresIn: number;
+        interval: number;
+      }>("/api/auth/xai/device/start", jsonPost({}));
+      expect(started.userCode).toBe("ABCD-EFGH");
+      expect(started.verificationUrl).toBe("https://x.ai/device?code=ABCD-EFGH");
+      expect(started.expiresIn).toBe(600);
+      expect(started.interval).toBe(5);
+      expect(started.handle.length).toBeGreaterThan(8);
+      expect(JSON.stringify(started)).not.toContain("SECRET-DEVICE-CODE");
+    } finally {
+      await device.dispose();
+    }
+  });
+
+  test("poll answers pending until the account connects, then reports the credential", async () => {
+    const xai = grant();
+    const device = await harness({ authFetch: xai.fetch, authNow: xai.now });
+    try {
+      const started = await device.json<{ handle: string }>("/api/auth/xai/device/start", jsonPost({}));
+      const poll = (): Promise<Response> =>
+        device.fetch("/api/auth/xai/device/poll", jsonPost({ handle: started.handle }));
+
+      const pending = await poll();
+      expect(pending.status).toBe(200);
+      expect(await pending.json()).toEqual({ pending: true });
+
+      const connected = await poll();
+      expect(connected.status).toBe(200);
+      const status = (await connected.json()) as AuthStatus;
+      expect(status.provider).toBe("xai");
+      expect(status.mode).toBe("device");
+      expect(status.ok).toBe(true);
+      expect(JSON.stringify(status)).not.toContain("at-1");
+      expect(xai.polls()).toBe(2);
+    } finally {
+      await device.dispose();
+    }
+  });
+
+  test("a handle nobody started is refused", async () => {
+    const response = await h.fetch("/api/auth/xai/device/poll", jsonPost({ handle: "nope" }));
+    expect(response.status).toBe(410);
   });
 });
 

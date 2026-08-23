@@ -25,16 +25,17 @@ state(seq, salt) = first 16 bytes of sha256(utf8(SEED + ":" + salt + ":" + seq))
 rng = xoshiro128**  seeded with state as four little-endian uint32 (if all zero, set s[0]=1)
 ```
 
-`salt` ∈ {`"layout"`, `"text"`, `"plant"`, `"memory"`, `"poison"`, `"probe"`}.
-Draw helpers (all on `rng.next()` →
-uint32): `u01() = next()/2^32`; `int(a,b) = a + floor(u01()·(b−a+1))`;
-`pick(list) = list[int(0, len−1)]`; `weighted(table) = first key whose cumulative
-weight > u01()·total` (table order as listed). Never reuse a stream across seqs.
+`salt` ∈ {`"layout"`, `"text"`, `"plant"`, `"memory"`, `"poison"`, `"probe"`,
+`"fault"`}. Draw helpers (all on `rng.next()` → uint32): `u01() = next()/2^32`;
+`int(a,b) = a + floor(u01()·(b−a+1))`; `pick(list) = list[int(0, len−1)]`;
+`weighted(table) = first key whose cumulative weight > u01()·total` (table order
+as listed). Never reuse a stream across seqs.
 Planting (§3.1–§3.5) uses the `"plant"` stream of seq 0 only, drawn in the order
 §3 lists; §3.6 uses `"memory"`, §3.7 uses `"poison"`, and the checkpoint sequence
-probes (§7.11) use `"probe"` — all at seq 0. The later plants have their own
-streams so that adding them leaves the fact/quote/number manifest of a given seed
-byte-identical.
+probes (§7.11) use `"probe"` — all at seq 0. The fault probes (§7.14) use
+`"fault"` at the checkpoint seq, so every checkpoint invents its own words. The
+later plants have their own streams so that adding them leaves the
+fact/quote/number manifest of a given seed byte-identical.
 
 ## 2. Layout
 
@@ -295,6 +296,32 @@ For checkpoint `K` (after episode `K` is appended and compacted):
     previous or current value: a closed proposal was never true. The checks are
     scoped to the person's own key, because a packet a million turns deep
     carries other people's certificates. `atoms.proposed` is reported.
+14. **Faults (KERNEL A11.1).** 20 questions per checkpoint, drawn from
+    `stream(SEED,"fault",K)`: one of the cues the amendment names — `my`, `did`,
+    `was`, `earlier` — plus two invented consonant–vowel words of 6–8 letters,
+    redrawn until no word the generator can write shares their first five
+    letters (the vocabularies and every planted string in the manifest; the stem
+    test is coarse because FTS5 stems). Every other word of the question is
+    dropped by `ftsTerms` — asserted, not assumed: `ftsTerms(question)` must be
+    exactly the two invented words — and none is capitalised or numeric, so
+    `names()` is empty, no position is addressed, and the lexical route runs and
+    returns nothing. Pass iff `packet.pages` holds exactly one record with
+    `trigger:"fault"` and `resolved:false`, the packet text contains
+    `⟨pylos fault⟩`, and none of the question's *own* routes (`sequence`,
+    `search`, `path`) resolved. A route that fired on the previous assistant
+    turn's names (§5.1) answered the model's sentence, not the question, and
+    does not suppress the fault; `resolvedElsewhere` counts probes where an own
+    route resolved anyway. Separately, the `fault` records drawn by every
+    *other* probe family at the same checkpoint are counted as `falseFaults`
+    and must be zero — those questions are addressable by construction, by turn
+    number, by a name the ledger knows, or by content words the episode holds.
+
+    Proves that a question carrying a conversational cue whose every route
+    misses leaves exactly one fault receipt in the packet and one notice in its
+    text, and that no probe the corpus can address draws one. Proves nothing
+    about the cue table's precision on natural questions: which questions are
+    allowed to fault is a heuristic (KERNEL A11.1, THEORY §15), and this probe
+    exercises only the four cues it names, on questions built to miss.
 
 Any assertion failure is recorded (the run continues) and the report marks the
 result `FAIL` with the first failing checkpoint; the results file is written
@@ -304,7 +331,7 @@ regardless.
 
 ```json
 {
-  "schema": "pylos.bench.million.v2",
+  "schema": "pylos.bench.million.v3",
   "seed": "1", "N": 1000000, "budget": 8192,
   "generator": { "version": "1.0.0", "vocabSha256": "…", "manifestSha256": "…" },
   "kernel": { "version": "1.0.0", "leaf": 32, "fanout": 8,
@@ -325,6 +352,7 @@ regardless.
       "poison": { "A": { "checked": 4, "passed": 4 }, "B": { "checked": 4, "passed": 4 },
                   "C": { "checked": 4, "passed": 4 }, "failed": [],
                   "proposedAtoms": 16, "maxTokens": 7948 },
+      "faults": { "asked": 20, "faulted": 20, "resolvedElsewhere": 0, "falseFaults": 0 },
       "ledger": { "entries": 41233, "parentsChecked": 256, "conservationOk": true, "completenessOk": true },
       "verify": { "ok": true, "headHash": "…", "checkedTo": 10000 },
       "archiveBytes": 4819231, "residentTokensP50": 7650,
@@ -359,8 +387,8 @@ the two turns asked for by name, each with the role of the episode found there.
 
 The markdown report is rendered from this JSON only; the landing page reads the
 same file. `v2` adds `sequence`, `memories` and `poison` to every checkpoint and
-`memories`/`persons` to `planted`; a `v1` file has none of them and is not
-re-renderable by the current `--rerender`.
+`memories`/`persons` to `planted`; `v3` adds `faults`. A file from an earlier
+schema lacks those keys and is not re-renderable by the current `--rerender`.
 
 ## 9. Live variant (`--live --model grok-4.3 --turns 2000`)
 

@@ -203,6 +203,10 @@ export async function runTurn(vault: Vault, threadId: string, options: RunTurnOp
       const served = recall(vault, threadId, args, {
         budget: pagedShare,
         residentSeqs,
+        // The question is in the index like any other turn; a recall whose words
+        // match it would match itself, and a self-match suppresses the broader
+        // pass that reaches the turn actually asked for (KERNEL A9.4, A10.1).
+        querySeq: userEpisode.seq,
         ...(options.tokenizer === undefined ? {} : { tokenizer: options.tokenizer }),
       });
       for (const record of served.result.records) {

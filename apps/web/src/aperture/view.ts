@@ -120,8 +120,8 @@ export function mountAperture(): void {
     const counts = state.levelCounts;
     const marks =
       state.recovered === null
-        ? `the ember mark is turn ${nf.format(REVISION_SEQ)}`
-        : `the ember marks are turns ${nf.format(REVISION_SEQ)} and ${nf.format(state.recovered.seq)}`;
+        ? `the full-height mark is turn ${nf.format(REVISION_SEQ)}`
+        : `the full-height marks are turns ${nf.format(REVISION_SEQ)} and ${nf.format(state.recovered.seq)}`;
     els.levels.textContent =
       counts.length === 0
         ? `Compaction hierarchy · level 4 → level 0 · ${marks}`
@@ -271,14 +271,6 @@ export function mountAperture(): void {
 
   els.replay.addEventListener("click", play);
 
-  for (const btn of document.querySelectorAll<HTMLElement>("[data-play-aperture]")) {
-    btn.addEventListener("click", () => {
-      section.scrollIntoView({ behavior: reduced.matches ? "auto" : "smooth", block: "start" });
-      section.focus({ preventScroll: true });
-      window.setTimeout(play, reduced.matches ? 0 : 400);
-    });
-  }
-
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver(
       (entries) => {
@@ -336,10 +328,15 @@ function drawTimeline(canvas: HTMLCanvasElement, state: RunState): void {
 
   const css = getComputedStyle(canvas);
   const read = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  const ash = read("--ash", "#7C786E");
-  const verdigris = read("--verdigris", "#1F6F5C");
-  const ember = read("--ember", "#C98A2E");
-  const hairline = read("--hairline", "rgba(23,22,15,0.12)");
+  const ash = read("--ash", "#7A6A5A");
+  const kiln = read("--kiln", "#D9450E");
+  const bone = read("--bone", "#F4EBDD");
+  const hairline = read("--hairline-kiln", "rgba(244,235,221,0.28)");
+
+  // The canvas sits on the kiln ground; everything drawn on it is bone, except
+  // the densest level, which recedes into the ground the way it does in fact.
+  ctx.fillStyle = kiln;
+  ctx.fillRect(0, 0, w, h);
 
   const levels = Math.max(state.levelCounts.length, 5);
   const lane = h / levels;
@@ -359,8 +356,8 @@ function drawTimeline(canvas: HTMLCanvasElement, state: RunState): void {
 
     const filled = w * progress;
     const spacing = filled / count;
-    ctx.strokeStyle = lvl >= 2 ? verdigris : ash;
-    ctx.globalAlpha = lvl >= 2 ? 0.8 : 0.45;
+    ctx.strokeStyle = lvl === 0 ? ash : bone;
+    ctx.globalAlpha = lvl >= 2 ? 0.85 : 0.5;
 
     if (spacing < 1.4) {
       ctx.lineWidth = lvl === 0 ? 3 : 2;
@@ -388,16 +385,17 @@ function drawTimeline(canvas: HTMLCanvasElement, state: RunState): void {
   ];
   for (const mark of marks) {
     const x = Math.round(w * (mark / state.total)) + 0.5;
-    ctx.strokeStyle = ember;
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = bone;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x, 1);
     ctx.lineTo(x, h - 1);
     ctx.stroke();
   }
 
-  ctx.fillStyle = verdigris;
-  ctx.fillRect(Math.max(0, w * progress - 1.5), 0, 2, h);
+  // the head of the stream, drawn as a block so it is not read as a mark
+  ctx.fillStyle = bone;
+  ctx.fillRect(Math.max(0, w * progress - 3), 0, 3, h);
 }
 
 function fitCanvas(canvas: HTMLCanvasElement): void {

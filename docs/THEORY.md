@@ -160,6 +160,32 @@ absent from the resident packet, a page is served whose span contains the value
 and reported per kind, never assumed: fraction of served ledger pages whose
 span was not needed for the checkpoint query.
 
+**The fault is routing's honest complement (KERNEL A11.1).** The rule above says
+when to page; it says nothing about a question that carries no `names(q)` at
+all — a conversational cue with no routable name is not a miss the ledger can
+even see. Before A11.1 that turn's `pages` was simply empty: the model had no
+way to tell "nothing here needed paging" from "nothing here could be found."
+A11.1 turns the silent case into a receipt: when a question asks something and
+refers to the conversation or the past, and none of the question's own routes
+— sequence, name, lexical — resolved, the kernel writes one
+`PageRecord{trigger:"fault", seqs:[], resolved:false}` and renders the
+`⟨pylos fault⟩` line for the model to read. The decision is made over the
+question's own routes only: a route that fired on the previous assistant
+turn's names (§5.1) answered the model's sentence, not the user's question, and
+does not silence the fault. A fault is not a claim about the archive or the
+view — the answer may be resident under words the question didn't use, or held
+under a name the extractor missed — it is a claim about the index: nothing in
+it was reached. The handler is the same `recall` tool as A9.4; the fault only
+guarantees the model is told to try.
+
+**Oracle.** A cue-bearing question with no resolving route leaves exactly one
+`fault` record and no resolved record of its own, and the `⟨pylos fault⟩` line
+appears in the packet at unchanged budget (`packages/core/test/page.test.ts`,
+"a question no route can reach records a fault, not silence"); an addressable
+probe — one with a turn number, a routable name, or lexical overlap — never
+draws a fault (same file, "the fault is about routing: a hit, a turn in view or
+a question about the world do not").
+
 ## 7. Row 32: certificate compaction `claim + deciding value + pointer`
 
 **Statement.** Policy-aware certificates give the best justified accuracy of any
@@ -346,11 +372,36 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
 - **Row 48** (EXACT): rolling exact window + stable-key index + exact fallback is
   the reference architecture; Pylos = recent slot + atom/loss index + `UNKNOWN`.
   Two more exact routes reach the index besides the ledger: the sequence address
-  (`#seq`, deterministic — "turn 345" pages that seq exactly, KERNEL A9.3) and
-  the lexical address (FTS5, porter stemming, KERNEL A9.4). Neither is a ledger
-  guarantee — the sequence route answers "what's at this position", not "what
-  was lost", and the lexical route is a best-effort address over stemmed text,
-  not a completeness proof.
+  (`#seq`, deterministic — "turn 345" pages that seq exactly, KERNEL A9.3;
+  A11.3 makes the neighbour speaker-aware — "what did I say on #450" follows
+  the question that reply answered rather than the next episode by position,
+  and `#n` accepts thousands separators) and the lexical address (FTS5, porter
+  stemming, KERNEL A9.4). Neither is a ledger guarantee — the sequence route
+  answers "what's at this position", not "what was lost", and the lexical
+  route is a best-effort address over stemmed text, not a completeness proof.
+  **The path (KERNEL A11.2) is a third, and it rides on the second:** a
+  question and its reply are the thread's own vocabulary for a memory, and the
+  packet that answered the question is the edge back to the evidence. When the
+  lexical route (or `recall`) reaches a hit that is itself an answered question
+  or its reply, the pager follows that hit's own page records — their
+  locators, not their neighbours — and serves those as `path` pages, so a
+  paraphrase that only overlaps the *later* retelling of a memory still reaches
+  the original spans. It is an address, not an authority: a source reached this
+  way keeps its role label and its `epistemic` (A10.1) exactly as the archive
+  holds it; depth is one — a path page is served, not itself followed, in the
+  turn that serves it; it is bounded by the same `P_max` and paged budget as
+  every other page; it is closed by forgetting (a removed source fails to
+  resolve) and conserved by export (`packets.jsonl` travels, so the edge
+  survives a Laptop Funeral, KERNEL A10.7). The oracle is the kernel test
+  suite, not a bench result this release: `packages/core/test/page.test.ts`
+  ("a paraphrase reaches the source through the turn that answered it", "the
+  path follows locators in priority order, and only the question's own names",
+  "the path skips a source the view already holds", "a forgotten source is not
+  served by the path, and records nothing") and
+  `packages/core/test/bundle.test.ts` ("packets travel, so a paraphrase still
+  finds the source after import"). No bench result measures the path this
+  release; "a recurring question gets cheaper" is the mechanism's intent, not a
+  measured claim.
 - **Frontier factorization lemma** (proved, finite portfolio model): minimum page
   portfolios factor over connected components — Pylos pages per ledger name
   independently, which is exact only because names are treated as independent.
@@ -381,6 +432,23 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
   cap nor record; every provider request of a turn is now `≤ B` by
   construction (`fitRound`) and receipted in `Packet.rounds`, chained into the
   assistant episode's `meta.roundsDigest` (KERNEL A10.3).
+- That a fault means the archive lacks the answer. A `⟨pylos fault⟩` line
+  (KERNEL A11.1) says the question's own routes found nothing; the answer may
+  be resident under other words, or absent entirely — the kernel does not know
+  which, and says so rather than guessing either way.
+- That the fault gate is precise on natural questions. The cue list (a
+  possessive, a past tense, a time word, a memory verb) is a heuristic chosen
+  to make a false positive cheap — an extra sentence the model can act on or
+  ignore — not a classifier with measured precision or recall (THEORY §15).
+- That the path (KERNEL A11.2) makes a recurring question cheaper. That is the
+  mechanism's intent; no bench result measures a cost reduction, and none is
+  claimed.
+- That a question needing many sources — *compare the eleven stories* — is
+  known to be incompletely answered when only one source is found. A question
+  today is answered from whichever routes fire; there is no receipt for the
+  n−k sources that did not resolve. The fault (KERNEL A11.1) covers the total
+  miss, not the partial one; collection completeness is the next kernel
+  milestone (A12), not a shipped one.
 
 ## 15. Where the mechanism exceeds the evidence
 
@@ -426,3 +494,33 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
     precision of the check round's page selection outside the synthetic
     corpus. The mechanism is exact by construction; its natural-language
     precision is not measured.
+11. **The fault gate's precision and recall on natural questions (KERNEL
+    A11.1) are unmeasured.** The bench measures the two things it can measure
+    deterministically: that a routing miss on a question carrying a
+    conversational cue and two words the corpus cannot contain leaves exactly
+    one `fault` record and the notice, and that every addressable probe —
+    sequence, name, or lexical — never draws one (`bench/results/million-5.md`,
+    kernel 1.3.0; `million-4.md` is the same kernel before the version bump). Whether the cue
+    list fires on the right natural sentences, and how often it fires on ones
+    that need no fault, is not a number this or any release reports.
+12. **The path's precision on natural conversation (KERNEL A11.2) is
+    unmeasured, and it has no run-scale number.** The kernel tests establish
+    that the mechanism does what §13 describes on planted fixtures; nothing in
+    `bench/results` runs it at the million-turn scale or asks whether the
+    edges it follows on natural paraphrase are the ones a user meant.
+13. **The search self-hit was invisible to the deterministic bench.** The
+    lexical route's strict AND pass matched the asking turn's own episode
+    before the broader OR pass could run, so a natural question with a cue
+    could fault instead of recovering the line it named — fixed by excluding
+    the asking turn from `episodes.search` inside the SQL, with a kernel
+    regression test. The bench never surfaced it because it compiles without
+    a question seq: the corpus's probes are asked of an already-compiled
+    packet, not appended as a turn that then searches the index containing
+    itself. A natural-question family that compiles *with* the asking turn in
+    the index — the shape a real conversation has — is a measurement still
+    owed.
+14. **Collection completeness is unmeasured and unbuilt.** A question that
+    needs n sources is answered today from whichever routes fire, with
+    nothing recorded about the n−k that did not resolve; the fault (KERNEL
+    A11.1) is a receipt for a total miss, not a count against a known n. This
+    is the next kernel milestone (A12), not a claim this release makes.

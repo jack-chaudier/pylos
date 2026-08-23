@@ -22,6 +22,7 @@ import { sha256 } from "./hash.ts";
 import { canonicalJson } from "./pure/canonical.ts";
 import { deriveLedger, sourceNamesOfEpisode } from "./pure/ledger.ts";
 import { normalizeName } from "./pure/names.ts";
+import { type AtomRow, toAtom } from "./rows.ts";
 import { type StoredCapsule, type Vault, VaultError } from "./vault.ts";
 import { verify } from "./verify.ts";
 import { unzip, zip } from "./zip.ts";
@@ -314,7 +315,7 @@ export async function importBundle(
   }
 
   const episodes = parseJsonl<Episode & { contentHash?: string }>(archive.get("episodes.jsonl"));
-  const atoms = parseJsonl<Record<string, unknown>>(archive.get("atoms.jsonl"));
+  const atoms = parseJsonl<AtomRow>(archive.get("atoms.jsonl"));
   const capsules = parseJsonl<StoredCapsule>(archive.get("capsules.jsonl"));
   const loss = parseJsonl<Record<string, unknown>>(archive.get("loss.jsonl"));
   const packets = parseJsonl<Record<string, unknown>>(archive.get("packets.jsonl"));
@@ -377,7 +378,14 @@ export async function importBundle(
       if (episode.seq % 4096 === 0) vault.putCheckpoint(threadId, episode.seq, episode.hash);
     }
     counters.bytes = bytes;
-    for (const atom of atoms) insertRow(vault, "atom", { ...atom, thread_id: threadId });
+    for (const atom of atoms) {
+      const row = { ...atom, thread_id: threadId };
+      insertRow(vault, "atom", row);
+      // `atom_name` is derived, so it is not in the bundle; without it an imported
+      // thread cannot route a question by an atom's subject (KERNEL A11.4). The
+      // counters are set below, so the index is rebuilt without `atoms.insert`.
+      vault.atoms.indexNames(toAtom(row));
+    }
     for (const capsule of capsules) {
       vault.capsules.insert({ ...capsule, threadId });
     }

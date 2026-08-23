@@ -76,6 +76,21 @@ export function spelled(count: number): string {
   return WORDS[count] ?? groupedNumber(count);
 }
 
+/**
+ * The turns a recovery line names, after the count: `turn 966`, `turns 1 and
+ * 966`, `turns 1, 966 and 4,120`. Past three the line stops listing and says
+ * how many more, because the point is which archive came back, not all of it.
+ */
+export function turnList(seqs: readonly number[]): string {
+  const [first, second, third] = seqs;
+  if (first === undefined) return "";
+  if (second === undefined) return `turn ${groupedNumber(first)}`;
+  const head = `turns ${groupedNumber(first)}`;
+  if (third === undefined) return `${head} and ${groupedNumber(second)}`;
+  if (seqs.length === 3) return `${head}, ${groupedNumber(second)} and ${groupedNumber(third)}`;
+  return `${head}, ${groupedNumber(second)} and ${groupedNumber(seqs.length - 2)} more`;
+}
+
 export function bytesLabel(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 ** 2) return `${Math.round(size / 1024)} KiB`;
@@ -100,5 +115,12 @@ export function pageLabel(page: PageRecord): string {
       return "recall";
     case "explicit":
       return "asked for";
+    case "fault":
+      return "page fault";
+    case "path": {
+      // KERNEL A11.2: the query is the hit whose receipt led here, written `#61234`.
+      const hit = Number(/\d+/.exec(page.query ?? "")?.[0]);
+      return Number.isFinite(hit) ? `by way of turn ${groupedNumber(hit)}` : "by way of an earlier answer";
+    }
   }
 }

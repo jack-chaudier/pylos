@@ -93,6 +93,52 @@ test("the recall tool loop serves exact archive material and records the pages",
   expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
 });
 
+/**
+ * The model's own recall query is the user's question in much the same words, so
+ * the question's episode — resident, indexed like any other turn — is the first
+ * thing an AND search matches. Counted as a hit it reports "found" and suppresses
+ * the broader pass that reaches the turn actually being asked for (KERNEL A9.4).
+ */
+test("a recall in the question's own words still reaches the archive, not UNKNOWN", async () => {
+  const { vault, thread } = tempVault();
+  await runTurn(vault, thread.id, {
+    text: "The flue on the kiln was blocked, which is why it fired unevenly.",
+    model: "m",
+    provider: echo,
+    budget: 8192,
+  });
+  const next = rng(71);
+  for (let i = 0; i < 300; i += 1) {
+    vault.episodes.append(thread.id, { role: "user", content: syntheticTurn(next, i) });
+  }
+  compact(vault, thread.id, { budget: 8192 });
+
+  const question = "Remind me about the unevenly fired kiln, exactly.";
+  let asked = false;
+  const echoingRecaller: Provider = async function* (request) {
+    if (!asked) {
+      asked = true;
+      yield { type: "tool_call", id: "c", name: "recall", arguments: JSON.stringify({ query: question }) };
+      yield { type: "done" };
+      return;
+    }
+    const tool = request.messages.find((m) => m.role === "tool");
+    yield { type: "delta", text: tool?.content ?? "" };
+    yield { type: "done" };
+  };
+
+  const result = await runTurn(vault, thread.id, {
+    text: question,
+    model: "m",
+    provider: echoingRecaller,
+    budget: 8192,
+    check: false,
+  });
+  expect(result.text).not.toContain("UNKNOWN");
+  expect(result.text).toContain("flue");
+  expect(result.pages.some((p) => p.trigger === "model" && p.seqs.includes(1))).toBe(true);
+});
+
 test("recall for material that does not exist returns UNKNOWN, not a guess", async () => {
   const { vault, thread } = tempVault();
   await runTurn(vault, thread.id, { text: "hello", model: "m", provider: echo, budget: 8192 });
@@ -571,4 +617,65 @@ test("fitRound displaces the oldest window spans, never the header or the prompt
   // Nothing to give: a single oversized prompt is returned as it is, not truncated.
   const only: ChatMessage[] = [{ role: "user", content: "x".repeat(4000) }];
   expect(fitRound(only, 10)).toEqual(only);
+});
+
+test("a fault is handled by the model's own rewording (KERNEL A11.1)", async () => {
+  const { vault, thread } = tempVault();
+  const next = rng(63);
+  for (let i = 0; i < 450; i += 1) {
+    vault.episodes.append(thread.id, {
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: syntheticTurn(next, i),
+    });
+  }
+  vault.episodes.append(thread.id, { role: "user", content: "The kiln at Sagres fired unevenly." });
+  for (let i = 0; i < 450; i += 1) {
+    vault.episodes.append(thread.id, {
+      role: i % 2 === 0 ? "assistant" : "user",
+      content: syntheticTurn(next, i),
+    });
+  }
+  vault.episodes.append(thread.id, { role: "assistant", content: "Noted." });
+  compact(vault, thread.id, { budget: 8192 });
+
+  const seen: string[] = [];
+  // The question uses none of the archive's words, so no route reaches it; the
+  // fault tells the model to try other words, and the archive answers those.
+  const rewording: Provider = async function* (request) {
+    seen.push(packetText(request.messages));
+    if (seen.length === 1) {
+      yield {
+        type: "tool_call",
+        id: "call_1",
+        name: "recall",
+        arguments: JSON.stringify({ query: "kiln at Sagres fired unevenly" }),
+      };
+      yield { type: "done" };
+      return;
+    }
+    const tool = request.messages.find((m) => m.role === "tool");
+    yield { type: "delta", text: `It was uneven: ${tool?.content.slice(0, 120) ?? ""}` };
+    yield { type: "done" };
+  };
+
+  const result = await runTurn(vault, thread.id, {
+    text: "what did we agree about the pottery furnace?",
+    model: "m",
+    provider: rewording,
+    budget: 8192,
+    check: false,
+  });
+
+  expect(seen[0]).toContain("⟨pylos fault⟩");
+  const fault = result.pages.findIndex((p) => p.trigger === "fault");
+  const served = result.pages.findIndex((p) => p.trigger === "model" && p.resolved);
+  expect(fault).toBeGreaterThanOrEqual(0);
+  expect(result.pages[fault]?.resolved).toBe(false);
+  expect(served).toBeGreaterThan(fault);
+  expect(result.pages[served]?.seqs).toContain(451);
+  expect(result.text).toContain("The kiln at Sagres fired unevenly.");
+  expect(result.packet.rounds).toHaveLength(2);
+  for (const round of result.packet.rounds ?? []) {
+    expect(round.tokens).toBeLessThanOrEqual(8192);
+  }
 });

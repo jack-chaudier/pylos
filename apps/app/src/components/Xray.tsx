@@ -10,7 +10,7 @@ import type {
 } from "@pylos/protocol";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.ts";
-import { groupedNumber, shortHash, tokenCount } from "../format.ts";
+import { groupedNumber, pageLabel, shortHash, tokenCount } from "../format.ts";
 
 export interface XrayProps {
   threadId: string;
@@ -21,11 +21,12 @@ export interface XrayProps {
   onVerified: () => void;
 }
 
+/** One accent: the slots are told apart by how much kiln is in them. */
 const RESIDENT_COLOR: Record<ResidentType, string> = {
-  header: "var(--ash)",
-  frontier: "var(--verdigris)",
-  capsule: "var(--verdigris-deep)",
-  paged: "var(--ember)",
+  header: "color-mix(in srgb, var(--ash) 55%, transparent)",
+  frontier: "var(--kiln)",
+  capsule: "var(--kiln-deep)",
+  paged: "color-mix(in srgb, var(--kiln) 50%, var(--bone))",
   recent: "var(--ink)",
   query: "var(--oxblood)",
 };
@@ -122,7 +123,7 @@ export function Xray(props: XrayProps): React.JSX.Element {
             </span>
           ) : null}
           {reconstructed ? (
-            <span className="badge" data-tone="ember">
+            <span className="badge" data-tone="kiln">
               reconstructed
             </span>
           ) : null}
@@ -235,17 +236,19 @@ export function Xray(props: XrayProps): React.JSX.Element {
                   packet.pages.map((page, index) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: order of service is the identity
                     <div key={`${page.trigger}-${index}`} className="page-row">
+                      {/* KERNEL A11.1: a fault is not an UNKNOWN locator — it is the receipt
+                          that no locator was found, and it says which question found none. */}
                       <span className="trigger" data-resolved={page.resolved}>
-                        {page.resolved ? page.trigger : "unknown"}
+                        {page.resolved || page.trigger === "fault" ? page.trigger : "unknown"}
                       </span>
                       <span>
-                        {page.name ?? page.query ?? "—"}
+                        {page.trigger === "path" ? pageLabel(page) : (page.name ?? page.query ?? "—")}
                         {page.seqs.length > 0
                           ? ` · #${page.seqs.slice(0, 6).map(groupedNumber).join(", #")}`
                           : ""}
                       </span>
                       <span className="latency">
-                        {page.tokens}t · {page.latencyMs}ms
+                        {page.trigger === "fault" ? "no route" : `${page.tokens}t · ${page.latencyMs}ms`}
                       </span>
                     </div>
                   ))
@@ -280,7 +283,7 @@ export function Xray(props: XrayProps): React.JSX.Element {
             </dl>
             <div className="sheet-actions">
               {verified !== undefined ? (
-                <span className="badge" data-tone={verified.ok ? "verdigris" : "oxblood"}>
+                <span className="badge" data-tone={verified.ok ? "kiln" : "oxblood"}>
                   {verified.ok
                     ? `chain verified to #${groupedNumber(verified.checkedTo)} · ${shortHash(verified.headHash)}`
                     : "chain mismatch"}

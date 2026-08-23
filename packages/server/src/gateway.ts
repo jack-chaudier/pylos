@@ -31,120 +31,133 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
   }
 
   const threadId = await resolveThread(context, request.headers.get("x-pylos-thread"));
-  const settings = await context.kernel.settings(threadId);
-  const model = body.model ?? settings.model ?? DEFAULT_MODEL;
-  const budget = settings.budget ?? DEFAULT_BUDGET;
 
-  const resolved = await context.registry.resolve(model);
-  if (resolved.provider !== "ollama" && !(await context.auth.configured(resolved.provider))) {
-    throw new HttpError(401, "no_provider", `Connect ${resolved.provider} first.`);
-  }
-  const bound = await context.registry.providerFn(model);
-  await context.kernel.setSettings(threadId, { model: bound.model, budget });
+  // The lane is claimed as soon as the thread is known: everything that can
+  // reorder two requests — resolving the model, checking the provider — happens
+  // while the ticket is already held, so two completions on one thread commit in
+  // the order they arrived. A full queue is a `429` here, before any output.
+  const ticket = context.kernel.enterTurn(threadId);
+  try {
+    const settings = await context.kernel.settings(threadId);
+    const model = body.model ?? settings.model ?? DEFAULT_MODEL;
+    const budget = settings.budget ?? DEFAULT_BUDGET;
 
-  const id = `chatcmpl-${crypto.randomUUID()}`;
-  const created = Math.floor(Date.now() / 1000);
-  const turn = context.kernel.runTurn(
-    threadId,
-    { text, model: bound.model, provider: bound.provider, budget, signal: request.signal },
-    bound.fn,
-  );
-
-  if (body.stream !== true) {
-    let answer = "";
-    let usage = { inputTokens: 0, outputTokens: 0 };
-    for await (const event of turn) {
-      // The committed episode is the final text: it is the reissued answer when
-      // a check replaced the draft, and the draft plus the kernel's unverified
-      // line when the check could not be run (KERNEL A9.5, A10.4).
-      if (event.type === "done") {
-        answer = event.episode.content;
-        if (event.usage !== undefined) usage = event.usage;
-      } else if (event.type === "error") {
-        throw new HttpError(502, event.code ?? "turn_failed", event.message);
-      }
+    const resolved = await context.registry.resolve(model);
+    if (resolved.provider !== "ollama" && !(await context.auth.configured(resolved.provider))) {
+      throw new HttpError(401, "no_provider", `Connect ${resolved.provider} first.`);
     }
-    return json(
-      {
-        id,
-        object: "chat.completion",
-        created,
-        model: bound.model,
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: answer },
-            finish_reason: "stop",
-          },
-        ],
-        usage: {
-          prompt_tokens: usage.inputTokens,
-          completion_tokens: usage.outputTokens,
-          total_tokens: usage.inputTokens + usage.outputTokens,
-        },
-      },
-      { headers: { "X-Pylos-Thread": threadId } },
-    );
-  }
+    const bound = await context.registry.providerFn(model);
 
-  const stream = new SseStream({ "X-Pylos-Thread": threadId });
-  const head = { id, object: "chat.completion.chunk", created, model: bound.model };
-  void (async () => {
-    /** Text streamed since the draft was last retracted. */
-    let sinceCheck = "";
-    let retracted = false;
-    try {
-      stream.send({ ...head, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
+    const id = `chatcmpl-${crypto.randomUUID()}`;
+    const created = Math.floor(Date.now() / 1000);
+    const turn = context.kernel.runTurn(
+      threadId,
+      { text, model: bound.model, provider: bound.provider, budget, signal: request.signal },
+      bound.fn,
+      ticket,
+    );
+
+    if (body.stream !== true) {
+      let answer = "";
+      let usage = { inputTokens: 0, outputTokens: 0 };
       for await (const event of turn) {
-        if (stream.isClosed) break;
-        if (event.type === "delta") {
-          sinceCheck += event.text;
-          stream.send({
-            ...head,
-            choices: [{ index: 0, delta: { content: event.text }, finish_reason: null }],
-          });
-        } else if (event.type === "check") {
-          retracted = true;
-          sinceCheck = "";
-          stream.send({
-            ...head,
-            choices: [{ index: 0, delta: {}, finish_reason: null }],
-            x_pylos: { event: "check", names: event.names, retract: true },
-          });
-        } else if (event.type === "done") {
-          // A check that could not be run streams no replacement; the kept draft
-          // and its unverified line are the answer, and must still arrive.
-          if (retracted && sinceCheck.length === 0 && event.episode.content.length > 0) {
-            stream.send({
-              ...head,
-              choices: [{ index: 0, delta: { content: event.episode.content }, finish_reason: null }],
-            });
-          }
-          stream.send({
-            ...head,
-            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-            ...(event.usage === undefined
-              ? {}
-              : {
-                  usage: {
-                    prompt_tokens: event.usage.inputTokens,
-                    completion_tokens: event.usage.outputTokens,
-                    total_tokens: event.usage.inputTokens + event.usage.outputTokens,
-                  },
-                }),
-          });
+        // The committed episode is the final text: it is the reissued answer when
+        // a check replaced the draft, and the draft plus the kernel's unverified
+        // line when the check could not be run (KERNEL A9.5, A10.4).
+        if (event.type === "done") {
+          answer = event.episode.content;
+          if (event.usage !== undefined) usage = event.usage;
         } else if (event.type === "error") {
-          stream.send({ error: { message: event.message, code: event.code ?? "turn_failed" } });
+          throw new HttpError(502, event.code ?? "turn_failed", event.message);
         }
       }
-    } catch (error) {
-      stream.send({ error: { message: String((error as Error).message ?? error) } });
-    } finally {
-      if (!stream.isClosed) stream.raw("[DONE]");
-      stream.close();
+      return json(
+        {
+          id,
+          object: "chat.completion",
+          created,
+          model: bound.model,
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: answer },
+              finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: usage.inputTokens,
+            completion_tokens: usage.outputTokens,
+            total_tokens: usage.inputTokens + usage.outputTokens,
+          },
+        },
+        { headers: { "X-Pylos-Thread": threadId } },
+      );
     }
-  })();
-  return stream.response;
+
+    const stream = new SseStream({ "X-Pylos-Thread": threadId });
+    const head = { id, object: "chat.completion.chunk", created, model: bound.model };
+    void (async () => {
+      /** Text streamed since the draft was last retracted. */
+      let sinceCheck = "";
+      let retracted = false;
+      try {
+        stream.send({ ...head, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
+        for await (const event of turn) {
+          if (stream.isClosed) break;
+          if (event.type === "delta") {
+            sinceCheck += event.text;
+            stream.send({
+              ...head,
+              choices: [{ index: 0, delta: { content: event.text }, finish_reason: null }],
+            });
+          } else if (event.type === "check") {
+            retracted = true;
+            sinceCheck = "";
+            stream.send({
+              ...head,
+              choices: [{ index: 0, delta: {}, finish_reason: null }],
+              x_pylos: { event: "check", names: event.names, retract: true },
+            });
+          } else if (event.type === "done") {
+            // A check that could not be run streams no replacement; the kept draft
+            // and its unverified line are the answer, and must still arrive.
+            if (retracted && sinceCheck.length === 0 && event.episode.content.length > 0) {
+              stream.send({
+                ...head,
+                choices: [{ index: 0, delta: { content: event.episode.content }, finish_reason: null }],
+              });
+            }
+            stream.send({
+              ...head,
+              choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+              ...(event.usage === undefined
+                ? {}
+                : {
+                    usage: {
+                      prompt_tokens: event.usage.inputTokens,
+                      completion_tokens: event.usage.outputTokens,
+                      total_tokens: event.usage.inputTokens + event.usage.outputTokens,
+                    },
+                  }),
+            });
+          } else if (event.type === "error") {
+            stream.send({ error: { message: event.message, code: event.code ?? "turn_failed" } });
+          }
+        }
+      } catch (error) {
+        stream.send({ error: { message: String((error as Error).message ?? error) } });
+      } finally {
+        if (!stream.isClosed) stream.raw("[DONE]");
+        stream.close();
+      }
+    })();
+    return stream.response;
+  } catch (error) {
+    // Nothing was streamed, so nothing will release the lane. Releasing twice is
+    // a no-op, so a throw after the handoff is safe here too.
+    ticket.release();
+    throw error;
+  }
 }
 
 export async function handleGatewayModels(context: ServerContext): Promise<Response> {

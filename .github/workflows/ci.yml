@@ -19,3 +19,6 @@ jobs:
       - run: bun run --cwd apps/app build
       - run: bun run --cwd apps/web build
       - run: bun test --cwd apps/web
+      - run: bun test --cwd apps/app
+      - name: Clean tree (a build must not change tracked files)
+        run: git diff --exit-code --stat

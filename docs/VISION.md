@@ -95,6 +95,11 @@ compact the source of truth, and never let the view forget what it forgot.**
   re-read · names — unverified* — the draft stands, but the gap is not hidden.
 * When a belief has changed: *That was true earlier, but it changed on turn
   4,812.* with both moments one click away.
+* When a fault was handled by the model's own search: *↺ page fault ·
+  recovered one earlier moment · recall.* A question the index cannot reach is
+  told to the model, never guessed. A path recovery — the archive answering
+  through the turn that once answered the same question — reads *↺ recovered
+  one earlier moment · by way of turn 61,234.*
 * When the model changes: a hairline divider — *Grok stopped here. Claude
   continued from the same thread.*
 * Click the evidence bar → the **X-ray**: the exact packet the model saw, the
@@ -113,6 +118,9 @@ Everything else collapses inward. No dashboards. No vocabulary.
 * Not a fact-checker. The verification round pages the archive and gives the
   model one more try only for names the ledger already recorded as dropped;
   it does not check a reply against the world.
+* Not a claim that a fault is evidence of absence. When Pylos cannot address a
+  question against its index, it says the index missed — not that the archive
+  lacks the answer.
 
 ## Lineage
 

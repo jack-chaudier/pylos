@@ -22,13 +22,22 @@ export interface Harness {
   dispose(): Promise<void>;
 }
 
+/** A stand-in for auth.x.ai, injected into the `AuthService` the harness builds. */
+export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
+
 const ORIGIN = "tauri://localhost";
 export const HOSTED_ORIGIN = "https://pylos.test";
 
-export async function harness(options: { provider?: FakeProvider; web?: string } = {}): Promise<Harness> {
+export async function harness(
+  options: { provider?: FakeProvider; web?: string; authFetch?: Fetcher; authNow?: () => number } = {},
+): Promise<Harness> {
   const home = await mkdtemp(join(tmpdir(), "pylos-test-"));
   const provider = options.provider ?? new FakeProvider();
-  const auth = new AuthService({ store: new CredentialStore(join(home, "auth.json")) });
+  const auth = new AuthService({
+    store: new CredentialStore(join(home, "auth.json")),
+    ...(options.authFetch === undefined ? {} : { fetch: options.authFetch }),
+    ...(options.authNow === undefined ? {} : { now: options.authNow }),
+  });
   await auth.setApiKey("xai", "xai-test-key-0000");
   const kernel = await openKernel({ home });
   const registry = new ProviderRegistry(auth, { xai: provider });
@@ -73,6 +82,8 @@ export interface HostedHarness {
   sse(path: string, body: unknown, session: string): Promise<TurnEvent[]>;
   /** Runs the device grant end to end for one subject and returns their session. */
   login(sub: string, profile?: { name?: string; email?: string }): Promise<{ session: string; me: Me }>;
+  /** Leaves the device grant unauthorized, so a poll keeps answering `pending`. */
+  holdGrant(held: boolean): void;
   registry: HostedRegistry;
   provider: FakeProvider;
   home: string;
@@ -119,6 +130,7 @@ export async function hostedHarness(
     home,
     provider,
     registry,
+    holdGrant: xai.hold,
     json: async <T>(path: string, init: RequestInit = {}, session?: string): Promise<T> => {
       const response = await call(path, session === undefined ? init : withSession(init, session));
       return (await response.json()) as T;
@@ -164,7 +176,9 @@ export function withSession(init: RequestInit, session: string): RequestInit {
 function fakeXai(): {
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
   identify(sub: string, profile: { name?: string; email?: string }): void;
+  hold(held: boolean): void;
 } {
+  let held = false;
   let current = {
     sub: "user-a",
     name: undefined as string | undefined,
@@ -174,6 +188,9 @@ function fakeXai(): {
   return {
     identify(sub, profile): void {
       current = { sub, name: profile.name, email: profile.email };
+    },
+    hold(value): void {
+      held = value;
     },
     fetch: async (url, init): Promise<Response> => {
       if (url.endsWith("/oauth2/device/code")) {
@@ -187,6 +204,7 @@ function fakeXai(): {
         });
       }
       if (url.endsWith("/oauth2/token")) {
+        if (held) return Response.json({ error: "authorization_pending" }, { status: 400 });
         const body = String((init?.body as URLSearchParams | undefined)?.toString() ?? "");
         const sub = /device_code=dc-([^&]+)/.exec(body)?.[1] ?? current.sub;
         const token = fakeJwt({ sub, iss: "https://auth.x.ai" });

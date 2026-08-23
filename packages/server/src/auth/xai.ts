@@ -202,6 +202,11 @@ export class AuthService {
     };
   }
 
+  /** Whether this handle is a device grant this service started and still holds. */
+  knowsDevice(handle: string): boolean {
+    return this.pending.has(handle);
+  }
+
   /** Never returns a token; the caller sees only `pending` or the masked status. */
   async pollDevice(handle: string): Promise<{ pending: true } | AuthStatus> {
     const result = await this.pollDeviceCredential(handle);

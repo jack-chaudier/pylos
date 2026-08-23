@@ -207,6 +207,9 @@ UPDATE tombstone SET removal_seq = 0 WHERE removal_seq IS NULL;
 /** The code migration that replays derived atom state under v1.1 rules (KERNEL A10.5). */
 export const AUTHORITY_REPLAY = "009-authority-replay";
 
+/** The code migration that rebuilds the derived atom name index (KERNEL A11.4). */
+export const ATOM_NAME_REBUILD = "010-atom-name-rebuild";
+
 /** Counter keys maintained incrementally (see `counter`). */
 export const COUNTERS = {
   episodes: "episodes",

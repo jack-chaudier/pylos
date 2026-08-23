@@ -86,13 +86,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError("offline", "Pylos is unreachable.", 0);
   }
-  if (response.status === 401) throw unauthorized();
-  if (!response.ok) throw await toError(response);
+  if (!response.ok) throw await failure(response);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
-function unauthorized(): ApiError {
+/**
+ * Codes the auth flows own. A 401 carrying one of these is a statement about a
+ * provider or a sign-in attempt, not about the session the app is holding —
+ * `no_provider` in particular answers 409 now but answered 401 before 1.3.
+ */
+const NOT_SESSION_END = new Set(["no_provider", "auth_denied", "auth_required", "invalid_grant"]);
+
+/** Turns a failed response into an error, and ends the session when it was the session. */
+async function failure(response: Response): Promise<ApiError> {
+  const error = await toError(response);
+  if (response.status !== 401 || NOT_SESSION_END.has(error.code)) return error;
   setSession(null);
   expired?.();
   return new ApiError("unauthorized", "This session has ended. Sign in again.", 401);
@@ -142,6 +151,8 @@ export interface LoginStart {
   verificationUrl: string;
   verificationUrlComplete?: string;
   expiresIn: number;
+  /** Seconds between polls, when the server says; hosted start does not. */
+  interval?: number;
 }
 
 export const api = {
@@ -176,8 +187,6 @@ export const api = {
   verify: (id: string): Promise<{ ok: boolean; headHash: string; checkedTo: number }> =>
     request(`/api/threads/${id}/verify`, post({})),
 
-  handoff: (id: string, model: string): Promise<Episode> =>
-    request<Episode>(`/api/threads/${id}/handoff`, post({ model })),
   forget: (id: string, seqs: Seq[], reason?: string): Promise<ForgetResult> =>
     request<ForgetResult>(`/api/threads/${id}/forget`, post({ seqs, reason })),
   settings: (id: string, patch: { model?: string; budget?: number }): Promise<unknown> =>
@@ -191,8 +200,7 @@ export const api = {
 
   exportBundle: async (id: string, passphrase: string): Promise<Uint8Array> => {
     const response = await fetch(`${base}/api/threads/${id}/export`, authorized(post({ passphrase })));
-    if (response.status === 401) throw unauthorized();
-    if (!response.ok) throw await toError(response);
+    if (!response.ok) throw await failure(response);
     return new Uint8Array(await response.arrayBuffer());
   },
 
@@ -248,13 +256,8 @@ export function streamTurn(
       onEvent({ type: "error", message: "Pylos is unreachable.", code: "offline" });
       return;
     }
-    if (response.status === 401) {
-      const error = unauthorized();
-      onEvent({ type: "error", message: error.message, code: error.code });
-      return;
-    }
     if (!response.ok || response.body === null) {
-      const error = await toError(response);
+      const error = await failure(response);
       onEvent({ type: "error", message: error.message, code: error.code });
       return;
     }

@@ -13,13 +13,13 @@ import type {
 } from "@pylos/protocol";
 import { pylosHome } from "./home.ts";
 import type { ProviderFn } from "./providers/types.ts";
+import type { Ticket } from "./turn-queue.ts";
 
 export interface TurnInput {
   text: string;
   model: string;
   provider: ProviderId;
   budget: number;
-  attachmentSeqs?: Seq[];
   /** KERNEL A4: a toolless model gets a different view contract and one more page. */
   supportsTools?: boolean;
   /** The request's signal: a turn still waiting for the thread gives up when the client does. */
@@ -77,12 +77,32 @@ export interface Kernel {
   capsules(threadId: ThreadId, level?: number): Promise<Capsule[]>;
   ledger(threadId: ThreadId, opts: { name?: string; limit?: number }): Promise<LossEntry[]>;
   /**
-   * Turns on one thread are serialized; a full queue throws `429 thread_busy`
-   * from this call, before the caller has opened a stream.
+   * Claims this thread's place in the turn queue, synchronously, so a route can
+   * take it the moment the request arrives and hand it to `runTurn` later. A
+   * full queue throws `429 thread_busy` from here; the caller owns the ticket
+   * until it passes it on, and must release it if it never does.
    */
-  runTurn(threadId: ThreadId, input: TurnInput, provider: ProviderFn): AsyncIterable<TurnEvent>;
+  enterTurn(threadId: ThreadId): Ticket;
+  /**
+   * Turns on one thread are serialized, in the order they claimed their place.
+   * Without a ticket this claims one itself — a full queue throws
+   * `429 thread_busy` before the caller has opened a stream. The turn records
+   * its model and budget as the thread's settings once it holds the lane.
+   */
+  runTurn(
+    threadId: ThreadId,
+    input: TurnInput,
+    provider: ProviderFn,
+    ticket?: Ticket,
+  ): AsyncIterable<TurnEvent>;
   attach(threadId: ThreadId, files: AttachInput[]): Promise<Episode[]>;
-  handoff(threadId: ThreadId, model: string, provider: ProviderId): Promise<Episode>;
+  /**
+   * Switches the thread's model and writes the divider — but only when a model
+   * has already spoken and it was a different one. `undefined` means the thread
+   * is already on this model; no assistant turn at all is `409 no_speaker`.
+   * An ordinary turn writes its own divider, so this is for API clients.
+   */
+  handoff(threadId: ThreadId, model: string, provider: ProviderId): Promise<Episode | undefined>;
   forget(threadId: ThreadId, target: ForgetTarget): Promise<ForgetOutcome>;
   exportBundle(threadId: ThreadId, opts: { passphrase: string; range?: [Seq, Seq] }): Promise<Uint8Array>;
   importBundle(data: Uint8Array, passphrase: string): Promise<ThreadStats>;

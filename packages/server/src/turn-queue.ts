@@ -7,6 +7,12 @@
  * happened. Turns on one thread therefore run strictly one after another;
  * different threads are untouched.
  *
+ * The lane is claimed at arrival, as the request's first act: everything that
+ * can reorder two requests — reading the body, resolving the model, asking the
+ * provider registry anything — happens while the ticket is already held, so the
+ * committed order is the order the turns arrived in, not the order their
+ * preparation happened to finish.
+ *
  * Refusing the second turn would lose what the user typed, so it waits — at most
  * `MAX_PENDING` deep, and only while its request is alive. A waiter that is
  * abandoned lets go of the queue immediately, so a hosted lease is never held by
@@ -34,9 +40,10 @@ export class TurnQueue {
   private readonly lanes = new Map<string, Lane>();
 
   /**
-   * Claims this thread's next slot synchronously, so a full queue is a `429`
-   * before a response has begun rather than an error inside a live stream. The
-   * ticket must be released — the caller owns it from here.
+   * Claims this thread's next slot synchronously — the order of these calls is
+   * the order the turns commit in, and a full queue is a `429` before a response
+   * has begun rather than an error inside a live stream. The ticket must be
+   * released — the caller owns it from here.
    */
   enter(threadId: string): Ticket {
     const lane = this.lanes.get(threadId) ?? { tail: Promise.resolve(), depth: 0 };

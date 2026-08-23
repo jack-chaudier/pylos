@@ -1,21 +1,22 @@
 {
   "name": "@pylos/web",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
-  "description": "pylos.dev \u2014 the landing page, and the aperture that runs the compiler in your browser.",
+  "description": "pylos.vercel.app \u2014 the landing page, and the aperture that runs the compiler in your browser.",
   "license": "Apache-2.0",
   "scripts": {
     "prepare:kernel": "bun scripts/link-kernel.ts",
     "prepare:snapshot": "bun scripts/snapshot.ts",
-    "prebuild": "bun run prepare:kernel && bun run prepare:snapshot && bun scripts/assets.ts",
+    "prepare:series": "bun scripts/series.ts",
+    "prebuild": "bun run prepare:kernel && bun run prepare:snapshot && bun run prepare:series && bun scripts/assets.ts",
     "build": "vite build",
     "predev": "bun run prepare:kernel",
     "dev": "vite",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "assets": "bun scripts/assets.ts",
-    "lint": "bunx biome check src scripts"
+    "lint": "bunx biome check src scripts test"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

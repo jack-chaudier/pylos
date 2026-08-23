@@ -6,6 +6,7 @@ set -eu
 REPO="jack-chaudier/pylos"
 VERSION="${PYLOS_VERSION:-latest}"
 PREFIX="${PYLOS_PREFIX:-$HOME/.local/bin}"
+SOURCE="https://github.com/$REPO"
 
 say() { printf '%s\n' "$*" >&2; }
 die() { say "pylos: $*"; exit 1; }
@@ -13,16 +14,20 @@ die() { say "pylos: $*"; exit 1; }
 os=$(uname -s)
 arch=$(uname -m)
 
-case "$os" in
-  Darwin) plat=macos ;;
-  Linux)  plat=linux ;;
-  *) die "unsupported platform: $os. Pylos ships for macOS and Linux." ;;
-esac
-
 case "$arch" in
   arm64|aarch64) arch=arm64 ;;
   x86_64|amd64)  arch=x64 ;;
-  *) die "unsupported architecture: $arch" ;;
+esac
+
+case "$os/$arch" in
+  Darwin/arm64) plat=macos ;;
+  Linux/x64)    plat=linux ;;
+  Darwin/x64)
+    die "no release build for Intel macOS. Pylos ships macOS on Apple silicon and Linux on x64; build from source: $SOURCE" ;;
+  Linux/arm64)
+    die "no release build for arm64 Linux. Pylos ships macOS on Apple silicon and Linux on x64; build from source: $SOURCE" ;;
+  *)
+    die "unsupported platform: $os $arch. Pylos ships macOS on Apple silicon and Linux on x64; build from source: $SOURCE" ;;
 esac
 
 asset="pylos-${plat}-${arch}.tar.gz"
@@ -49,4 +54,4 @@ case ":$PATH:" in
   *":$PREFIX:"*) ;;
   *) say "pylos: add $PREFIX to your PATH" ;;
 esac
-say "pylos: run 'pylos' to start the thread"
+say "pylos: run 'pylos serve' and open http://127.0.0.1:7334/app/"

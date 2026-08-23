@@ -1,0 +1,1039 @@
+{
+  "source": "bench/results/million-5.json",
+  "seed": "1",
+  "turns": 1000000,
+  "budget": 8192,
+  "points": [
+    {
+      "seq": 10000,
+      "archiveBytes": 17496392,
+      "viewP50": 7970,
+      "viewMax": 8013,
+      "ledger": 7218,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 20000,
+      "archiveBytes": 26863376,
+      "viewP50": 7751,
+      "viewMax": 7798,
+      "ledger": 14166,
+      "rolling": 0.5,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 30000,
+      "archiveBytes": 38936984,
+      "viewP50": 7836,
+      "viewMax": 7897,
+      "ledger": 21059,
+      "rolling": 0.333,
+      "bm25": 0.333,
+      "pylos": 1
+    },
+    {
+      "seq": 40000,
+      "archiveBytes": 50490944,
+      "viewP50": 8005,
+      "viewMax": 8049,
+      "ledger": 27993,
+      "rolling": 0.333,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 50000,
+      "archiveBytes": 60923808,
+      "viewP50": 7759,
+      "viewMax": 7885,
+      "ledger": 34903,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 60000,
+      "archiveBytes": 72259696,
+      "viewP50": 7940,
+      "viewMax": 7983,
+      "ledger": 41695,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 70000,
+      "archiveBytes": 84100568,
+      "viewP50": 7913,
+      "viewMax": 7950,
+      "ledger": 48693,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 80000,
+      "archiveBytes": 95011568,
+      "viewP50": 7908,
+      "viewMax": 7944,
+      "ledger": 55602,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 90000,
+      "archiveBytes": 106052328,
+      "viewP50": 7918,
+      "viewMax": 7963,
+      "ledger": 62308,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 100000,
+      "archiveBytes": 118026408,
+      "viewP50": 7922,
+      "viewMax": 7951,
+      "ledger": 69101,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 110000,
+      "archiveBytes": 128811704,
+      "viewP50": 7912,
+      "viewMax": 7959,
+      "ledger": 75713,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 120000,
+      "archiveBytes": 139233168,
+      "viewP50": 7900,
+      "viewMax": 7937,
+      "ledger": 82495,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 130000,
+      "archiveBytes": 149812560,
+      "viewP50": 7891,
+      "viewMax": 7953,
+      "ledger": 89109,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 140000,
+      "archiveBytes": 161008488,
+      "viewP50": 7973,
+      "viewMax": 8009,
+      "ledger": 95830,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 150000,
+      "archiveBytes": 171904520,
+      "viewP50": 7896,
+      "viewMax": 7916,
+      "ledger": 102520,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 160000,
+      "archiveBytes": 183498384,
+      "viewP50": 7901,
+      "viewMax": 7932,
+      "ledger": 109311,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 170000,
+      "archiveBytes": 193781064,
+      "viewP50": 7860,
+      "viewMax": 7898,
+      "ledger": 116027,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 180000,
+      "archiveBytes": 204450472,
+      "viewP50": 7837,
+      "viewMax": 7868,
+      "ledger": 122761,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 190000,
+      "archiveBytes": 215341328,
+      "viewP50": 7854,
+      "viewMax": 7898,
+      "ledger": 129480,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 200000,
+      "archiveBytes": 226776048,
+      "viewP50": 7834,
+      "viewMax": 7871,
+      "ledger": 136249,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 210000,
+      "archiveBytes": 237465960,
+      "viewP50": 7895,
+      "viewMax": 7947,
+      "ledger": 142921,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 220000,
+      "archiveBytes": 248130672,
+      "viewP50": 7864,
+      "viewMax": 7884,
+      "ledger": 149553,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 230000,
+      "archiveBytes": 260786584,
+      "viewP50": 7814,
+      "viewMax": 7885,
+      "ledger": 156112,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 240000,
+      "archiveBytes": 271063184,
+      "viewP50": 7937,
+      "viewMax": 7974,
+      "ledger": 162956,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 250000,
+      "archiveBytes": 280607136,
+      "viewP50": 7862,
+      "viewMax": 7901,
+      "ledger": 169729,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 260000,
+      "archiveBytes": 292024512,
+      "viewP50": 7741,
+      "viewMax": 7769,
+      "ledger": 176648,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 270000,
+      "archiveBytes": 303533560,
+      "viewP50": 7868,
+      "viewMax": 7888,
+      "ledger": 183288,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 280000,
+      "archiveBytes": 314523320,
+      "viewP50": 7891,
+      "viewMax": 7906,
+      "ledger": 189949,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 290000,
+      "archiveBytes": 326022544,
+      "viewP50": 7894,
+      "viewMax": 7933,
+      "ledger": 196848,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 300000,
+      "archiveBytes": 337351648,
+      "viewP50": 7809,
+      "viewMax": 7874,
+      "ledger": 203790,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 310000,
+      "archiveBytes": 346382568,
+      "viewP50": 7878,
+      "viewMax": 7929,
+      "ledger": 210472,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 320000,
+      "archiveBytes": 358521448,
+      "viewP50": 7938,
+      "viewMax": 7965,
+      "ledger": 217321,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 330000,
+      "archiveBytes": 369807296,
+      "viewP50": 7882,
+      "viewMax": 7918,
+      "ledger": 224011,
+      "rolling": 0.333,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 340000,
+      "archiveBytes": 380931888,
+      "viewP50": 7924,
+      "viewMax": 7963,
+      "ledger": 230845,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 350000,
+      "archiveBytes": 391327456,
+      "viewP50": 7855,
+      "viewMax": 7898,
+      "ledger": 237680,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 360000,
+      "archiveBytes": 402231152,
+      "viewP50": 7985,
+      "viewMax": 8034,
+      "ledger": 244372,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 370000,
+      "archiveBytes": 414171096,
+      "viewP50": 7866,
+      "viewMax": 7917,
+      "ledger": 251109,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 380000,
+      "archiveBytes": 423979640,
+      "viewP50": 7547,
+      "viewMax": 7586,
+      "ledger": 257815,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 390000,
+      "archiveBytes": 435517696,
+      "viewP50": 7981,
+      "viewMax": 8016,
+      "ledger": 264567,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 400000,
+      "archiveBytes": 446198792,
+      "viewP50": 7932,
+      "viewMax": 7977,
+      "ledger": 271257,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 410000,
+      "archiveBytes": 456567800,
+      "viewP50": 7652,
+      "viewMax": 7696,
+      "ledger": 277896,
+      "rolling": 0.333,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 420000,
+      "archiveBytes": 468791088,
+      "viewP50": 7875,
+      "viewMax": 7903,
+      "ledger": 284821,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 430000,
+      "archiveBytes": 479871896,
+      "viewP50": 7877,
+      "viewMax": 7957,
+      "ledger": 291347,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 440000,
+      "archiveBytes": 492341712,
+      "viewP50": 7945,
+      "viewMax": 7985,
+      "ledger": 298226,
+      "rolling": 0.333,
+      "bm25": 0.333,
+      "pylos": 1
+    },
+    {
+      "seq": 450000,
+      "archiveBytes": 501997960,
+      "viewP50": 7966,
+      "viewMax": 8017,
+      "ledger": 305128,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 460000,
+      "archiveBytes": 511966992,
+      "viewP50": 7932,
+      "viewMax": 7979,
+      "ledger": 311827,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 470000,
+      "archiveBytes": 523743480,
+      "viewP50": 7872,
+      "viewMax": 7916,
+      "ledger": 318423,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 480000,
+      "archiveBytes": 533772680,
+      "viewP50": 7891,
+      "viewMax": 7931,
+      "ledger": 325397,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 490000,
+      "archiveBytes": 545216432,
+      "viewP50": 7920,
+      "viewMax": 7989,
+      "ledger": 332034,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 500000,
+      "archiveBytes": 556312208,
+      "viewP50": 7880,
+      "viewMax": 7973,
+      "ledger": 338883,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 510000,
+      "archiveBytes": 570053976,
+      "viewP50": 7869,
+      "viewMax": 7940,
+      "ledger": 345578,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 520000,
+      "archiveBytes": 578076552,
+      "viewP50": 7974,
+      "viewMax": 8063,
+      "ledger": 352347,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 530000,
+      "archiveBytes": 589835984,
+      "viewP50": 7867,
+      "viewMax": 7951,
+      "ledger": 359255,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 540000,
+      "archiveBytes": 600795992,
+      "viewP50": 7936,
+      "viewMax": 8032,
+      "ledger": 366049,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 550000,
+      "archiveBytes": 612955232,
+      "viewP50": 7870,
+      "viewMax": 7961,
+      "ledger": 372974,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 560000,
+      "archiveBytes": 623327016,
+      "viewP50": 7894,
+      "viewMax": 7984,
+      "ledger": 379714,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 570000,
+      "archiveBytes": 632566016,
+      "viewP50": 7920,
+      "viewMax": 8008,
+      "ledger": 386393,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 580000,
+      "archiveBytes": 645926616,
+      "viewP50": 7910,
+      "viewMax": 8001,
+      "ledger": 393216,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 590000,
+      "archiveBytes": 658103272,
+      "viewP50": 7998,
+      "viewMax": 8080,
+      "ledger": 400004,
+      "rolling": 0.333,
+      "bm25": 0.333,
+      "pylos": 1
+    },
+    {
+      "seq": 600000,
+      "archiveBytes": 666828520,
+      "viewP50": 7832,
+      "viewMax": 7907,
+      "ledger": 406691,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 610000,
+      "archiveBytes": 677236592,
+      "viewP50": 7896,
+      "viewMax": 7983,
+      "ledger": 413438,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 620000,
+      "archiveBytes": 688606472,
+      "viewP50": 7910,
+      "viewMax": 7994,
+      "ledger": 420138,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 630000,
+      "archiveBytes": 699616688,
+      "viewP50": 7844,
+      "viewMax": 7971,
+      "ledger": 426937,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 640000,
+      "archiveBytes": 710317256,
+      "viewP50": 7369,
+      "viewMax": 7472,
+      "ledger": 433837,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 650000,
+      "archiveBytes": 722365424,
+      "viewP50": 7934,
+      "viewMax": 8006,
+      "ledger": 440647,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 660000,
+      "archiveBytes": 731412128,
+      "viewP50": 7892,
+      "viewMax": 7972,
+      "ledger": 447266,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 670000,
+      "archiveBytes": 743803216,
+      "viewP50": 7877,
+      "viewMax": 7965,
+      "ledger": 453950,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 680000,
+      "archiveBytes": 755183824,
+      "viewP50": 7859,
+      "viewMax": 7940,
+      "ledger": 460635,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 690000,
+      "archiveBytes": 764856600,
+      "viewP50": 7883,
+      "viewMax": 8005,
+      "ledger": 467197,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 700000,
+      "archiveBytes": 776472360,
+      "viewP50": 7752,
+      "viewMax": 7860,
+      "ledger": 473950,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 710000,
+      "archiveBytes": 786896960,
+      "viewP50": 7565,
+      "viewMax": 7654,
+      "ledger": 480769,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 720000,
+      "archiveBytes": 798123952,
+      "viewP50": 7777,
+      "viewMax": 7903,
+      "ledger": 487673,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 730000,
+      "archiveBytes": 808925008,
+      "viewP50": 7848,
+      "viewMax": 7950,
+      "ledger": 494385,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 740000,
+      "archiveBytes": 819246128,
+      "viewP50": 7709,
+      "viewMax": 7776,
+      "ledger": 501106,
+      "rolling": 0.167,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 750000,
+      "archiveBytes": 830048432,
+      "viewP50": 7896,
+      "viewMax": 7978,
+      "ledger": 507823,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 760000,
+      "archiveBytes": 842278288,
+      "viewP50": 7943,
+      "viewMax": 8039,
+      "ledger": 514638,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 770000,
+      "archiveBytes": 853057232,
+      "viewP50": 7885,
+      "viewMax": 7968,
+      "ledger": 521502,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 780000,
+      "archiveBytes": 863046696,
+      "viewP50": 7904,
+      "viewMax": 7994,
+      "ledger": 528182,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 790000,
+      "archiveBytes": 874595672,
+      "viewP50": 7888,
+      "viewMax": 7999,
+      "ledger": 535039,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 800000,
+      "archiveBytes": 886067832,
+      "viewP50": 7904,
+      "viewMax": 7980,
+      "ledger": 541817,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 810000,
+      "archiveBytes": 896938664,
+      "viewP50": 7851,
+      "viewMax": 7944,
+      "ledger": 548396,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 820000,
+      "archiveBytes": 908232776,
+      "viewP50": 7873,
+      "viewMax": 7963,
+      "ledger": 555154,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 830000,
+      "archiveBytes": 919708288,
+      "viewP50": 7927,
+      "viewMax": 8049,
+      "ledger": 561876,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 840000,
+      "archiveBytes": 929094936,
+      "viewP50": 7906,
+      "viewMax": 8017,
+      "ledger": 568629,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 850000,
+      "archiveBytes": 939252912,
+      "viewP50": 7938,
+      "viewMax": 8012,
+      "ledger": 575324,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 860000,
+      "archiveBytes": 951833592,
+      "viewP50": 7954,
+      "viewMax": 8043,
+      "ledger": 581980,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 870000,
+      "archiveBytes": 963800296,
+      "viewP50": 7895,
+      "viewMax": 7964,
+      "ledger": 588705,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 880000,
+      "archiveBytes": 976202896,
+      "viewP50": 7885,
+      "viewMax": 7969,
+      "ledger": 595321,
+      "rolling": 0.167,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 890000,
+      "archiveBytes": 983527328,
+      "viewP50": 7861,
+      "viewMax": 7982,
+      "ledger": 602087,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 900000,
+      "archiveBytes": 995728800,
+      "viewP50": 7895,
+      "viewMax": 7934,
+      "ledger": 608808,
+      "rolling": 0.333,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 910000,
+      "archiveBytes": 1006258744,
+      "viewP50": 7928,
+      "viewMax": 7989,
+      "ledger": 615733,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 920000,
+      "archiveBytes": 1018100168,
+      "viewP50": 7799,
+      "viewMax": 7920,
+      "ledger": 622669,
+      "rolling": 0,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 930000,
+      "archiveBytes": 1028294312,
+      "viewP50": 7840,
+      "viewMax": 7888,
+      "ledger": 629530,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 940000,
+      "archiveBytes": 1039532280,
+      "viewP50": 7903,
+      "viewMax": 7983,
+      "ledger": 636260,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 950000,
+      "archiveBytes": 1049899320,
+      "viewP50": 7839,
+      "viewMax": 7878,
+      "ledger": 642820,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 960000,
+      "archiveBytes": 1061421208,
+      "viewP50": 7939,
+      "viewMax": 8023,
+      "ledger": 649601,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 970000,
+      "archiveBytes": 1072916216,
+      "viewP50": 7804,
+      "viewMax": 7926,
+      "ledger": 656507,
+      "rolling": 0.333,
+      "bm25": 0,
+      "pylos": 1
+    },
+    {
+      "seq": 980000,
+      "archiveBytes": 1085129736,
+      "viewP50": 7870,
+      "viewMax": 7959,
+      "ledger": 663223,
+      "rolling": 0.333,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 990000,
+      "archiveBytes": 1094373696,
+      "viewP50": 7985,
+      "viewMax": 8069,
+      "ledger": 669842,
+      "rolling": 0,
+      "bm25": 0.167,
+      "pylos": 1
+    },
+    {
+      "seq": 1000000,
+      "archiveBytes": 1104811400,
+      "viewP50": 7825,
+      "viewMax": 7925,
+      "ledger": 676593,
+      "rolling": 0.26,
+      "bm25": 0.06,
+      "pylos": 1
+    }
+  ],
+  "final": {
+    "archiveBytes": 1104811400,
+    "lossEntries": 676593,
+    "capsules": 35713,
+    "facts": {
+      "checked": 2000,
+      "passed": 2000
+    },
+    "quotes": {
+      "checked": 200,
+      "passed": 200
+    },
+    "numbers": {
+      "checked": 50,
+      "passed": 50
+    },
+    "memories": {
+      "checked": 2000,
+      "passed": 2000
+    },
+    "sequence": {
+      "checked": 10000,
+      "passed": 10000
+    },
+    "faults": {
+      "asked": 2000,
+      "receipted": 2000
+    },
+    "verifyOk": true,
+    "headHash": "beca5ffe5a1fde3da3b74c3bdedf5148a338cce41cf66dfa73c91c72ebbb6d3f"
+  }
+}

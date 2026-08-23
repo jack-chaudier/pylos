@@ -15,7 +15,7 @@ export interface RailProps {
 
 /**
  * The scrollbar, replaced. Hairline ticks at capsule boundaries (denser marks =
- * more compacted), ember ticks at handoffs, a verdigris thumb for the viewport.
+ * more compacted), kiln ticks at handoffs, a kiln thumb for the viewport.
  */
 export function TimelineRail(props: RailProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);

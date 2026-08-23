@@ -2,7 +2,17 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { atomize, compact, compile, exportBundle, importBundle, openVault, verify } from "../src/index.ts";
+import {
+  atomize,
+  compact,
+  compile,
+  exportBundle,
+  importBundle,
+  openVault,
+  packetText,
+  runTurn,
+  verify,
+} from "../src/index.ts";
 import { cleanup, rng, syntheticTurn, tempVault } from "./helpers.ts";
 
 afterAll(cleanup);
@@ -169,4 +179,70 @@ test("a bundle exported with packet messages restores them verbatim", async () =
   const imported = await importBundle(target, bytes, { passphrase: "pw" });
   expect(target.packets.byId(packet.id)?.messages).toEqual(packet.messages);
   expect(verify(target, imported.threadId, { full: true }).ok).toBe(true);
+});
+
+test("import rebuilds the atom name index (KERNEL A11.4)", async () => {
+  const { vault, thread } = seeded(38, 200);
+  const subject = vault.atoms.list(thread.id, { phase: "SUPPORTED", limit: 1 })[0];
+  expect(subject).toBeDefined();
+  const name = (subject as { key: string }).key.toLowerCase();
+
+  const bytes = await exportBundle(vault, thread.id, { passphrase: "pw" });
+  const target = freshVault();
+  const imported = await importBundle(target, bytes, { passphrase: "pw" });
+
+  const restored = target.atoms.byName(imported.threadId, name).map((a) => a.id);
+  expect(restored.length).toBeGreaterThan(0);
+  expect(restored).toEqual(vault.atoms.byName(thread.id, name).map((a) => a.id));
+});
+
+test("packets travel, so a paraphrase still finds the source after import (KERNEL A11.2)", async () => {
+  const source = "The kiln at Sagres fired unevenly because the flue was blocked.";
+  const { vault, thread } = tempVault();
+  const next = rng(39);
+  for (let i = 0; i < 150; i += 1) {
+    vault.episodes.append(thread.id, {
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: syntheticTurn(next, i),
+    });
+  }
+  const planted = vault.episodes.append(thread.id, { role: "user", content: source });
+  for (let i = 0; i < 150; i += 1) {
+    vault.episodes.append(thread.id, {
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: syntheticTurn(next, i),
+    });
+  }
+  // A question that addressed the source by number: the packet it left is the
+  // only edge from the question's words back to the source (KERNEL A11.2).
+  const asked = await runTurn(vault, thread.id, {
+    text: `what did the vent gasket memo cover on turn ${planted.seq}?`,
+    model: "m",
+    provider: async function* () {
+      yield { type: "delta", text: "Noted." };
+      yield { type: "done" };
+    },
+    budget: 8192,
+    check: false,
+  });
+  for (let i = 0; i < 300; i += 1) {
+    vault.episodes.append(thread.id, {
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: syntheticTurn(next, i),
+    });
+  }
+  compact(vault, thread.id, { budget: 8192 });
+
+  const bytes = await exportBundle(vault, thread.id, { passphrase: "pw" });
+  const target = freshVault();
+  const imported = await importBundle(target, bytes, { passphrase: "pw" });
+
+  const packet = compile(target, imported.threadId, {
+    query: "what was in the vent gasket memo?",
+    budget: 8192,
+  });
+  const path = packet.pages.find((p) => p.trigger === "path");
+  expect(path?.query).toBe(`#${asked.userEpisode.seq}`);
+  expect(path?.seqs).toContain(planted.seq);
+  expect(packetText(packet.messages)).toContain(source);
 });

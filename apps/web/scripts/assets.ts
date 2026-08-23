@@ -3,10 +3,10 @@
  * page: the aperture mark (favicon), the OG card, the touch icon, the manifest,
  * robots, and the install script the download block points at.
  *
- * The OG card is laid out in HTML with the same self-hosted fonts and the same
- * palette as the site, then photographed with headless Chrome. Its numbers come
- * from `public/aperture/final.json`, so the card states what the run actually
- * produced.
+ * The OG card is laid out in HTML with the same self-hosted fonts, the same
+ * palette and the same plate as the site, then photographed with headless
+ * Chrome. Its numbers come from `public/aperture/final.json`, so the card states
+ * what the run actually produced.
  */
 
 import { spawnSync } from "node:child_process";
@@ -19,25 +19,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const pub = resolve(here, "../public");
 const tmp = resolve(here, "../.assets-tmp");
 
-const BONE = "#F4F1EA";
-const INK = "#17160F";
-const ASH = "#7C786E";
-const VERDIGRIS = "#1F6F5C";
-const EMBER = "#C98A2E";
-const HAIRLINE = "rgba(23,22,15,0.14)";
+/** docs/DESIGN.md, verbatim. */
+const KILN = "#D9450E";
+const BONE = "#F4EBDD";
 
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 // ── the mark ────────────────────────────────────────────────────────────────
-// A gate seen end-on: a verdigris ring left open on one side, with the ember
-// point of what was recovered sitting at the centre.
+// The aperture seen end-on: a bone ring left open on one side over the kiln
+// ground, with the point of what was recovered sitting at its centre.
 
 function mark(size: number, background: string | null): string {
-  const bg = background
-    ? `<rect width="${size}" height="${size}" rx="${Math.round(size * 0.22)}" fill="${background}"/>`
-    : "";
+  const bg = background ? `<rect width="${size}" height="${size}" fill="${background}"/>` : "";
   const s = size / 24;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}<g transform="translate(${size / 2} ${size / 2}) rotate(-58) translate(${-size / 2} ${-size / 2})"><circle cx="${size / 2}" cy="${size / 2}" r="${9 * s}" fill="none" stroke="${VERDIGRIS}" stroke-width="${2.6 * s}" stroke-dasharray="${46 * s} ${12 * s}" stroke-linecap="butt"/></g><circle cx="${size / 2}" cy="${size / 2}" r="${2.6 * s}" fill="${EMBER}"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}<g transform="translate(${size / 2} ${size / 2}) rotate(-58) translate(${-size / 2} ${-size / 2})"><circle cx="${size / 2}" cy="${size / 2}" r="${8.6 * s}" fill="none" stroke="${BONE}" stroke-width="${2.8 * s}" stroke-dasharray="${44 * s} ${12 * s}" stroke-linecap="butt"/></g><circle cx="${size / 2}" cy="${size / 2}" r="${2.8 * s}" fill="${BONE}"/></svg>`;
 }
 
 // ── the OG card ─────────────────────────────────────────────────────────────
@@ -46,10 +41,9 @@ interface Snapshot {
   turn: number;
   packet: { tokens: number; budget: number };
   lossRows: number;
-  revisionSeq: number;
 }
 
-function ogHtml(snap: Snapshot | null, fontDir: string): string {
+function ogHtml(snap: Snapshot | null, fontDir: string, artDir: string): string {
   const nf = new Intl.NumberFormat("en-US");
   const turns = nf.format(snap?.turn ?? 1_000_000);
   const tokens = nf.format(snap?.packet.tokens ?? 6440);
@@ -57,49 +51,34 @@ function ogHtml(snap: Snapshot | null, fontDir: string): string {
   const ledger = nf.format(snap?.lossRows ?? 1_249_335);
 
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-@font-face{font-family:"Newsreader";src:url("${fontDir}/newsreader-latin-var.woff2") format("woff2-variations");font-weight:300 700}
-@font-face{font-family:"Geist";src:url("${fontDir}/geist-latin-var.woff2") format("woff2-variations");font-weight:300 700}
-@font-face{font-family:"Geist Mono";src:url("${fontDir}/geist-mono-latin-var.woff2") format("woff2-variations");font-weight:400 600}
+@font-face{font-family:"Instrument Serif";src:url("${fontDir}/instrument-serif-latin.woff2") format("woff2");font-weight:400}
+@font-face{font-family:"Instrument Serif";src:url("${fontDir}/instrument-serif-italic-latin.woff2") format("woff2");font-weight:400;font-style:italic}
+@font-face{font-family:"Courier Prime";src:url("${fontDir}/courier-prime-latin.woff2") format("woff2");font-weight:400}
+@font-face{font-family:"Courier Prime";src:url("${fontDir}/courier-prime-bold-latin.woff2") format("woff2");font-weight:700}
 *{box-sizing:border-box;margin:0}
 html,body{width:1200px;height:630px}
-body{background:${BONE};color:${INK};font-family:"Geist",system-ui,sans-serif;
-  display:grid;grid-template-columns:1fr 452px;overflow:hidden}
-.pane{padding:62px 58px;display:flex;flex-direction:column;justify-content:space-between}
-.pane.right{border-left:1px solid ${HAIRLINE};justify-content:center;gap:0;padding:62px 52px}
-.mono{font-family:"Geist Mono",monospace;font-size:15px;letter-spacing:.11em;text-transform:uppercase;color:${ASH}}
-.wordmark{font-family:"Newsreader",serif;font-size:38px;font-variation-settings:"opsz" 32;
-  color:${VERDIGRIS};display:flex;align-items:center;gap:14px;letter-spacing:-.02em}
-h1{font-family:"Newsreader",serif;font-weight:400;font-size:118px;line-height:.96;
-  letter-spacing:-.035em;font-variation-settings:"opsz" 72;margin:26px 0 22px}
-.lede{font-size:20px;line-height:1.5;color:rgba(23,22,15,.66);max-width:30ch}
-.num{font-family:"Newsreader",serif;font-weight:400;font-size:70px;line-height:1;
-  letter-spacing:-.03em;font-variation-settings:"opsz" 60;color:${EMBER};font-variant-numeric:tabular-nums}
-.num.small{font-size:52px;color:${VERDIGRIS}}
-.stat + .stat{margin-top:38px;padding-top:38px;border-top:1px solid ${HAIRLINE}}
-.stat .mono{margin-bottom:10px}
-.foot{font-family:"Geist Mono",monospace;font-size:14px;letter-spacing:.1em;
-  text-transform:uppercase;color:${ASH}}
+body{background:${KILN};color:${BONE};font-family:"Instrument Serif",Georgia,serif;
+  display:grid;grid-template-columns:1fr 430px;overflow:hidden}
+.pane{padding:56px 54px;display:flex;flex-direction:column;justify-content:space-between}
+.mono{font-family:"Courier Prime",monospace;font-size:15px;letter-spacing:.12em;text-transform:uppercase}
+.wordmark{font-size:34px;text-transform:uppercase;letter-spacing:.02em;line-height:1}
+h1{font-weight:400;font-size:80px;line-height:.9;letter-spacing:-.01em;
+  text-transform:uppercase;margin:24px 0 20px}
+h1 em{font-style:italic}
+.figures{font-family:"Courier Prime",monospace;font-size:15px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;line-height:2}
+.plate{padding:0;overflow:hidden}
+.plate img{width:100%;height:630px;object-fit:cover;object-position:50% 38%;display:block}
 </style></head><body>
 <div class="pane">
-  <div class="wordmark">${mark(30, null)}pylos</div>
+  <p class="wordmark">Pylos</p>
   <div>
-    <h1>Talk forever.</h1>
-    <p class="lede">One conversation. Every model. Nothing forgotten silently.</p>
+    <h1>The conversation<br><em>that does not end</em></h1>
+    <p class="figures">${turns} turns · view ${tokens} / ${budget} · ledger ${ledger}</p>
   </div>
-  <p class="foot">Open source · Apache-2.0 · Mac + Linux</p>
+  <p class="mono">Open source · Apache-2.0 · macOS + Linux</p>
 </div>
-<div class="pane right">
-  <div class="stat">
-    <p class="mono">Archive · exact</p>
-    <p class="num">${turns}</p>
-    <p class="mono" style="margin-top:10px;font-size:13px;letter-spacing:.05em">turns · ${ledger} ledger entries</p>
-  </div>
-  <div class="stat">
-    <p class="mono">View · bounded</p>
-    <p class="num small">${tokens}<span style="color:${ASH};font-size:.5em"> / ${budget}</span></p>
-    <p class="mono" style="margin-top:10px;font-size:13px;letter-spacing:.05em">tokens resident, every turn</p>
-  </div>
-</div>
+<div class="plate"><img src="${artDir}/empyrean.webp" alt=""></div>
 </body></html>`;
 }
 
@@ -117,12 +96,13 @@ function shoot(htmlPath: string, out: string, w: number, h: number): boolean {
       "--disable-gpu",
       "--hide-scrollbars",
       "--force-device-scale-factor=1",
-      "--virtual-time-budget=2500",
+      "--virtual-time-budget=3000",
       `--screenshot=${out}`,
       `--window-size=${w},${h}`,
       `file://${htmlPath}`,
     ],
-    { stdio: "ignore" },
+    // A build must never hang on a browser: no card is better than no build.
+    { stdio: "ignore", timeout: 90_000 },
   );
   return res.status === 0 && existsSync(out);
 }
@@ -132,8 +112,8 @@ function shoot(htmlPath: string, out: string, w: number, h: number): boolean {
 await mkdir(pub, { recursive: true });
 await mkdir(tmp, { recursive: true });
 
-// favicon: the mark on bone, sized for a 16px tab
-await writeFile(resolve(pub, "favicon.svg"), `${mark(32, BONE)}\n`, "utf8");
+// favicon: the mark on kiln, sized for a 16px tab
+await writeFile(resolve(pub, "favicon.svg"), `${mark(32, KILN)}\n`, "utf8");
 
 // manifest + robots
 await writeFile(
@@ -145,8 +125,8 @@ await writeFile(
       description: "One conversation. Every model. Nothing forgotten silently.",
       start_url: "/",
       display: "browser",
-      background_color: BONE,
-      theme_color: BONE,
+      background_color: KILN,
+      theme_color: KILN,
       icons: [
         { src: "/favicon.svg", sizes: "any", type: "image/svg+xml" },
         { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
@@ -170,7 +150,9 @@ await writeFile(
   "utf8",
 );
 
-// install script — the thing the copy button actually points at
+// The installer. Asset names are a contract with release.yml: it publishes
+// pylos-macos-arm64.tar.gz and pylos-linux-x64.tar.gz, and nothing else — so
+// every other platform is told plainly to build from source.
 await writeFile(
   resolve(pub, "install.sh"),
   `#!/bin/sh
@@ -181,6 +163,7 @@ set -eu
 REPO="jack-chaudier/pylos"
 VERSION="\${PYLOS_VERSION:-latest}"
 PREFIX="\${PYLOS_PREFIX:-$HOME/.local/bin}"
+SOURCE="https://github.com/$REPO"
 
 say() { printf '%s\\n' "$*" >&2; }
 die() { say "pylos: $*"; exit 1; }
@@ -188,16 +171,20 @@ die() { say "pylos: $*"; exit 1; }
 os=$(uname -s)
 arch=$(uname -m)
 
-case "$os" in
-  Darwin) plat=macos ;;
-  Linux)  plat=linux ;;
-  *) die "unsupported platform: $os. Pylos ships for macOS and Linux." ;;
-esac
-
 case "$arch" in
   arm64|aarch64) arch=arm64 ;;
   x86_64|amd64)  arch=x64 ;;
-  *) die "unsupported architecture: $arch" ;;
+esac
+
+case "$os/$arch" in
+  Darwin/arm64) plat=macos ;;
+  Linux/x64)    plat=linux ;;
+  Darwin/x64)
+    die "no release build for Intel macOS. Pylos ships macOS on Apple silicon and Linux on x64; build from source: $SOURCE" ;;
+  Linux/arm64)
+    die "no release build for arm64 Linux. Pylos ships macOS on Apple silicon and Linux on x64; build from source: $SOURCE" ;;
+  *)
+    die "unsupported platform: $os $arch. Pylos ships macOS on Apple silicon and Linux on x64; build from source: $SOURCE" ;;
 esac
 
 asset="pylos-\${plat}-\${arch}.tar.gz"
@@ -224,7 +211,7 @@ case ":$PATH:" in
   *":$PREFIX:"*) ;;
   *) say "pylos: add $PREFIX to your PATH" ;;
 esac
-say "pylos: run 'pylos' to start the thread"
+say "pylos: run 'pylos serve' and open http://127.0.0.1:7334/app/"
 `,
   "utf8",
 );
@@ -238,13 +225,13 @@ try {
 }
 
 const ogPath = resolve(tmp, "og.html");
-await writeFile(ogPath, ogHtml(snap, `file://${pub}/fonts`), "utf8");
+await writeFile(ogPath, ogHtml(snap, `file://${pub}/fonts`, `file://${pub}/art`), "utf8");
 const ogOk = shoot(ogPath, resolve(pub, "og.png"), 1200, 630);
 
 const touchPath = resolve(tmp, "touch.html");
 await writeFile(
   touchPath,
-  `<!doctype html><html><body style="margin:0;width:180px;height:180px;background:${BONE}">${mark(180, BONE)}</body></html>`,
+  `<!doctype html><html><body style="margin:0;width:180px;height:180px;background:${KILN}">${mark(180, KILN)}</body></html>`,
   "utf8",
 );
 const touchOk = shoot(touchPath, resolve(pub, "apple-touch-icon.png"), 180, 180);
@@ -252,5 +239,6 @@ const touchOk = shoot(touchPath, resolve(pub, "apple-touch-icon.png"), 180, 180)
 await rm(tmp, { recursive: true, force: true });
 
 console.log(
-  `[pylos/web] assets · favicon ✓ · manifest ✓ · install.sh ✓ · og.png ${ogOk ? "✓" : "skipped"} · apple-touch-icon ${touchOk ? "✓" : "skipped"}`,
+  `[pylos/web] assets · favicon ✓ · manifest ✓ · install.sh ✓ · ` +
+    `og.png ${ogOk ? "✓" : "skipped"} · apple-touch-icon ${touchOk ? "✓" : "skipped"}`,
 );

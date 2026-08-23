@@ -268,3 +268,15 @@ test("the turn being answered is rendered once, at the end, outside the window",
   expect(cold.resident.some((r) => r.type === "query")).toBe(false);
   expect(cold.resident.some((r) => r.type === "recent" && r.seq === asked.seq)).toBe(true);
 });
+
+test("the fault line is in the view at every budget, and the budget still holds (KERNEL A11.1)", () => {
+  const { vault, thread } = build(91, 300);
+  vault.episodes.append(thread.id, { role: "assistant", content: "Noted." });
+  for (const budget of [1024, 2048, 8192, 32768]) {
+    const packet = compile(vault, thread.id, { query: "what did we decide?", budget, model: "test" });
+    expect(packet.pages.some((p) => p.trigger === "fault")).toBe(true);
+    expect(packetText(packet.messages)).toContain("⟨pylos fault⟩");
+    expect(packet.tokens).toBeLessThanOrEqual(budget);
+    expect(approxTokens(packetText(packet.messages))).toBeLessThanOrEqual(budget);
+  }
+});

@@ -242,6 +242,10 @@ export interface PagedBlock {
   epistemic: Epistemic;
 }
 
+/** The label a path page carries, and the legend that explains it (KERNEL A11.2). */
+export const VIA_LABEL = "via #";
+const VIA_LEGEND = " · via #n — reached by way of the turn that once answered a question with it";
+
 /** Exact episodes recovered for this turn, each prefixed `⟦recovered #seq · trigger⟧`. */
 export function renderPaged(
   blocks: readonly PagedBlock[],
@@ -249,7 +253,9 @@ export function renderPaged(
   tokenizer: Tokenizer = approxTokens,
 ): { text: string; tokens: number; included: PagedBlock[] } {
   if (blocks.length === 0 || maxTokens <= 0) return { text: "", tokens: 0, included: [] };
-  const head = "⟦recovered from the archive for this turn · exact text⟧";
+  // The legend is spent only when a `via` block is there to need it.
+  const legend = blocks.some((b) => b.trigger.startsWith(VIA_LABEL)) ? VIA_LEGEND : "";
+  const head = `⟦recovered from the archive for this turn · exact text${legend}⟧`;
   const parts: string[] = [head];
   const included: PagedBlock[] = [];
   let used = tokenizer(head);
@@ -264,9 +270,45 @@ export function renderPaged(
   return { text: parts.join("\n\n"), tokens: used, included };
 }
 
-/** Note lines for pages that found nothing exact. Never fuzzy, never silent. */
+/**
+ * What a turn whose every route came back empty tells the model (KERNEL A11.1).
+ * It reports the index, not the archive: the answer may be resident, and the
+ * archive may hold it under other words. Only the recall sentence differs
+ * between a model that can call tools and one that cannot.
+ */
+const FAULT_OPENING =
+  "⟨pylos fault⟩ Nothing in this question matched the archive's index: no turn number, no recorded " +
+  "name, no search term reached a turn. That says nothing about whether the archive holds the answer. ";
+
+const FAULT_CLOSING =
+  " If it is not about this conversation, answer it normally. Never present a guess as a memory.";
+
+export const FAULT_NOTICE_TOOLS =
+  `${FAULT_OPENING}If this question is about something from this conversation and the answer is not ` +
+  "already in the view, call `recall` with other words for the same thing before answering; if nothing " +
+  `comes back, say that you could not find it in the archive.${FAULT_CLOSING}`;
+
+export const FAULT_NOTICE_NO_TOOLS =
+  `${FAULT_OPENING}If this question is about something from this conversation and the answer is not ` +
+  `already in the view, say that you would need to check, and ask for a word from the original ` +
+  `conversation.${FAULT_CLOSING}`;
+
+/**
+ * The fault line, when the turn recorded one. It states a fact about routing,
+ * not about the view and not about the archive (KERNEL A11.1).
+ */
+export function renderFault(pages: readonly PageRecord[], supportsTools: boolean): string {
+  if (!pages.some((p) => p.trigger === "fault")) return "";
+  return supportsTools ? FAULT_NOTICE_TOOLS : FAULT_NOTICE_NO_TOOLS;
+}
+
+/**
+ * Note lines for pages that found nothing exact. Never fuzzy, never silent. A
+ * fault is unresolved too, but it has its own line (KERNEL A11.1): naming the
+ * question as a failed locator would be a second, wronger receipt for the miss.
+ */
 export function renderUnknownPages(pages: readonly PageRecord[]): string {
-  const unresolved = pages.filter((p) => !p.resolved);
+  const unresolved = pages.filter((p) => !p.resolved && p.trigger !== "fault");
   if (unresolved.length === 0) return "";
   const names = unresolved.map((p) => p.name ?? p.query ?? "?").slice(0, 8);
   return `⟨UNKNOWN: no exact material found for ${names.join(", ")}⟩`;

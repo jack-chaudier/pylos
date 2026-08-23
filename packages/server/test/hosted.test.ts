@@ -240,6 +240,38 @@ describe("limits", () => {
     await local.dispose();
   });
 
+  test("polling a sign-in that is in flight does not spend the address's attempts", async () => {
+    const local = await hostedHarness();
+    local.holdGrant(true);
+    const address = "203.0.113.7";
+    const start = (): Promise<Response> => local.fetch("/api/login/xai/start", jsonPost({}), address);
+    const started = await start();
+    const { handle } = (await started.json()) as { handle: string };
+    const poll = (): Promise<Response> => local.fetch("/api/login/xai/poll", jsonPost({ handle }), address);
+
+    // 40 polls: twice the per-address cap, all of them for a handle we issued.
+    for (let i = 0; i < 40; i += 1) {
+      const response = await poll();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ pending: true });
+    }
+    local.holdGrant(false);
+    expect((await poll()).status).toBe(200);
+    // The address spent one start and no polls, so it can still begin a sign-in.
+    expect((await start()).status).toBe(200);
+    await local.dispose();
+  }, 20_000);
+
+  test("polling a handle nobody started counts against the address", async () => {
+    const local = await hostedHarness();
+    const address = "203.0.113.8";
+    const poll = (): Promise<Response> =>
+      local.fetch("/api/login/xai/poll", jsonPost({ handle: "nope" }), address);
+    for (let i = 0; i < 20; i += 1) expect((await poll()).status).toBe(410);
+    expect((await poll()).status).toBe(429);
+    await local.dispose();
+  });
+
   test("an oversized JSON body is refused", async () => {
     const { session } = await h.login("sub-fat");
     const thread = await h.json<ThreadStats>("/api/threads", jsonPost({}), session);

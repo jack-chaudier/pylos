@@ -54,8 +54,6 @@ export {
   page,
   recall,
   resolves,
-  type SequenceRef,
-  sequenceRefs,
   TOKENS_PER_PAGE,
 } from "./page.ts";
 // The pure layer is re-exported for convenience; `@pylos/core/pure` is the
@@ -63,7 +61,7 @@ export {
 export * from "./pure/index.ts";
 export { needsAuthorityReplay, replayAtoms } from "./replay.ts";
 export { ftsQuery } from "./rows.ts";
-export { AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
+export { ATOM_NAME_REBUILD, AUTHORITY_REPLAY, COUNTERS, MIGRATIONS } from "./schema.ts";
 export { stats } from "./stats.ts";
 export {
   handoff,

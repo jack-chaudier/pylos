@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CredentialStore } from "../src/auth/store.ts";
 import { AuthService, XAI_CLIENT_ID } from "../src/auth/xai.ts";
+import { createContext } from "../src/context.ts";
+import { authPath } from "../src/home.ts";
 
 let home: string;
 
@@ -58,6 +60,28 @@ describe("credential custody", () => {
     const status = await auth.setApiKey("openai-compatible", "key-123456", "https://example.test/v1/");
     expect(status.ok).toBe(true);
     expect(await auth.baseUrl("openai-compatible")).toBe("https://example.test/v1");
+  });
+});
+
+describe("a profile owns its credentials", () => {
+  test("`--home DIR` keeps the credential file in DIR, 0600", async () => {
+    const context = await createContext({ home });
+    try {
+      expect(context.auth.store.path).toBe(join(home, "auth.json"));
+      await context.auth.setApiKey("openai", "sk-proj-profile-scoped"); // scan-secrets:allow (fixture)
+      const info = await stat(join(home, "auth.json"));
+      expect(info.mode & 0o777).toBe(0o600);
+    } finally {
+      await context.kernel.close();
+    }
+  });
+
+  test("PYLOS_AUTH_PATH still wins, and no home means the profile in the environment", () => {
+    expect(authPath({ PYLOS_AUTH_PATH: "/somewhere/else/auth.json" }, home)).toBe(
+      "/somewhere/else/auth.json",
+    );
+    expect(authPath({}, home)).toBe(join(home, "auth.json"));
+    expect(authPath({ PYLOS_HOME: "/profiles/one" })).toBe(join("/profiles/one", "auth.json"));
   });
 });
 

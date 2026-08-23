@@ -141,6 +141,11 @@ export class HostedRegistry {
     };
   }
 
+  /** Whether a sign-in with this handle is still in flight here. */
+  knowsLogin(handle: string): boolean {
+    return this.login.knowsDevice(handle);
+  }
+
   async pollLogin(handle: string): Promise<LoginPoll> {
     const result = await this.login.pollDeviceCredential(handle);
     if ("pending" in result) return result;

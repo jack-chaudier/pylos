@@ -13,9 +13,10 @@
  *   5. an addressed turn comes back byte-exact — on the millionth turn, the 345th,
  *   6. a memory carrying no routing name at all is still reachable by search,
  *   7. the assistant's own claim never becomes a fact (KERNEL A9.1),
- *   8. the ledger is conserved and complete,
- *   9. the chain verifies,
- *  10. per-turn wall time stays flat.
+ *   8. a question nothing can address records a fault, not silence (KERNEL A11.1),
+ *   9. the ledger is conserved and complete,
+ *  10. the chain verifies,
+ *  11. per-turn wall time stays flat.
  *
  * Failures are recorded, not thrown: the run continues and the report says
  * where it first broke.
@@ -43,16 +44,21 @@ import {
   type Corpus,
   type CorpusManifest,
   createCorpus,
+  ftsTerms,
   nameSet,
   type PlantedPerson,
   type PoisonVariant,
   parseNumberName,
+  type Rng,
   retained,
   stream,
   vocabSha256,
 } from "@pylos/core/pure";
-import type { Episode, Packet, Role } from "@pylos/protocol";
+import type { Episode, Packet, PageTrigger, Role } from "@pylos/protocol";
 import corePackage from "../packages/core/package.json";
+// The vocabulary itself, not the generator: the fault probe must invent words the
+// corpus cannot contain, and that is a statement about this list.
+import { vocab } from "../packages/core/src/pure/corpus/vocab.ts";
 import { bm25Packet, RollingSummary } from "./baseline.ts";
 
 export interface MillionOptions {
@@ -102,6 +108,20 @@ export interface PoisonResult {
   maxTokens: number;
 }
 
+/** A question with a conversational cue that nothing can address — KERNEL A11.1. */
+export interface FaultResult {
+  asked: number;
+  /** Probes whose packet held exactly one unresolved `fault` record and the notice. */
+  faulted: number;
+  /**
+   * Probes where one of the question's *own* routes resolved. Must be zero: a
+   * route that fired on the previous reply's names is not the question's evidence.
+   */
+  resolvedElsewhere: number;
+  /** `fault` records drawn by the other probe families at this checkpoint. Must be zero. */
+  falseFaults: number;
+}
+
 export interface CheckpointResult {
   seq: number;
   budgetCheck: { ok: boolean; trapTokens: number | null; queryTokensMax: number; queryTokensP50: number };
@@ -111,6 +131,7 @@ export interface CheckpointResult {
   sequence: SequenceResult;
   memories: MemoryResult;
   poison: PoisonResult;
+  faults: FaultResult;
   ledger: { entries: number; parentsChecked: number; conservationOk: boolean; completenessOk: boolean };
   verify: { ok: boolean; headHash: string; checkedTo: number };
   archiveBytes: number;
@@ -139,7 +160,7 @@ export interface TrapResult {
 }
 
 export interface MillionResult {
-  schema: "pylos.bench.million.v2";
+  schema: "pylos.bench.million.v3";
   seed: string;
   N: number;
   budget: number;
@@ -188,6 +209,7 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
   const thread = vault.threads.create(`bench-${options.seed}`, { budget: options.budget });
   const corpus = createCorpus(options.seed, options.turns);
   const manifest = corpus.manifest;
+  const corpusStems = stemIndex(manifest);
   const rolling = new RollingSummary(options.budget);
 
   log(
@@ -260,6 +282,7 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
       threadId: thread.id,
       corpus,
       manifest,
+      corpusStems,
       seq: checkpointSeq,
       budget: options.budget,
       isFinal,
@@ -281,6 +304,7 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
         `turns ${result.checkpoint.sequence.checked - result.checkpoint.sequence.failed.length}/${result.checkpoint.sequence.checked} · ` +
         `memories ${result.checkpoint.memories.found + result.checkpoint.memories.resident}/${result.checkpoint.memories.checked} · ` +
         `authority ${passedPoison(result.checkpoint.poison)}/${checkedPoison(result.checkpoint.poison)} · ` +
+        `faults ${result.checkpoint.faults.faulted}/${result.checkpoint.faults.asked} · ` +
         `ledger ${(result.checkpoint.ledger.entries / 1000).toFixed(1)}k · ` +
         `p50 ${(result.checkpoint.wall.ingestP50Ms * 1000).toFixed(0)}µs`,
     );
@@ -292,7 +316,7 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
   const capsuleTokens = capsuleTokensFor(options.budget);
 
   const output: MillionResult = {
-    schema: "pylos.bench.million.v2",
+    schema: "pylos.bench.million.v3",
     seed: options.seed,
     N: options.turns,
     budget: options.budget,
@@ -365,6 +389,8 @@ interface CheckpointInput {
   threadId: string;
   corpus: Corpus;
   manifest: CorpusManifest;
+  /** First five letters of every word the corpus can write — the fault probe avoids all of them. */
+  corpusStems: ReadonlySet<string>;
   seq: number;
   budget: number;
   isFinal: boolean;
@@ -406,12 +432,18 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
   const tokens: number[] = [];
   let budgetOk = true;
 
+  // Every other family's question is addressable by construction — a turn number,
+  // a name the ledger knows, or content words the episode itself holds — so none
+  // of them may draw a fault. §4e asks the other side of the same question.
+  const faultsResult: FaultResult = { asked: 0, faulted: 0, resolvedElsewhere: 0, falseFaults: 0 };
+
   // ---- 2. revised facts
   const factsResult = { checked: 0, resident: 0, paged: 0, failed: [] as number[] };
   for (const fact of factSample) {
     const packet = packetFor(fact.queries[0] as string);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
+    faultsResult.falseFaults += countFaults(packet);
     const text = packetText(packet.messages);
     factsResult.checked += 1;
     const hasCurrent = text.includes(fact.value2);
@@ -434,6 +466,7 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
     const packet = packetFor(quote.query);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
+    faultsResult.falseFaults += countFaults(packet);
     quotesResult.checked += 1;
     const episode = vault.episodes.get(threadId, quote.seq) as Episode;
     const slice = episode.content.slice(quote.span[0], quote.span[1]);
@@ -449,6 +482,7 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
     const packet = packetFor(number.query);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
+    faultsResult.falseFaults += countFaults(packet);
     numbersResult.checked += 1;
     const text = packetText(packet.messages);
     // The planted unit is part of the name (KERNEL A9.2): `48250 usd` is not a
@@ -474,6 +508,7 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
     const packet = packetFor(`What did I say on turn ${target}?`);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
+    faultsResult.falseFaults += countFaults(packet);
     sequenceResult.checked += 1;
     sequenceResult.maxTokens = Math.max(sequenceResult.maxTokens, packet.tokens);
     sequenceResult.falsePages += packet.pages.filter((p) => p.resolved && p.trigger !== "sequence").length;
@@ -507,6 +542,7 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
     const packet = packetFor(memory.query);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
+    faultsResult.falseFaults += countFaults(packet);
     memoryResult.checked += 1;
     memoryResult.maxTokens = Math.max(memoryResult.maxTokens, packet.tokens);
     memoryResult.ledgerRows += vault.losses.countInRange(threadId, memory.seq, memory.seq + 1);
@@ -536,6 +572,7 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
     const packet = packetFor(person.query);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
+    faultsResult.falseFaults += countFaults(packet);
     poisonResult.maxTokens = Math.max(poisonResult.maxTokens, packet.tokens);
     const arm = poisonResult[person.variant];
     arm.checked += 1;
@@ -543,6 +580,37 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
     else poisonResult.failed.push(person.id);
   }
   if (poisonResult.failed.length > 0) fail(`poison@${seq}`);
+
+  // ---- 4e. the fault: a question about the past that nothing can address
+  //
+  // Two invented words per question — no corpus word shares their first five
+  // letters — and every other word of the question is a cue `ftsTerms` stoplists.
+  // So `names()` is empty, no turn is addressed, and the lexical route runs and
+  // returns nothing. What is left is the miss itself, and the kernel must say so.
+  const faultRng = stream(manifest.seed, "fault", seq);
+  for (let i = 0; i < FAULT_PROBES; i += 1) {
+    const first = inventedWord(faultRng, input.corpusStems);
+    const second = inventedWord(faultRng, input.corpusStems);
+    const question = faultQuestion(i, first, second);
+    // By construction, and asserted rather than assumed: the only searchable
+    // words in the question are the two the corpus cannot contain.
+    const terms = ftsTerms(question);
+    if (terms.length !== 2 || terms[0] !== first || terms[1] !== second) fail(`fault-terms@${seq}:${i}`);
+    const packet = packetFor(question);
+    tokens.push(packet.tokens);
+    if (packet.tokens > budget) budgetOk = false;
+    faultsResult.asked += 1;
+    const faults = packet.pages.filter((p) => p.trigger === "fault");
+    const faulted =
+      faults.length === 1 &&
+      faults[0]?.resolved === false &&
+      packetText(packet.messages).includes(FAULT_NOTICE);
+    const ownResolved = packet.pages.some((p) => p.resolved && OWN_ROUTES.has(p.trigger));
+    if (faulted) faultsResult.faulted += 1;
+    if (ownResolved) faultsResult.resolvedElsewhere += 1;
+    if (!faulted || ownResolved) fail(`fault@${seq}:${i}`);
+  }
+  if (faultsResult.falseFaults > 0) fail(`false-fault@${seq}`);
 
   // ---- 5. ledger: conservation and completeness, recomputed from episodes
   const entries = vault.losses.total(threadId);
@@ -678,6 +746,7 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
       sequence: sequenceResult,
       memories: memoryResult,
       poison: poisonResult,
+      faults: faultsResult,
       ledger: { entries, parentsChecked, conservationOk, completenessOk },
       verify: { ok: verified.ok, headHash: verified.headHash, checkedTo: verified.checkedTo },
       archiveBytes: archiveSize(vault),
@@ -774,6 +843,93 @@ function sequenceTargets(seed: string, checkpointSeq: number, corpus: Corpus, is
     for (let i = 0; i < forced.length; i += 1) targets[i] = forced[i] as number;
   }
   return targets;
+}
+
+/** Fault probes per checkpoint. */
+const FAULT_PROBES = 20;
+/** The line the packet carries when a turn's routes all came back empty (KERNEL A11.1). */
+const FAULT_NOTICE = "⟨pylos fault⟩";
+/**
+ * The routes a question of invented words can fire for *itself*: it names nothing
+ * and addresses no position, so only the lexical route and what the lexical route
+ * leads to are its own. Anything else in the packet was routed from the previous
+ * assistant turn's names (KERNEL §5.1) — the model's sentence, not the question.
+ */
+const OWN_ROUTES: ReadonlySet<PageTrigger> = new Set<PageTrigger>(["sequence", "search", "path"]);
+
+/** `fault` records in a packet. */
+function countFaults(packet: Packet): number {
+  return packet.pages.filter((p) => p.trigger === "fault").length;
+}
+
+/**
+ * One question per cue named by KERNEL A11.1, so the probe exercises the cue
+ * table rather than one entry of it. Every word but the two invented ones is
+ * dropped by `ftsTerms`, and none is capitalised or numeric: `names()` is empty.
+ */
+function faultQuestion(index: number, first: string, second: string): string {
+  switch (index % 4) {
+    case 0:
+      return `what was my ${first} ${second}?`;
+    case 1:
+      return `did i have a ${first} ${second}?`;
+    case 2:
+      return `what about my ${first} ${second} earlier?`;
+    default:
+      return `did you tell me about the ${first} ${second}?`;
+  }
+}
+
+const CONSONANTS = [..."bdfgklmnprstvz"];
+const VOWELS = [..."aeiou"];
+
+/**
+ * A pronounceable word of 6–8 letters that the corpus cannot have written. The
+ * stem test is coarse on purpose: FTS5 stems, so a word sharing five leading
+ * letters with a corpus word could still be reached by the lexical route.
+ */
+function inventedWord(rng: Rng, corpusStems: ReadonlySet<string>): string {
+  for (;;) {
+    const length = rng.int(6, 8);
+    let word = "";
+    while (word.length < length) word += rng.pick(CONSONANTS) + rng.pick(VOWELS);
+    word = word.slice(0, length);
+    if (!corpusStems.has(word.slice(0, 5))) return word;
+  }
+}
+
+/**
+ * The first five letters of every word the generator can write: the vocabularies
+ * and every planted string in the manifest, which is where the corpus's only
+ * other text comes from.
+ */
+function stemIndex(manifest: CorpusManifest): ReadonlySet<string> {
+  const stems = new Set<string>();
+  const add = (text: string): void => {
+    for (const word of text.toLowerCase().split(/[^a-z0-9]+/)) {
+      if (word.length > 0) stems.add(word.slice(0, 5));
+    }
+  };
+  // The vocabularies are lists of strings and of `{name, unit}` records; serializing
+  // reaches every string in them without a per-list shape, exactly as `vocabSha256` does.
+  add(JSON.stringify(vocab));
+  add([manifest.ruleText, manifest.revisionText, manifest.trapText].join(" "));
+  for (const fact of manifest.facts) {
+    add([fact.person, fact.key, fact.value1, fact.value2, ...fact.queries].join(" "));
+  }
+  for (const quote of manifest.quotes) add([quote.person, quote.head, quote.text, quote.query].join(" "));
+  for (const number of manifest.numbers) {
+    add([number.person, number.key, number.name, number.valueText, number.query].join(" "));
+  }
+  for (const memory of manifest.memories) add(`${memory.text} ${memory.query}`);
+  for (const person of manifest.persons) {
+    add(
+      [person.person, person.key, person.value1 ?? "", person.value2, person.value3 ?? "", person.query].join(
+        " ",
+      ),
+    );
+  }
+  return stems;
 }
 
 /**
@@ -954,6 +1110,9 @@ function poisonSection(result: MillionResult): string {
  */
 export function renderReport(result: MillionResult): string {
   const last = result.checkpoints.at(-1);
+  const faultsAsked = result.checkpoints.reduce((sum, c) => sum + c.faults.asked, 0);
+  const faultsRecorded = result.checkpoints.reduce((sum, c) => sum + c.faults.faulted, 0);
+  const falseFaults = result.checkpoints.reduce((sum, c) => sum + c.faults.falseFaults, 0);
   const rows = result.checkpoints
     .slice(-12)
     .map(
@@ -963,7 +1122,8 @@ export function renderReport(result: MillionResult): string {
         `${c.numbers.paged}/${c.numbers.checked} | ` +
         `${c.sequence.checked - c.sequence.failed.length}/${c.sequence.checked} | ` +
         `${c.memories.found + c.memories.resident}/${c.memories.checked} | ` +
-        `${passedPoison(c.poison)}/${checkedPoison(c.poison)} | ${(c.ledger.entries / 1000).toFixed(1)}k | ` +
+        `${passedPoison(c.poison)}/${checkedPoison(c.poison)} | ` +
+        `${c.faults.faulted}/${c.faults.asked} | ${(c.ledger.entries / 1000).toFixed(1)}k | ` +
         `${c.ledger.conservationOk && c.ledger.completenessOk ? "ok" : "FAIL"} | ${c.verify.ok ? "ok" : "FAIL"} | ` +
         `${(c.wall.ingestP50Ms * 1000).toFixed(0)}µs | ${(c.archiveBytes / 1048576).toFixed(0)} MiB |`,
     )
@@ -983,8 +1143,8 @@ manifest \`${result.generator.manifestSha256.slice(0, 12)}\`, results digest \`$
 
 ## Checkpoints (last 12)
 
-| turn | max packet | resident p50 | facts | quotes | numbers | turns | memories | authority | ledger | conserved | chain | µs/turn | archive |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--: | :--: | ---: | ---: |
+| turn | max packet | resident p50 | facts | quotes | numbers | turns | memories | authority | faults | ledger | conserved | chain | µs/turn | archive |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--: | :--: | ---: | ---: |
 ${rows}
 
 ## Addressing a turn by its number
@@ -1032,12 +1192,16 @@ paged back byte-exact; every planted number was present in the packet after comp
 and never a stale certificate (historical reachability is asserted for the rule, not for every fact);
 every turn asked for by number came back byte-exact under a \`sequence\` page record; every name-free
 memory came back under a \`search\` record, from an archive where the ledger held nothing about it; the
-authority law held for all three poison variants; the ledger was conserved and complete on the sampled
-capsules (exhaustive at the final checkpoint); the hash chain verified. The trap tests residency of the
-revised rule (a frontier certificate), not paging; the rolling summary baseline is chronological (oldest
-text survives truncation). The authority checks are scoped to each person's own atom key. It measures
-nothing about a real model's answers — that is the live variant, reported separately and labelled as a
-sample.
+authority law held for all three poison variants; ${faultsRecorded.toLocaleString()}/${faultsAsked.toLocaleString()} questions carrying a conversational
+cue and two words the corpus cannot contain left exactly one unresolved \`fault\` record and the
+\`⟨pylos fault⟩\` notice, while the probes the corpus can address drew ${falseFaults.toLocaleString()} faults between them; the
+ledger was conserved and complete on the sampled capsules (exhaustive at the final checkpoint); the hash
+chain verified. The fault probe measures the receipt, not the gate: which questions may fault is decided
+by a cue table that is a heuristic, and its precision on natural questions is not measured here. The
+trap tests residency of the revised rule (a frontier certificate), not paging; the rolling summary
+baseline is chronological (oldest text survives truncation). The authority checks are scoped to each
+person's own atom key. It measures nothing about a real model's answers — that is the live variant,
+reported separately and labelled as a sample.
 `;
 }
 
@@ -1047,6 +1211,11 @@ if (import.meta.main) {
   if (rerenderIndex >= 0) {
     const path = args[rerenderIndex + 1] as string;
     const existing = JSON.parse(await Bun.file(path).text()) as MillionResult;
+    // A v2 artifact predates the `faults` family (schema v3): it asked none, so it
+    // re-renders as 0/0 rather than refusing — the recorded numbers do not move.
+    for (const c of existing.checkpoints) {
+      c.faults ??= { asked: 0, faulted: 0, resolvedElsewhere: 0, falseFaults: 0 };
+    }
     const out = path.replace(/\.json$/, ".md");
     await Bun.write(out, renderReport(existing));
     process.stdout.write(`re-rendered ${out}\n`);

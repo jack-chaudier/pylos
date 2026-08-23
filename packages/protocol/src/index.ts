@@ -170,7 +170,16 @@ export type CheckStatus =
   | "none" // nothing to check: every named value in the draft was supported
   | "check-failed"; // the provider failed during the check round; the draft was kept, qualified
 
-export type PageTrigger = "sequence" | "ledger" | "historical" | "search" | "model" | "explicit" | "check";
+export type PageTrigger =
+  | "sequence"
+  | "ledger"
+  | "historical"
+  | "search"
+  | "path" // an earlier turn's receipt led back to the turns it was answered from (KERNEL A11.2)
+  | "model"
+  | "explicit"
+  | "check"
+  | "fault"; // no route reached the archive for this question (KERNEL A11.1)
 
 export interface PageRecord {
   trigger: PageTrigger;
@@ -290,7 +299,9 @@ export interface AuthStatus {
 // GET  /api/threads/:id/ledger?name&limit  → LossEntry[]
 // POST /api/threads/:id/turn  TurnRequest  → text/event-stream of TurnEvent
 // POST /api/threads/:id/attach (multipart) → Episode[]   (attachment episodes; text extracted when possible)
-// POST /api/threads/:id/handoff {model}    → Episode      (writes the handoff divider)
+// POST /api/threads/:id/handoff {model}    → Episode | { ok, changed: false }   (the divider, when the
+//                                            model that last spoke is a different one; 409 no_speaker
+//                                            before any model has spoken. A turn writes it by itself.)
 // POST /api/threads/:id/forget {seqs?|atomIds?|reason} → { tombstoneId, removalSeq, echoes: Seq[], capsules, packets, blobs }  (KERNEL A10.6; echoes = assistant turns that quoted it)
 // POST /api/threads/:id/export {passphrase, range?} → application/octet-stream (.pylos)
 // POST /api/import (multipart file + passphrase) → ThreadStats
@@ -320,7 +331,6 @@ export interface TurnRequest {
   text: string;
   model?: string; // defaults to thread setting
   budget?: number; // tokens; defaults to settings
-  attachmentSeqs?: Seq[]; // attachments uploaded earlier in this turn
 }
 
 export type TurnEvent =
@@ -340,7 +350,7 @@ export type TurnEvent =
   | { type: "done"; episode: Episode; usage?: Usage }
   | { type: "error"; message: string; code?: string };
 
-export const PYLOS_VERSION = "1.2.0";
+export const PYLOS_VERSION = "1.3.0";
 export const DEFAULT_BUDGET = 32_768;
 export const DEMO_BUDGET = 8_192;
 export const LEAF_CAPSULE_EPISODES = 32;
