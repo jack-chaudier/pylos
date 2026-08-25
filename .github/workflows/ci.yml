@@ -24,6 +24,9 @@ jobs:
       - run: bun run --cwd apps/web build
       - uses: dtolnay/rust-toolchain@stable
         if: matrix.os == 'macos-latest'
+      - name: Build sidecar (tauri's build script validates the declared binary)
+        if: matrix.os == 'macos-latest'
+        run: bun run --cwd packages/server build:sidecar
       - name: Desktop shell tests
         if: matrix.os == 'macos-latest'
         run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
