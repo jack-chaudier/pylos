@@ -238,11 +238,10 @@ test("a child killed after SQL commit is recovered from durable attachment stage
   vault.db.close();
 
   const coreUrl = new URL("../src/index.ts", import.meta.url).href;
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `
+  // The payload literals push this script near a megabyte. Linux caps a single
+  // argv string at 128 KiB (MAX_ARG_STRLEN), so `-e` cannot carry it; the child
+  // runs from a script file instead.
+  const childScript = `
         const { createRequire } = await import("node:module");
         const fs = createRequire(import.meta.url)("node:fs");
         const rename = fs.renameSync;
@@ -261,8 +260,11 @@ test("a child killed after SQL commit is recovered from durable attachment stage
             blob: { bytes: Uint8Array.from(${JSON.stringify([...second])}), mime: "text/plain", name: "child-second.txt" } },
         ]);
         process.exit(86);
-      `,
-    ],
+      `;
+  const childScriptPath = resolve(vault.home, "crash-child.mjs");
+  await Bun.write(childScriptPath, childScript);
+  const child = Bun.spawn(
+    [process.execPath, "run", childScriptPath],
     {
       cwd: resolve(import.meta.dir, "../../.."),
       env: { ...process.env, PYLOS_HOME: vault.home, PYLOS_THREAD: thread.id },
