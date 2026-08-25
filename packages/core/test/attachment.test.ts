@@ -263,15 +263,12 @@ test("a child killed after SQL commit is recovered from durable attachment stage
       `;
   const childScriptPath = resolve(vault.home, "crash-child.mjs");
   await Bun.write(childScriptPath, childScript);
-  const child = Bun.spawn(
-    [process.execPath, "run", childScriptPath],
-    {
-      cwd: resolve(import.meta.dir, "../../.."),
-      env: { ...process.env, PYLOS_HOME: vault.home, PYLOS_THREAD: thread.id },
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
+  const child = Bun.spawn([process.execPath, "run", childScriptPath], {
+    cwd: resolve(import.meta.dir, "../../.."),
+    env: { ...process.env, PYLOS_HOME: vault.home, PYLOS_THREAD: thread.id },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const stderr = await new Response(child.stderr).text();
   const exit = await child.exited;
   expect(exit, stderr).not.toBe(0);
