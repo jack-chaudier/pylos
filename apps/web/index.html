@@ -6,13 +6,15 @@
     <title>Pylos — the conversation that does not end</title>
     <meta
       name="description"
-      content="Pylos is one conversation that never has to end. It keeps the exact, hash-chained archive of every turn, compiles a bounded view for whatever model you are using now, and records what each compaction lost so it can page the exact material back before the model answers."
+      content="One conversation, every model, a million turns deep. Pylos keeps the exact hash-chained archive, compiles a fixed-budget view for whichever model is talking, and writes a receipt for everything the view leaves out — so the exact words come back."
     />
     <link rel="canonical" href="https://pylos.vercel.app/" />
     <meta name="theme-color" content="#D9450E" />
     <meta name="color-scheme" content="light" />
 
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
 
@@ -22,20 +24,20 @@
     <meta property="og:title" content="Pylos — the conversation that does not end" />
     <meta
       property="og:description"
-      content="One thread. Every model. A million turns deep — ask about anything you ever said and the exact words come back."
+      content="One conversation, every model, a million turns deep. Pylos keeps the exact hash-chained archive, compiles a fixed-budget view for whichever model is talking, and writes a receipt for everything the view leaves out — so the exact words come back."
     />
     <meta property="og:image" content="https://pylos.vercel.app/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Pylos — one conversation, every model, nothing forgotten silently."
+      content="Pylos — one conversation, every model, a million turns deep."
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Pylos — the conversation that does not end" />
     <meta
       name="twitter:description"
-      content="One thread. Every model. A million turns deep — ask about anything you ever said and the exact words come back."
+      content="One conversation, every model, a million turns deep. Pylos keeps the exact hash-chained archive, compiles a fixed-budget view for whichever model is talking, and writes a receipt for everything the view leaves out — so the exact words come back."
     />
     <meta name="twitter:image" content="https://pylos.vercel.app/og.png" />
 
@@ -63,24 +65,39 @@
 
     <!-- ── nav ────────────────────────────────────────────────────────── -->
     <header class="nav">
-      <div class="wrap nav__in">
-        <a class="wordmark" href="/" aria-label="Pylos, home">Pylos</a>
-        <nav class="nav__links" aria-label="Primary">
-          <a
-            class="is-hide-sm"
-            href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md"
-            >Theory</a
+      <div class="nav__bar">
+        <div class="wrap nav__in">
+          <a class="wordmark" href="#top" aria-label="Pylos, home">
+            <span class="mark" aria-hidden="true"
+              ><img src="/art/empyrean.webp" width="1600" height="1974" alt="" decoding="async"
+            /></span>
+            <span>Pylos</span>
+          </a>
+          <p
+            class="mono nav__pulse"
+            title="The counter replays the deterministic 1,000,000-turn bench · chain verified — bench/results/million-6.md"
           >
-          <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos">GitHub</a>
-          <a href="#install">Install</a>
-          <a class="btn btn--bone btn--sm" href="#console">Ask the thread</a>
-        </nav>
+            <span class="nav__dot" aria-hidden="true"></span><span class="nav__tag">Our proof run</span><span data-nav-count>1,000,000</span><span class="nav__long"> turns · chain</span> ✓
+          </p>
+          <nav class="nav__links" aria-label="Primary">
+            <a
+              class="is-hide-sm"
+              href="https://github.com/jack-chaudier/pylos/blob/main/docs/THEORY.md"
+              >Theory</a
+            >
+            <a class="is-hide-sm" href="https://github.com/jack-chaudier/pylos">GitHub</a>
+            <a href="#install">Install</a>
+            <a class="btn btn--bone btn--sm" href="#console"
+              >Ask the thread<span class="btn__arrow" aria-hidden="true">→</span></a
+            >
+          </nav>
+        </div>
       </div>
     </header>
 
     <main id="main" tabindex="-1">
       <!-- ── hero ─────────────────────────────────────────────────────── -->
-      <section class="hero">
+      <section class="hero" id="top">
         <div class="wrap hero__in">
           <div class="hero__copy">
             <p class="mono eyebrow">Open source · Apache-2.0 · macOS + Linux</p>
@@ -88,11 +105,13 @@
               The conversation<br /><em>that does not end</em>
             </h1>
             <p class="lede">
-              One thread. Every model. A million turns deep — ask about anything you ever said and
-              the exact words come back.
+              One thread. Every model. A million turns deep, and the exact words come back — with a
+              receipt for everything the model's view left out.
             </p>
             <div class="cta">
-              <a class="btn btn--bone" href="#console">Ask the million-turn thread</a>
+              <a class="btn btn--bone" href="#console"
+                >Ask the million-turn thread<span class="btn__arrow" aria-hidden="true">→</span></a
+              >
               <a class="btn btn--ghost" href="#install">Install</a>
             </div>
             <p class="cmd">
@@ -155,8 +174,7 @@
                 decoding="async"
               />
               <p class="mono feature__caption">
-                Every turn is kept exactly and hashed into a chain; ask for turn 61,234 or for where
-                Esme Whitlock lives now and the bytes come back.
+                Every turn is kept exactly and hashed into a chain. Ask for turn 61,234, or for what Esme Whitlock said — a name planted deep in the million-turn thread you can question further down this page — and the bytes come back, not a paraphrase.
               </p>
             </li>
             <li class="feature">
@@ -166,14 +184,13 @@
                 class="feature__plate"
                 src="/art/ninth-heaven.webp"
                 width="1200"
-                height="1534"
+                height="1638"
                 alt="Gustave Doré, Paradiso XXVIII: two figures at a fixed horizon of light."
                 loading="lazy"
                 decoding="async"
               />
               <p class="mono feature__caption">
-                The model reads a fixed budget no matter how long the thread is; what the budget
-                could not hold is written to a ledger, never dropped in silence.
+                The model reads a fixed budget whether the thread is ten turns or a million. Whatever the budget cannot hold is written to a ledger with an address, never dropped in silence.
               </p>
             </li>
             <li class="feature">
@@ -189,8 +206,7 @@
                 decoding="async"
               />
               <p class="mono feature__caption">
-                Grok stops, Claude continues, a local model finishes; the thread is the agent, the
-                model is the visitor.
+                Grok stops, Claude continues, a local model finishes. The thread is the agent; the model is the visitor.
               </p>
             </li>
           </ol>
@@ -200,13 +216,47 @@
       <!-- ── the proof ────────────────────────────────────────────────── -->
       <section class="proof" id="proof" aria-labelledby="proof-title">
         <div class="wrap">
-          <p class="mono eyebrow">The proof · deterministic · zero model calls</p>
+          <p class="mono eyebrow">The proof · deterministic · zero model calls · kernel 2.0.0</p>
           <h2 class="sec__title" id="proof-title">
             1,000,000 turns.<br /><em>The view never grew.</em>
           </h2>
           <div class="proof__body" data-proof>
             <p class="mono">Loading the bench series…</p>
           </div>
+        </div>
+      </section>
+
+      <!-- ── what is proven, what is not ──────────────────────────────── -->
+      <section class="boundary" aria-labelledby="boundary-title">
+        <div class="wrap">
+          <h2 class="mono eyebrow boundary__title" id="boundary-title">
+            What is proven, what is not
+          </h2>
+          <div class="boundary__row">
+            <article class="boundary__col">
+              <p class="mono boundary__label">Proven</p>
+              <p class="boundary__body">
+                Exact recall by address. 1,000,000 turns, every planted fact, quote, number and turn reference recovered at the final checkpoint. Chain verified.
+              </p>
+            </article>
+            <article class="boundary__col">
+              <p class="mono boundary__label">Experimental</p>
+              <p class="boundary__body">
+                Finding a source from different wording. On our 13-question authored set the optional local similarity route chose the intended source 6 of 13 times and a wrong one 5 of 13. A suggestion is verified against the stored bytes before it is used.
+              </p>
+            </article>
+            <article class="boundary__col">
+              <p class="mono boundary__label">Not claimed</p>
+              <p class="boundary__body">
+                That any phrasing will find its source, that the model's answers are correct, or any number we have not measured.
+              </p>
+            </article>
+          </div>
+          <p class="mono boundary__more">
+            <a class="link" href="https://github.com/jack-chaudier/pylos/tree/main/bench/results"
+              >Read the receipts <span class="btn__arrow" aria-hidden="true">→</span></a
+            >
+          </p>
         </div>
       </section>
 
@@ -224,58 +274,46 @@
           </div>
 
           <p class="mono glosses">
-            <dfn
-              title="A capsule is an extractive summary of a fixed run of turns; capsules of capsules cover the whole archive in O(log n) of them."
-              >Capsule</dfn
-            >
-            a summary of a run of turns ·
-            <dfn
-              title="The loss ledger records every name, value and quote a capsule's text no longer contains, each with the exact turn and span it came from."
-              >Ledger</dfn
-            >
-            what a capsule no longer contains, with locators ·
-            <dfn
-              title="The frontier is the set of certificates that are currently true — standing rules and the newest value of every fact — carried in the packet whatever their age."
-              >Frontier</dfn
-            >
-            what is currently true, as certificates ·
-            <dfn
-              title="A certificate is a fact you stated. The kernel holds it true until you revise it, and never promotes a fact the model merely proposed."
-              >Certificate</dfn
-            >
-            a fact the user stated, kept as true until the user revises it ·
-            <dfn
-              title="Paging is fetching the exact archived turn a question needs and putting it in the packet before the model answers."
-              >Page</dfn
-            >
-            bringing an exact turn back before the model answers ·
-            <dfn
-              title="The packet is the text the compiler hands the model for one turn — header, frontier, capsules, paged material and the newest turns — inside a fixed token budget."
-              >Packet</dfn
-            >
-            the bounded text the model actually reads
+            Plain words first. The word after each dot is what Pylos calls it — hover a marked term
+            for the whole definition.
           </p>
 
           <div class="ap__panel">
             <div class="ap__grid">
               <div class="ap__cell">
                 <div class="ap__label">
-                  <span class="mono">Archive · exact, hash-chained</span>
+                  <span class="mono"
+                    >Every turn, kept exactly ·
+                    <dfn
+                      title="The archive is every turn of the conversation kept exactly as it was written, each one hashed into a chain so that a later change to any of them shows."
+                      >archive</dfn
+                    ></span
+                  >
                   <span class="mono" data-ap-rate>&nbsp;</span>
                 </div>
-                <strong class="counter" data-ap-archive aria-live="off">0</strong>
-                <p class="ap__sub" data-ap-archive-sub>0 capsules · 0 kB of archive text · 1 level</p>
+                <strong class="counter" data-ap-archive aria-live="off">—</strong>
+                <p class="ap__sub" data-ap-archive-sub>Waking the million-turn archive…</p>
               </div>
 
               <div class="ap__cell">
                 <div class="ap__label">
-                  <span class="mono">View · what the model sees</span>
-                  <span class="mono" data-ap-budget>budget 8,192</span>
+                  <span class="mono"
+                    >What the model reads ·
+                    <dfn
+                      title="The packet is the text the compiler hands the model for one turn — the header, the facts currently standing, the summaries, anything fetched back and the newest turns — inside a fixed token budget."
+                      >packet</dfn
+                    ></span
+                  >
+                  <span class="mono" data-ap-budget>budget 8,192 tokens</span>
                 </div>
                 <strong class="counter counter--view" data-ap-view
-                  >0<span class="counter__of"> / 8,192</span></strong
+                  >—<span class="counter__of"> / 8,192</span></strong
                 >
-                <div class="meter" role="img" aria-label="Packet composition against the token budget">
+                <div
+                  class="meter"
+                  role="img"
+                  aria-label="What fills the model's view, against its fixed budget"
+                >
                   <span class="meter__slot" data-slot="header"></span>
                   <span class="meter__slot" data-slot="frontier"></span>
                   <span class="meter__slot" data-slot="capsules"></span>
@@ -283,25 +321,51 @@
                   <span class="meter__slot" data-slot="recent"></span>
                 </div>
                 <ul class="legend" data-ap-legend>
-                  <li><i data-slot="header"></i>header</li>
-                  <li><i data-slot="frontier"></i>frontier</li>
-                  <li><i data-slot="capsules"></i>capsules</li>
-                  <li><i data-slot="paged"></i>paged</li>
-                  <li><i data-slot="recent"></i>recent</li>
+                  <li><i data-slot="header"></i>who and when · header</li>
+                  <li>
+                    <i data-slot="frontier"></i>the facts currently standing ·
+                    <dfn
+                      title="The frontier is the facts currently standing — the rules you set and the newest value of every fact — each one tied to the turn that stated it, and carried whatever their age."
+                      >frontier</dfn
+                    >
+                  </li>
+                  <li>
+                    <i data-slot="capsules"></i>summaries of older turns ·
+                    <dfn
+                      title="A capsule is a summary of a fixed run of turns, written out of the turns themselves; summaries of summaries cover the whole archive in a handful of them."
+                      >capsules</dfn
+                    >
+                  </li>
+                  <li>
+                    <i data-slot="paged"></i>fetched back for this question ·
+                    <dfn
+                      title="Paging is fetching the exact archived turn a question needs and putting it in front of the model before it answers."
+                      >paged</dfn
+                    >
+                  </li>
+                  <li><i data-slot="recent"></i>the newest turns · recent</li>
                 </ul>
               </div>
             </div>
 
             <div class="ap__ledger">
-              <span class="mono" data-ap-ledger-count>Ledger · 0 entries · 0 removed (conserved)</span>
+              <span class="mono"
+                >What the summaries dropped, with a way back to it ·
+                <dfn
+                  title="The loss ledger records every name, value and quote a summary's text no longer contains, each with the exact turn and span it came from."
+                  >ledger</dfn
+                ></span
+              >
+              <span class="mono" data-ap-ledger-count>waiting for the first summary to seal</span>
               <div class="strip" data-ap-strip aria-hidden="true"></div>
             </div>
 
             <div class="ap__timeline">
               <canvas data-ap-canvas height="46" aria-hidden="true"></canvas>
               <span class="mono" data-ap-levels
-                >Compaction hierarchy · level 4 → level 0 · the full-height mark is turn 483,112,
-                where the rule changed</span
+                >Summaries of summaries, coarsest lane at the top down to the raw turns at the bottom
+                (level 4 → level 0) · the full-height mark is turn 483,112, where the rule
+                changed</span
               >
             </div>
 
@@ -314,26 +378,17 @@
           </div>
 
           <div class="ap__foot">
-            <p class="mono" data-ap-status>Ready · seed 1 · deterministic</p>
+            <p class="mono" data-ap-status>Ready · the same numbers every run (seed 1)</p>
             <button class="btn btn--quiet" type="button" data-ap-replay>Replay</button>
           </div>
-          <!-- The two bench figures in this note are `final` in public/bench/series.json,
-               derived at build from bench/results/million-5.json. -->
           <p class="note">
-            This is an exhibit, not the proof: the browser-safe subset of the compiler
-            (<code>@pylos/core/pure</code> — no vault, no chain, no index) run in this tab over the
-            bench's own corpus at seed <code>1</code> — the same million turns
-            <code>pylos bench million</code> ingests, generated here by the same function. It
-            computes real capsules, a real ledger and a real packet, and reports what actually
-            happened: the closing question about the migration rule needs no page, because the rule
-            is a certificate the frontier keeps resident; the closing question about an exact quote
-            does, and the ledger returns the turn it is on. Keeping no vault and no index also makes
-            its counters smaller than the bench's — 676,593 ledger entries and 1,054 MiB of archive
-            there, less of both here; the turns are the same million. The proof is the deterministic
-            million-turn bench artifact in
+            The browser-safe compiler (<code>@pylos/core/pure</code> — no vault, no chain, no index)
+            is running in this tab over a million turns from the bench's own generator at seed
+            <code>1</code>, building real capsules, a real ledger and a real packet. Keeping no vault
+            makes these counters smaller than the bench's, which is the artifact in
             <a class="link" href="https://github.com/jack-chaudier/pylos/tree/main/bench/results"
               >bench/results</a
-            >. How long the run takes depends on your machine; the size of the packet does not.
+            >.
           </p>
           <p class="sr" role="status" data-ap-live></p>
         </div>
@@ -348,12 +403,16 @@
           </h2>
           <p class="lede">
             The kernel answering is the real one — <code>@pylos/core/pure</code>, running in your
-            browser over the same thread the published bench ingests. No model is called. Every line
-            below is archived text, or a certificate the kernel derived from archived text, and it
-            says which route found it. The live sample in the story above replays the migration rule
-            at turn 966 of a 2,000-turn thread; the million-turn thread here plants the same revision
-            at turn 483,112. You can add to the thread too: start a line with
-            <code>remember:</code> and it becomes turn 1,000,001.
+            browser over a million-turn fixture generated by the same function as the bench. No model
+            is called. Esme Whitlock, the name from the first card at the top of this page, is one
+            of the people in this thread; the chips below ask about her. Every line below is
+            archived text, or a fact you stated and the kernel still holds true — a
+            <dfn
+              title="A certificate is a fact you stated. The kernel holds it true until you revise it, and never promotes a fact the model merely proposed."
+              >certificate</dfn
+            >
+            — and it says which route found it. You can add to the thread too: start a
+            line with <code>remember:</code> and it becomes turn 1,000,001.
           </p>
 
           <div class="console__panel">
@@ -379,15 +438,27 @@
           <div class="console__cards" data-console-cards></div>
 
           <p class="note">
-            The routes are the kernel's: a turn number is an address; a standing rule is a
-            certificate that stays resident however old it is; a name a capsule dropped has an exact
-            locator in the loss ledger; a fact you stated outranks a fact the assistant stated; and a
-            sentence with no name in it can only be found by searching for its words. Each card says
-            which one fired. A question that never refers back to the conversation is answered
-            <code>⟦not a memory⟧</code> — the thread has no turn about it, and that is not a fault.
-            The two model answers in the migration card are recorded — they come from
-            <a class="link" href="/bench/trap.json">/bench/trap.json</a>, the artifact the live bench
-            wrote, with the packet hash beside them. Nothing on this page asks a model anything.
+            Each card says how it reached the line: a turn number is an address, a rule you set stays
+            in the view however old it is, a name a summary dropped keeps a way back to its turn.
+            Two kinds of miss are told apart, and only one of them is a failure. A question about the
+            world — one that never reaches back into this conversation — gets
+            <code>⟦no turn about that · not a memory⟧</code>: the thread has no turn on the subject,
+            and a model would answer it from what it knows. A question that does reach back into the
+            conversation, and reaches no turn, gets
+            <code>⟦looked back, found no route to a turn · page fault⟧</code>, and that one is
+            receipted as a failure. The two model answers in the migration card are
+            recorded, from <a class="link" href="/bench/trap.json">/bench/trap.json</a>.
+          </p>
+          <p class="note">
+            <span class="mono">Natural-question receipt · 6 of 13 intended sources · 5 of 13 wrong ones</span
+            ><br />
+            The similarity route proposes an address; it does not certify a hit. Thirteen authored
+            questions, no model called.
+            <a
+              class="link"
+              href="https://github.com/jack-chaudier/pylos/blob/main/bench/results/natural.md"
+              >Read the natural-question receipt</a
+            >.
           </p>
         </div>
       </section>
@@ -395,7 +466,7 @@
       <!-- ── install ──────────────────────────────────────────────────── -->
       <section class="install" id="install" tabindex="-1" aria-labelledby="install-title">
         <div class="wrap">
-          <p class="mono eyebrow">Install · v1.3.0 · Apache-2.0</p>
+          <p class="mono eyebrow">Install · v2.0.0 · Apache-2.0</p>
           <h2 class="sec__title" id="install-title">
             One window. One composer.<br /><em>No vocabulary.</em>
           </h2>
@@ -405,17 +476,21 @@
             <article class="card" data-os="mac">
               <h4 class="card__os">macOS</h4>
               <p class="mono card__meta">Apple silicon · macOS 13+</p>
-              <p class="mono card__meta">pylos-1.3.0.dmg</p>
-              <a class="btn btn--bone" href="https://github.com/jack-chaudier/pylos/releases/latest"
-                >Download for macOS</a
+              <p class="mono card__meta">pylos-2.0.0.dmg</p>
+              <a
+                class="btn btn--bone"
+                href="https://github.com/jack-chaudier/pylos/releases/latest/download/pylos-2.0.0.dmg"
+                >Download<span class="btn__arrow" aria-hidden="true">→</span></a
               >
             </article>
             <article class="card" data-os="linux">
               <h4 class="card__os">Linux</h4>
               <p class="mono card__meta">x64 · Debian / Ubuntu .deb</p>
-              <p class="mono card__meta">pylos-1.3.0.deb</p>
-              <a class="btn btn--bone" href="https://github.com/jack-chaudier/pylos/releases/latest"
-                >Download for Linux</a
+              <p class="mono card__meta">pylos-2.0.0.deb</p>
+              <a
+                class="btn btn--bone"
+                href="https://github.com/jack-chaudier/pylos/releases/latest/download/pylos-2.0.0.deb"
+                >Download<span class="btn__arrow" aria-hidden="true">→</span></a
               >
             </article>
           </div>
@@ -479,7 +554,7 @@
           <li>Instrument Serif and Courier Prime — SIL Open Font License</li>
         </ul>
         <ul class="mono footer__meta">
-          <li>Pylos v1.3.0</li>
+          <li>Pylos v2.0.0</li>
           <li>Apache-2.0</li>
           <li>2026</li>
           <li><a href="https://github.com/jack-chaudier/pylos">GitHub</a></li>

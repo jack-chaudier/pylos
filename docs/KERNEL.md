@@ -1,4 +1,4 @@
-# Pylos Kernel — specification (v1)
+# Pylos Kernel — specification (v2.0.0; legacy v1 bundles readable)
 
 The kernel is a TypeScript library (`@pylos/core`, Bun, `bun:sqlite`) with no UI
 dependency. It owns the archive, the memory IR, the context compiler, the loss
@@ -28,9 +28,20 @@ One SQLite database per user profile: `~/.pylos/vault.sqlite` (WAL, `0600`),
 blobs in `~/.pylos/objects/<sha256>` (content-addressed). `PYLOS_HOME`
 overrides. `--home <dir>` (or `PYLOS_HOME`) also owns `<dir>/auth.json`,
 unless `PYLOS_AUTH_PATH` overrides that path independently. All writes that
-belong to one turn commit in **one transaction**
-(episode + atoms + capsules + packet + pages): a crash can never leave an answer
-without its derivation.
+belong to one SQLite transaction commit atomically, but a provider-backed turn
+intentionally spans **tx A** and **tx B** (A6, A10.2). Tx A durably records the
+attachments, user episode, user rule atoms and pending packet before provider
+work. Tx B later commits the checked assistant answer, its receipt, assistant
+proposals, compaction and the completed packet together. A crash or provider
+failure between them may therefore leave a user turn and pending packet with no
+assistant answer; it cannot leave a committed assistant answer without the tx B
+derivation that accompanies it.
+
+The DDL below is a **non-exhaustive conceptual excerpt**, not installable or
+migration-complete schema. The authoritative schema is the ordered migrations
+in `packages/core/src/schema.ts`. In particular, this excerpt omits current
+receipt, reachability, fragment, address, semantic, attachment-manifest,
+atomization and capsule-ledger tables/columns and several production bounds.
 
 ```sql
 CREATE TABLE thread (
@@ -94,7 +105,10 @@ CREATE TABLE tombstone (id TEXT PRIMARY KEY, thread_id TEXT, target TEXT, reason
 Hash chain: `hash_i = sha256(hash_{i-1} ‖ canonicalJSON({seq, ts, role, model, provider, content_hash, meta}))`,
 `hash_0 = sha256("pylos:" + thread.id)`. `verify(thread)` replays the chain and
 must succeed after import. Verification must be incremental (store a checkpoint
-every 4,096 episodes) so the UI never waits on a full replay.
+every 4,096 episodes) so the UI never waits on a full replay. A checkpoint says
+where a replay may resume, not that one happened; a passing `verify()`
+separately records how far it certified, so a reader can state that without
+replaying (§A5).
 
 ## 2. Memory IR: atoms and revisions
 
@@ -190,7 +204,7 @@ Budget allocation (defaults, all tunable in `settings`):
 | Slot | Share | Content |
 | --- | --- | --- |
 | header | ≤ 4% | identity, turn count, date, archive size, the **view contract** (below) |
-| frontier | ≤ 20% | pinned atoms, then SUPPORTED atoms by recency; certificate form `key = value ⟨#seq⟩` |
+| frontier | ≤ 20% | pinned atoms, then SUPPORTED atoms by recency (ties order by insertion, newest first); certificate form `key = value ⟨#seq⟩` |
 | capsules | ≤ 18% | the O(log n) capsules covering everything before the exact window, coarse→fine, each followed by its ledger digest `⟨lost: 14 · names: Boston, 2026-06-03, "dry-run" …⟩` |
 | paged | ≤ 18% | exact episodes recovered for this turn (§5), each prefixed `⟦recovered #seq · trigger⟧` |
 | recent | remainder (≈ 40%) | the most recent episodes verbatim, newest-first fill |
@@ -259,13 +273,26 @@ every time; no provider conversation id is ever required to continue.
 the exported episodes, not the whole profile, and import restores
 `packets.jsonl` so the X-ray survives transport.*
 
-A single file: `pylos-<threadid>-<headseq>.pylos` = AES-256-GCM over a zip of
-`{manifest.json, episodes.jsonl, atoms.jsonl, capsules.jsonl, loss.jsonl,
-packets.jsonl, tombstones.jsonl, objects/*}` with a key derived from a
-passphrase (PBKDF2-SHA256 ≥ 600k iterations or scrypt; WebCrypto). Never
-contains credentials. `import` verifies the hash chain before accepting and
-refuses on mismatch. Selective export by seq range is allowed and marks the
-manifest as partial.
+The current writer emits v2: a single `pylos-<threadid>-<headseq>.pylos` file
+whose clear header declares `v:2`, followed by an AES-256-GCM stream of a
+framed archive (the authenticated archive marker is `PYLOS2`). Frames carry
+`manifest.json`, JSONL members, and content-addressed objects without a ZIP
+central directory, so staging and transport do not construct the whole archive
+in memory. The key is derived from a passphrase with the versioned
+PBKDF2-SHA256 scheme at exactly 600,000 iterations (`kdf =
+pbkdf2-sha256`, `iters = 600000`; WebCrypto). The current reader imports both
+current v2 framed bundles and legacy v1 ZIP bundles. The explicit legacy writer
+emits v1 only when the selected state is representable by the historical format;
+it refuses v2-only receipts, continuations or address state that an older reader
+could silently discard. An older reader must refuse a v2 header rather than
+discard new receipt files. Neither format contains credentials. AES-256-GCM
+authenticates each encrypted frame and the clear header supplied as AAD;
+`import` additionally verifies manifest/file SHA-256 digests, object/span and
+attachment-partition integrity, and the archive hash chain before accepting.
+These checks establish confidentiality and tamper detection for a holder of the
+passphrase, not sender identity, provenance, or external credential
+authenticity. Selective export by seq range is allowed and marks the manifest as
+partial.
 
 ## 8. Forgetting
 
@@ -281,22 +308,89 @@ content. Pylos forgets only on command, and records that it did.
 
 ## 9. Public surface of `@pylos/core`
 
-```ts
-openVault(opts?: {home?: string}): Vault
-vault.threads.create(title?) / list() / get(id)
-vault.episodes.append(threadId, ep) / list(threadId, {before, limit}) / get(threadId, seq) / search(threadId, q)
-vault.atoms.list(threadId, {phase, key}) / pin / revise
-compile(vault, threadId, {query, budget, model, tokenizer}): Packet   // §4
-page(vault, threadId, request): PageResult                           // §5
-atomize(vault, threadId, seqs, {modelExtractor?}): Atom[]            // §2
-compact(vault, threadId): Capsule[]                                  // §3, idempotent
-verify(vault, threadId): {ok, headHash, checkedTo}                   // §1
-exportBundle / importBundle                                          // §7
-forget(vault, threadId, target)                                      // §8
-stats(vault, threadId): ThreadStats
-```
+`packages/core/src/index.ts` currently re-exports on the order of 250 names —
+every function, type and tuning constant any module inside the kernel happens
+to need from another. That file is not the contract; this section is. It names
+the surface by group, one line per group naming the load-bearing functions and
+types. A name `index.ts` exports but this section does not name is
+implementation detail: it may be renamed, folded, or removed on a minor or
+patch release without that being a breaking change. Types are shared with
+`@pylos/protocol` unless noted otherwise.
 
-Types live in `@pylos/protocol` and are shared with the server and UI.
+**Vault, threads, hash chain** (§1, A5, A10.5, A11.4)
+`openVault(opts?: {home?}): Vault`; `vault.threads` / `vault.episodes` /
+`vault.atoms` / `vault.packets`; `EpisodeInput`, `StoredCapsule`, `Tombstone`,
+`PacketSummary`; the chain primitives `sha256`, `canonicalHash`, `chainHash`,
+`genesisHash`, `newId`, `metaHashOf`, `chainRecord`; `COMPILER_VERSION`,
+`CHECKPOINT_EVERY`, `PACKET_MESSAGE_RETENTION`; the ordered migration table
+`MIGRATIONS` and its named checkpoints (`AUTHORITY_REPLAY`,
+`ATOM_NAME_REBUILD`, `ATTACHMENT_NAME_REBUILD`); `needsAuthorityReplay`,
+`replayAtoms`, `replayAtomsBounded` (the A10.5 replay-on-open repair).
+`threads.create(title?, settings?, provenance?)` takes an optional
+`ThreadProvenance { id?: string; createdAt?: number }`. A supplied `id` is
+used verbatim, including as the genesis-hash seed, and must match
+`th_[A-Za-z0-9_-]{1,127}`; a duplicate id raises `VaultError`. A supplied
+`createdAt` must be a non-negative safe integer millisecond timestamp. Either
+field omitted keeps today's behavior — a random id, wall-clock time. The
+deterministic benches supply provenance derived from their seed, which is
+what makes head hash and packet digests seed-determined rather than
+run-to-run entropy.
+
+**Atomize, compact, compile, page, turn** (§2–§6, A9, A10, A11, A12.3)
+`atomize`, `atomizeWithModel`, `authorityOf` (§2); `compact`,
+`residentCapsules`, `capsuleLedgerNames`, `capsuleTokensFor`, `CapsuleWriter`
+(§3); `compile`, `compileView`, `Compilation`, `CompileOptions` (§4); `page`,
+`recall`, `resolves`, `containsName`, `isResident`, `PageRequest`,
+`PageResult`, `TOKENS_PER_PAGE`, `ftsQuery` (§5, A9.4); `runTurn`,
+`RunTurnOptions`, `TurnResult`, `Provider`, `roundsDigest`, `handoff` (§6, A6,
+A10.2, A10.3); the attachment manifest and tail route `buildAttachmentManifest`,
+`readAttachmentSpan`, `readAttachmentRange`, `verifyAttachmentSpan` (A12.3),
+which shares the paging contract.
+
+**Bundle export / import** (§7, A7, A10.7, A12.4)
+Stream-native, used by the CLI and server: `exportBundleStream`,
+`importBundleStream`, `BundleProgress`, `BundleLimits`,
+`BUNDLE_TRANSPORT_BUFFER_BOUND`. Compatibility byte API for small callers:
+`exportBundle`, `importBundle`. The explicit legacy writer: `exportBundleV1`.
+
+**Forget** (§8, A10.6)
+`forget`, `ForgetResult`, `ForgetTarget`, and the blob garbage collection it
+drives: `stageBlobForDeletion`, `commitBlobDeletion`, `discardBlobDeletion`,
+`recoverBlobDeletions`, `recoverBlobDeletionsBatched`.
+
+**Verify and reachability** (§1, A12.1)
+`verify`, `VerifyResult`; `buildReachability`, `verifyReachability`,
+`reachabilityNotice`.
+
+**Obligation and coverage** (A13)
+`collectionCue`, `coverageFor`, `explicitCardinality`, `renderCoverage`.
+
+**Claim gate** (A14)
+`gateAnswer`, `GateInput`, `GateResult`, `issueEvidenceCapabilities`,
+`scanRememberedClaims`, `scanRememberedClaimsDetailed`, `parseClaimMap`,
+`qualificationLinesFor`, `isMemoryQuestion`, `CLAIM_GRAMMAR_VERSION`,
+`answerReceiptDigestOf`.
+
+**Address graph and semantic route** (A15)
+`recordAddressRoute`, `recordAddressRouteFromReceipt`, `getAddressRoute`,
+`listAddressRoutes`, `listCurrentAddressRoutes`, `listEffectiveAddressRoutes`,
+`invalidateAddressRoute`, `invalidateAddressRoutesForSources`,
+`reuseAddressRoute`, `proposeAddressAlias`, `revalidateAddressAlias`,
+`canonicalAddressQuery`, `addressQueryDigest` (A15.1); `probeSemanticCapability`,
+`buildSemanticReceipt`, `verifySemanticHit`, `verifySemanticHits`,
+`semanticPageRecord`, `createSemanticRuntime`, `probeSemanticRuntime` (A15.2 —
+optional, and gated by the claim boundary that section states).
+
+**Demo / proof thread**
+`demo`, `readDemo`, `DEMO_MODEL`, `DEMO_BUDGET`, `DEMO_VERSION` — what
+`apps/app/src/components/ProofTour.tsx` reads (THEORY §13, the A12–A15 map).
+
+**`@pylos/core/pure`**
+Re-exported here for convenience and separately importable as
+`@pylos/core/pure`: the browser-safe subset (`names()`/normalization, budget
+math, the pure ledger, `sequenceRefs`) that powers the landing page's
+aperture. It carries no Bun or SQLite import — that constraint is part of the
+contract, not an implementation accident.
 
 ## 10. The bench: `pylos bench million`
 
@@ -329,6 +423,29 @@ landing page renders the same numbers. A live variant (`--live --model grok-4.3
 --turns 2000`) then asks the trap question through two packet builders —
 rolling-summary baseline vs Pylos — against the real provider and records both
 answers. The claim the landing page makes must be the claim the bench proves.
+
+`pylos bench live --model M [--turns N]` runs the same live comparison
+directly (`bench/live.ts`; defaults `turns=2000`, `seed=live-1`, `budget=8192`):
+one real provider, two packet builders, both answers recorded side by side.
+
+`pylos bench natural [--out PATH] [--markdown-out PATH]` runs the deterministic,
+zero-model-call natural-question measurement gate (`bench/natural.ts`, A15.3):
+small authored fixtures across the required families (self-hit, paraphrase,
+negation, pronouns/ambiguity, multilingual refer-back, deletion/supersession,
+partial collections, claim-map omission, world-knowledge), scored against the
+kernel's own routing, reachability, coverage and claim-gate receipts — not
+recall, precision, or provider efficacy. It writes `bench/results/natural.json`
+and `natural.md`.
+
+`pylos bench funeral --home DIR --thread ID --out PATH` runs the file-to-file
+Laptop Funeral transport measurement (`bench/funeral.ts`): exports a vault
+through `exportBundleStream` and restores it through `importBundleStream` into
+a fresh temporary home, then verifies the chain and a sampled page on both
+sides. `--turns N` seeds a deterministic fixture when `THREAD` is empty;
+`--bundle PATH`, `--page-seq N`, `--page-query TEXT`, `--million-result JSON`
+and `--budget N` (default 8192) are optional. See
+[`funeral-6.md`](../bench/results/funeral-6.md) for the retained million-episode
+run.
 
 ---
 
@@ -369,7 +486,7 @@ Page `n` iff `n ∈ names(q_t) ∪ names(previous assistant turn)` ∧ `n` has a
 
 Lexical search fires only when the query contains a question mark or interrogative **and** ≥ 1 name that is neither resident nor in the ledger; `k = 2`; trigger `search`; counted against `P_max`.
 
-HISTORICAL atoms are **never** resident by default (row 41: all-as-of state is identity-like); only the §5.2 trigger brings them in. The header shows `historical: n`; the ledger digest lists ≤ 3 most recently changed keys. Frontier eviction order: pinned → kind priority (rule/preference, decision, identity, task, fact, promise, hypothesis) → recency; each eviction writes a `loss` row of kind `atom`. Token counting applies to the rendered packet string. For models with `supportsTools=false`, the view contract says "say you would need to check" instead of "call `recall`" and `P_max` is raised by one.
+HISTORICAL atoms are **never** resident by default (row 41: all-as-of state is identity-like); only the §5.2 trigger brings them in. The header shows `historical: n`; the ledger digest lists ≤ 3 most recently changed keys. Frontier eviction order: pinned → kind priority (rule/preference, decision, identity, task, fact, promise, hypothesis) → recency; each eviction writes a `loss` row of kind `atom`. Atoms sharing a `valid_from_seq` order by insertion (rowid) — newest first in the frontier, oldest first among a capsule's certificates — so derived text is a function of the archive alone, never of an atom's random id. Token counting applies to the rendered packet string. For models with `supportsTools=false`, the view contract says "say you would need to check" instead of "call `recall`" and `P_max` is raised by one.
 
 ## A5. Hash chain canonicalization and `forget` (§1, §8)
 
@@ -380,21 +497,32 @@ content_hash = sha256(utf8(content))                      -- stored column
 meta_hash    = sha256(cjson(pick(meta, blob, mime, name, size, from, to)))   -- immutable meta only
 ```
 
-`forget` replaces `content` (and deletes the FTS row via the external-content delete trigger first) but keeps `content_hash`; `verify()` checks the chain over stored hashes and, for non-removed rows, `sha256(content) == content_hash`. Checkpoints every 4,096 store `(seq, hash)`.
+`forget` replaces `content` (and deletes the FTS row via the external-content delete trigger first) but keeps `content_hash`; `verify()` checks the chain over stored hashes and, for non-removed rows, `sha256(content) == content_hash`. Checkpoints every 4,096 store `(seq, hash)` — written by the writer on append as well as by a replay; a checkpoint says where a replay may resume, not that one happened.
+
+A passing `verify()` separately records `(seq, hash)` at its `checkedTo` in `chain_verified` (migration 029), distinct from `chain_checkpoint`. `stats()` reports it as `verifiedTo` after re-checking that the episode at that seq still carries that hash and is within the head — a rewritten or truncated tail reads as unverified rather than as an old claim. A failing `verify()` withdraws the record. An authenticated fragment (§A7) has no genesis continuity to certify and never carries one. `.pylos` bundles do not transport `chain_verified` or `chain_checkpoint`, so an imported thread reads unverified until verified locally.
 
 ## A6. Transactions per turn (§6)
 
-* **tx A**: user/attachment episodes + packet row with `status='pending'`.
-* **tx B**: assistant episode + rule atoms + any capsules sealed + packet `status='done'` (+ pages).
+* **tx A**: attachment and user episodes + deterministic user-rule atoms + the
+  compiled packet row with `status='pending'`.
+* **tx B**: tool and assistant episodes + kernel claim-gate receipt + assistant
+  rule proposals + any capsules sealed + address edge (when mechanically
+  grounded) + packet `status='done'` with its pages/rounds.
 * **tx C** (async, optional): model-extracted atoms, frontier-only; sealed capsules are never rewritten.
 
-`PRAGMA journal_mode=WAL; synchronous=FULL` for A/B (NORMAL allowed in bench). A dangling `pending` packet after restart renders as *no reply* and the user turn is retried on the next send.
+`PRAGMA journal_mode=WAL; synchronous=FULL` for A/B (NORMAL allowed in bench). A
+dangling `pending` packet after restart truthfully represents *no committed
+reply*. Retrying provider work is an explicit caller/product action, not an
+atomic rollback of tx A. A provider stream that ends with an empty or
+whitespace-only answer is a failed turn, not a committed one: tx B does not
+run, no assistant episode is appended, and the packet stays `pending` — the
+same state a mid-stream provider failure leaves.
 
 ## A7. Packet retention and export (§7)
 
 `packet.messages` is kept only for the most recent 1,000 packets; every packet keeps `digest`, `resident[]`, `pages`, `ledger`, `compilerVersion`. The X-ray re-renders older packets from `resident[]` and asserts the digest (or labels the view "reconstructed").
 
-Export: AES-256-GCM over a 1 MiB chunked stream (per-chunk nonce = base ‖ counter; AAD = cleartext header `{v, kdf, salt, params, threadId, headSeq, headHash, partial?:{from,to,prevHash}}`), scrypt `N=2^17, r=8, p=1` preferred (PBKDF2-SHA256 ≥ 600k fallback), so import can stream-verify a million-episode bundle. `manifest.json` carries per-file sha256 and the `loss` row count; import recomputes `dropped()` on a sample of capsules and refuses on disagreement.
+Export: AES-256-GCM over a 1 MiB chunked stream (per-chunk nonce = base ‖ counter; AAD = cleartext header `{v, kdf, iters, salt, nonce, threadId, headSeq, headHash, partial?:{from,to,prevHash}}`), with the versioned PBKDF2-SHA256 scheme fixed at exactly 600,000 iterations (`kdf = pbkdf2-sha256`, `iters = 600000`). Each frame is authenticated by AES-GCM; `manifest.json` carries per-file SHA-256 digests and the `loss` row count, and import verifies those digests, attachment partitions, the hash chain, and a sampled `dropped()` recomputation before accepting. A full bundle always restores under its authenticated thread id because derived capsule and address identities are bound to it; only an authenticated partial fragment may be installed under a caller-selected local id while retaining its original-thread provenance. This is bundle confidentiality and tamper detection for a passphrase holder, not sender identity or provenance.
 
 ## A8. Wording
 
@@ -622,7 +750,20 @@ appended to the messages array without a cap and without a receipt.
   `{messagesDigest, tokens, budget, pages, responseDigest, usage, status}`, where
   `pages` are the pages served to build *that* round. `Usage` on the episode is
   the sum across rounds. `vault.packets.finish()` stores the rounds with the
-  packet.
+  packet. `admittedPageSeqs` records, of that round's served page sources, the
+  ones whose recovered block survived into what the provider actually saw. A
+  `⟦recovered #n ·` marker belongs to the compiler only where the compiler
+  writes one: `assemble` puts every page insert of the initial request in a
+  single place, the packet's first message — the system header — and every
+  other retained message is episode text quoted verbatim, which may itself
+  carry a marker of its own (a tool result quoting an earlier turn's recall, a
+  user who typed `⟦recovered #7 ·` into the chat). Those are content, not
+  admissions. On verification the header alone certifies what the round
+  certainly showed and the whole retained request certifies what it could have
+  shown: `admittedPageSeqs` must contain every source marked in the header and
+  none unmarked anywhere in the retained request. A retained non-empty packet
+  whose first message is not a system message with string content fails
+  verification as malformed.
 * **Chained.** `roundsDigest = sha256(concat of the rounds' messagesDigest)` goes
   into the assistant episode's meta, and the chain covers it: the A5 pick grows to
 
@@ -669,7 +810,7 @@ migration wearing the user's authority — and, once `SUPPORTED`, hold the slot
 against the user's own word.
 
 A vault is repaired by **replay**, not by patching: atoms are derived state, and
-the episodes are exact. On open, if the code migration `008-authority-replay` has
+the episodes are exact. On open, if the code migration `009-authority-replay` has
 not been applied and the vault shows the tell — an atom with authority `user`
 whose source episode's role is `assistant` or `tool` — the kernel, in one
 transaction per thread, clears `atom` and `atom_name`, resets the atom counters,
@@ -865,9 +1006,10 @@ removed question or reply leaves the index with its FTS row — note that
 removing only the question leaves the reply's `meta.pages` intact, so the
 source stays reachable by way of the reply until the reply, or the source, is
 removed too), and bounded by the same `P_max`. Nothing in `bench/results`
-measures the path; the kernel tests are its referee for this release, and
-"a recurring question gets cheaper" is the mechanism's intent, not a measured
-result (THEORY §15).
+measures the path. Focused kernel oracles exercise the mechanism, but those
+tests are not by themselves evidence that a packaged or published release
+contains it. "A recurring question gets cheaper" remains the mechanism's
+intent, not a measured result (THEORY §15).
 
 ### A11.3 The sequence route is speaker-aware (A9.3)
 
@@ -901,3 +1043,342 @@ nor show a proposal. Import now indexes every restored atom's names exactly as
 first open, every thread that holds atoms but no `atom_name` rows — a vault
 imported under 1.1 or 1.2 is repaired the same way, once. A test asserts
 `atoms.byName` after a round-trip.
+
+## A12. v2.0.0 retained-byte closure
+
+These amendments close storage paths that the name ledger cannot describe. The
+ledger remains the authority for recognized semantic loss; A12 adds a byte-level
+reachability receipt beneath it. The two invariants are complementary and neither
+substitutes for the other.
+
+### A12.1 Four exclusive states for retained bytes (§1, §3, §4)
+
+The subject of this invariant is every UTF-8 byte of every non-removed episode
+and every byte of every attachment object reachable from one. At packet compile
+time each retained interval is assigned exactly one state, in this precedence:
+
+1. `resident` — these exact bytes are present in the rendered packet;
+2. `capsule` — the interval belongs to the source range of one resident capsule
+   whose loss rows are queryable and whose capsule id is in the packet;
+3. `pageable` — the packet carries an exact kernel locator that returns these
+   bytes and verifies their hash;
+4. `opaque` — the packet carries a hash, byte range and explicit statement that
+   the interval was retained but not indexed as text.
+
+There is no fifth state. A locator that exists only as an internal API is not a
+state: the locator or a range containing it must appear in `Packet.reachability`.
+`UNKNOWN` is the result of a failed locator check, not a retained-byte state.
+Removed bytes are outside the retained set and remain governed by A10.6.
+
+`ReachabilitySpan` uses half-open byte ranges `[from,to)`, never the character
+offsets of `LossEntry.span`. Spans are sorted, non-overlapping and coalesced only
+when state, source and locator agree. `verifyReachability()` independently
+enumerates the retained intervals and refuses a packet with a gap, overlap,
+wrong hash, missing capsule, or unexposed locator. This is the mechanical scope
+of “nothing retained is silently unreachable”: it proves an explicit current
+address or opaque receipt, not that every natural paraphrase discovers it.
+Episode ranges are numeric envelopes over the archive: a chain-valid removed
+episode may lie inside one without receiving a closure state, because removed
+bytes are outside the retained set. Compilation does not enumerate tombstones
+to cut those envelopes; the verifier checks each row's removal record at the
+packet snapshot, rejects an explicit span for a removed row, and preserves the
+historical `invalidated` result when the removal happened after that snapshot.
+
+### A12.2 Recent overflow and an over-budget current turn (§4, A10.1)
+
+`fillRecent` never stops at an episode that does not fit. It skips that episode,
+continues toward older candidates, and returns a `pageable` receipt for every
+skipped byte range. The same receipt is emitted when the recent allocation is
+zero and when final packet trimming removes an episode. The system message names
+the skipped sequence and locator; a gap marker that depends on an older capsule
+is not sufficient.
+
+The current question is never silently truncated. `runTurn` refuses a user turn
+whose bounded representation plus the mandatory header cannot fit the selected
+budget, before appending it, with `turn_too_large`. Attachments use A12.3 instead
+of consuming the query slot. Every provider request therefore remains within
+the turn budget even when one submitted value is large.
+
+### A12.3 Attachment manifests and the tail route (§1, §5, A10.6, A10.7)
+
+An attachment is written as a manifest plus fixed-size, content-addressed spans.
+The manifest binds the whole-object hash, size, MIME type, name, chunk size and
+an ordered partition of `[0,size)`. Every span carries ordinal, byte range,
+span hash and state `indexed` or `opaque`:
+
+* `indexed` means the kernel decoded complete UTF-8 code points under a declared
+  encoding and placed those exact bytes in the attachment episode's text index;
+  a valid text object is not thereby indexed in full: if the episode stores only
+  an extracted prefix, only fully represented prefix spans may be indexed;
+* `opaque` means the bytes are retained and hash-addressed but no text claim is
+  made. Invalid UTF-8, unsupported formats and undecoded remainders are opaque.
+
+The manifest digest is in the attachment episode's chain-covered metadata.
+Span boundaries never split a UTF-8 code point. Empty files have one manifest
+covering the empty interval; no range is invented. Legacy `meta.blob` objects
+open as one verified opaque span until explicitly re-imported under this format.
+
+Before ordinary lexical routing, a turn naming an attachment and asking for its
+tail/end/last lines, or a turn immediately following an attachment whose indexed
+tail was not resident, may serve one `attachment-tail` page. It returns a bounded
+exact final indexed span with `{manifest, spanHash, byteRange, encoding}`. An
+opaque tail produces an opaque receipt, never decoded or invented prose. Missing
+or corrupt span objects are unresolved receipts. This route consumes the same
+page budget as every other address and cannot authorize a fact.
+
+Forgetting traverses manifests and span references, deleting a chunk only when
+no surviving manifest reaches it. Export closure includes manifests and exactly
+their reachable spans; partial export includes only manifests whose attachment
+episodes are in range. Import verifies the whole hash, every span hash and the
+partition before making any row or object visible.
+
+### A12.4 Streaming and staged bundles (§7, A10.7)
+
+The compatibility `Uint8Array` bundle functions may collect a stream for small
+callers, but the CLI and HTTP server use stream-native export and import. JSONL
+is read in bounded database batches, ZIP/container entries and authenticated
+frames are emitted incrementally, and objects are read in bounded chunks. The
+declared transport/frame buffer bound is a function of frame size, maximum
+permitted JSONL line, and bounded index metadata, not archive size; it is not a
+claim about parser allocations, staged files, or total process RSS.
+
+Import first decrypts into a private temporary staging area while enforcing
+entry, frame, line, object and decompressed-byte limits. It verifies the bundle
+manifest, filenames, file/span digests, counts, attachment partitions and chain
+before installing database rows or object files. A wrong passphrase, late
+corruption, cancellation or verification failure leaves the destination vault
+and object store unchanged and removes the stage. The current writer emits the
+v2 framed `PYLOS2` archive; the current reader accepts that v2 format and legacy
+v1 ZIP bundles. The v1 path turns whole blobs into explicit opaque manifests. The
+explicit v1 writer refuses any selected state whose current receipts,
+continuations or addresses cannot be represented without loss in the historical
+format. A writer that
+requires ZIP64 (or a versioned framed equivalent) must declare that bundle
+version, and
+an older reader must refuse rather than silently discard new receipt files.
+
+## A13. Collection obligations and coverage receipts
+
+A deterministic cue parser recognizes whole-word `all`, `every`, `compare`,
+`list` and `each` in a question. It emits an `Obligation` before routing. The
+counting unit is an exact, deduplicated source locator `(source, byte range,
+revision)`, not a model-mentioned item and not an unqualified page count.
+
+An obligation records the cue, query sequence, as-of sequence, route version,
+the kernel-observed name of each route run with its returned count and status,
+located locators, current supported locators, historical locators, and
+unresolved locators. `required` is present only when the kernel can read a
+cardinality from an explicit sequence/range/list in the question or a
+user-authorized collection manifest. It is never inferred from provider prose.
+
+The receipt also carries a bounded, kernel-written issuance basis. It binds the
+question content hash, the initial compile-page digest, the exact retained
+locator digests, and the ordered `names`, `pages`, and `search` candidates that
+the kernel observed, including one overflow sentinel. Verification replays
+members whose source still exists. When a later user-authorized forget has
+erased the lexical posting, verification instead requires the original member
+hash and locator binding plus a chain-valid tombstone whose removal sequence is
+after the asking turn. A deleted posting is therefore not reconstructed from
+the receipt's locator list, and a later recall page cannot rewrite the original
+page-route result.
+
+Every cue-bearing packet contains one `CoverageReceipt` and renders one block:
+
+```
+⟨pylos coverage · located N sources · supported N · historical N ·
+  completeness not established · digest SHA256⟩
+```
+
+When `required` is known the last field is `complete` only when the supported
+locator count is exactly `required` (not merely at least it), historical and
+unresolved counts are zero, and no route reports an unresolved, ambiguous, or
+capped outcome. Otherwise it is `incomplete · unresolved N`.
+Unknown cardinality always says `completeness not established`, including zero
+hits. The same receipt and digest are stored on the final answer. The answer
+gate (A14) treats `there were N`, `there are N`, `exactly N`, and unqualified
+`all N` as collection claims: a route lower bound may license “I found N,” never
+an archive total.
+
+This is deterministic replay against the retained vault and its current hash
+chain, not an external signature. A party able to rewrite the entire database,
+rewrite the issuance basis, and replace every later hash through a new head is
+outside this verifier's tamper model; preventing that requires an independently
+anchored head, MAC, or signing key.
+
+## A14. One-turn evidence capabilities and the remembered-claim gate
+
+This gate is deliberately narrower than entailment verification. It governs the
+closed candidate class below and makes no claim about arbitrary prose.
+
+### A14.1 Capabilities are issued and authorized only by the kernel
+
+For each exact source span shown in a provider round, the kernel may mint an
+opaque one-turn token bound to thread, turn, round ordinal and messages digest,
+source sequence/manifest, half-open byte span, content/span hash, authority,
+atom revision interval when applicable, and a random nonce. Tokens expire when
+the turn settles and never enter an export. Stored receipts carry token digests,
+not reusable tokens.
+
+The provider may return prose plus a hidden `ClaimMap` whose entries contain
+only an output span, kind hint and capability tokens. The map is an untrusted
+proposal. It cannot choose authority, revision, classification, world-knowledge
+status or whether a sentence is a memory. The kernel rejects malformed spans,
+cross-turn/cross-round tokens and tokens whose source no longer validates.
+
+Immediately before the assistant episode commits, in the same transaction, the
+kernel revalidates every used source. A concurrent removal or revision therefore
+turns a once-valid capability into a qualification; it can never race release.
+
+### A14.2 Candidate completeness is independent of the model map
+
+The kernel scans the final draft independently. The gated candidate class is:
+
+* every normalized number occurrence outside kernel markup, except a number
+  wholly owned by a collection candidate whose aggregate grammar validates all
+  numeric assertions in that sentence against A13;
+* every quoted span of at least three words;
+* explicit identity/copular forms selected by the versioned deterministic
+  grammar;
+* every quantified or totalizing collection form from A13; and
+* every declarative sentence in an answer to a question that A11.1 classifies
+  as referring to this conversation or the past, except a versioned set of
+  explicit reasoning/creative forms. A number, identity, quotation or
+  collection is never exempted by those forms.
+
+The union of this scan and valid `ClaimMap` spans is classified. Omitting a map
+entry, calling it `WORLD_KNOWLEDGE`, changing punctuation/Unicode or returning
+more than three claims cannot remove a candidate. The grammar version and scan
+digest are part of the answer receipt. This is the mechanical scope of
+“remembered fact”; facts outside the grammar remain explicitly not claimed.
+
+### A14.3 Kernel classifications and release
+
+For every candidate the kernel emits exactly one classification:
+
+* `SUPPORTED` — either a current user/tool/attachment capability whose exact
+  source contains the claim's mechanically required names, number/unit,
+  identity value or quotation, or an A13 collection metric whose value and
+  typed aggregate basis revalidate against the packet's exact coverage digest;
+* `HISTORICAL` — the cited source is valid but its revision interval has closed;
+* `PROPOSED` — the best cited source is assistant/model authority;
+* `INFERENCE` — current sources were cited but the claim is not string-present
+  under the candidate oracle;
+* `UNKNOWN` — no valid current capability supports it;
+* `WORLD_KNOWLEDGE` — the question is not a memory question and the claim cites
+  no archive capability.
+
+Only `SUPPORTED` remembered claims pass unqualified. Every remembered
+`HISTORICAL`, `PROPOSED`, `INFERENCE` or `UNKNOWN` claim receives a visible
+kernel qualification naming its class and source status. `WORLD_KNOWLEDGE`,
+reasoning and creative prose remain outside the memory gate. A collection lower
+bound is rewritten or qualified as A13 requires.
+
+`AnswerReceipt` binds final answer digest, packet and round digests, coverage
+digest plus its route version/run projection, candidate spans, classifications, exact witness locators or typed
+aggregate coverage bases, token digests, qualification text, grammar version
+and gate status. A collection basis names one of `located`, `supported`,
+`historical` or `unresolved`, its exact value and the coverage digest; it is
+never represented by an arbitrary source locator. Its digest is stored in the
+packet and chain-covered assistant metadata. `verify()` rechecks receipt
+hashes, surviving witnesses, coverage route counts and every aggregate basis.
+
+In the tested built-in `/api/.../turn` and `/v1/chat/completions` paths, no
+answer delta leaves before classification, source revalidation and assistant
+commit. Their streaming clients receive the committed, already-qualified text
+in chunks after the gate settles; there is no retract protocol for ungated
+memory prose. This statement does not certify an external adapter or caller that
+bypasses those kernel-owned paths.
+
+## A15. Versioned address graph and natural-question measurement
+
+### A15.1 Resolved-query monotonicity (§5, A11.2)
+
+A query identity is a versioned digest of NFKC/case-folded/collapsed text,
+sequence references, normalized names and FTS terms. After a completed turn
+whose gate accepted at least one current grounded claim, tx B appends an
+`address_route` edge from `(thread, query digest, router version, archive
+snapshot)` to exact source witnesses. Each witness binds source/content/span
+hash, role, atom key and validity interval when present. Pending/failed turns
+never create edges.
+
+An active edge is tried before mutable lexical or semantic ranking. Repeating
+the same versioned query returns the same ordered witnesses. An edge is never
+rewritten or silently retargeted: deletion, revision, authority change, source
+hash failure or router upgrade appends an explicit invalidation/supersession
+record. A newly grounded answer appends a new edge; the historical edge remains
+auditable. This append-only law — same witnesses or explicit invalidation — is
+resolved-query monotonicity. Routes and invalidations travel in bundles and are
+checked by `verify()`.
+
+### A15.2 Semantic and alias addresses are never authority
+
+The optional local semantic route stores source vectors beside FTS5 in
+`sqlite-vec`, with `sqlite-lembed` generating embeddings from the pinned
+`all-MiniLM-L6-v2` artifact (384 dimensions, cosine distance). The runtime
+manifest pins platform, native extension versions, model identity, and every
+asset hash; startup must capability-probe the extension and verify those pins.
+When resources are absent, incompatible, or incompletely indexed, the route
+emits an explicit unavailable/incomplete receipt and lexical search keeps its
+own label; no fallback is called semantic. Resource preparation is a build-time
+boundary, not a runtime download.
+
+A separate developer-run compiled-C preflight passed on one macOS arm64 staged
+resource directory (custom SQLite 3.53.3, `vec0` 0.1.8, `lembed`
+0.1-alpha.8, and a pinned MiniLM asset). It established that those staged files
+could load, register the model and answer one KNN probe on that host. It did not
+exercise an installed application or published archive, and does not establish
+Linux coverage, sidecar resource discovery, signing, notarization or semantic
+retrieval quality.
+
+A semantic hit is an address proposal only. Before serving it, the kernel checks
+source existence, non-removal, content/span hash and bounds, then pages the exact
+bytes under trigger `semantic`. The source keeps its role and epistemic class.
+A false hit costs at most the ordinary page cap and cannot create an atom,
+certificate, fact or active address edge unless the later answer gate grounds a
+claim in that exact source.
+
+A model-written alias contains alias text, source locator, quote/span and source
+hash. The existing string-presence oracle must find the alias/quote in that
+source before commit; otherwise it is rejected. Accepted aliases are bounded,
+address-only rows and are revalidated at page time. Model-written atoms retain
+A9.1: verbatim quote required, authority `model`, phase `PROPOSED`. Forgetting
+invalidates vector/alias rows and no export/import may resurrect them.
+
+### A15.3 Natural-question bench before successor training (§10, THEORY §15.13)
+
+The frozen bench (`bench/natural.ts`) appends every asking turn before compile
+and binds a manifest of source byte spans, authority/revision, deletion events,
+expected routes, collection cardinality and language/negation/pronoun metadata.
+It records matched positive/negative controls where the authored family supplies
+them and preserves single-denominator families without inventing an opposite
+polarity. The required families are: self-hit, paraphrase without shared nouns,
+negation, pronouns and ambiguity, multilingual refer-back, deleted and
+superseded sources, partial known/unknown collections, capability-map omission
+and forgery, and world-knowledge controls. In the current result, only
+partial-collection and claim-map-omission have matched pairs (one each); all
+other families are single-denominator.
+
+The report separates deterministic routing, byte closure, coverage and gate
+outcomes from optional model behavior. It reports denominators, unresolved
+receipts, false pages, qualification/release errors, infrastructure failures,
+latency and cost. Exact recovery or an explicit honest receipt may both be valid
+for an address experiment; only the former counts as route recall. No successor
+extractor is trained and no natural-language efficacy claim is published until
+the frozen residual exists.
+
+Retained local artifact status: [`bench/results/natural.md`](../bench/results/natural.md) +
+`natural.json` are schema v1 at version 2.0.0, carrying stable
+semantic-projection digest
+`cd86341177409aaebe090757920cf4d9866aa5ea266e058e69b331a324589202`. Only one
+execution's result is retained in the tree; the digest's stability across
+repeated runs is not evidenced by the retained artifact. It records 13 probes,
+0 safety-oracle violations, semantic receipt availability 13/13, exact target
+semantic addresses 6/13, false pages 5/13, unresolved receipts 0/4,
+qualification errors 0/4, release errors 0/3, infrastructure failures 0/13,
+coverage receipts 2, answer/gate receipts 4, and model calls 0. The compile-only
+bench reports the `sqlite-vec` semantic runtime mechanism as implemented:yes
+and tested:no — the runtime exists in-tree with kernel tests, but this bench
+invokes no semantic runtime directly; this is authored fixture-safety evidence, not recall,
+precision, ranking, multilingual, graph, or provider efficacy. No successor
+extractor is trained. The retained artifact and repeatability observation are
+not a release-installation, packaging or runtime-semantic certification.

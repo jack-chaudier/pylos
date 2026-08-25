@@ -11,11 +11,14 @@
  * pylos stats [--thread ID] [--json]
  * pylos bench million [--turns N] [--seed S] [--budget B] [--out PATH]
  * pylos bench live --model M [--turns N]
+ * pylos bench natural [--out PATH] [--markdown-out PATH]
+ * pylos bench funeral --home DIR --thread ID --out PATH
  * ```
  */
 
+import { open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { exportBundle, importBundle } from "./bundle.ts";
+import { exportBundleStream, importBundleStream } from "./bundle.ts";
 import { stats } from "./stats.ts";
 import { openVault } from "./vault.ts";
 import { verify } from "./verify.ts";
@@ -58,6 +61,37 @@ function num(args: Args, key: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+async function writeBundleStream(path: string, stream: ReadableStream<Uint8Array>): Promise<number> {
+  const temporary = `${path}.part-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const file = await open(temporary, "w", 0o600);
+  const reader = stream.getReader();
+  let bytes = 0;
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      let offset = 0;
+      while (offset < next.value.byteLength) {
+        const result = await file.write(next.value.subarray(offset));
+        if (result.bytesWritten <= 0) throw new Error("bundle output made no write progress");
+        offset += result.bytesWritten;
+      }
+      bytes += next.value.byteLength;
+    }
+    await file.sync();
+    await file.close();
+    await rename(temporary, path);
+    return bytes;
+  } catch (error) {
+    void reader.cancel("bundle output failed").catch(() => undefined);
+    await file.close().catch(() => undefined);
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 const USAGE = `pylos — the forever chat
 
   pylos serve [--port 7334]            start the local API (needs @pylos/server)
@@ -67,6 +101,8 @@ const USAGE = `pylos — the forever chat
   pylos import FILE                    restore a bundle into this profile
   pylos bench million [--turns N] [--seed S] [--budget B] [--out PATH]
   pylos bench live --model M [--turns N]
+  pylos bench natural [--out PATH] [--markdown-out PATH]
+  pylos bench funeral --home DIR --thread ID --out PATH
 
   --home DIR   profile directory (default $PYLOS_HOME or ~/.pylos)
 `;
@@ -176,15 +212,15 @@ async function main(argv: string[]): Promise<number | null> {
       const thread = str(args, "thread") ?? vault.threads.primary().id;
       const range = str(args, "range");
       const parsed = range?.split(":").map(Number);
-      const bytes = await exportBundle(vault, thread, {
+      const stream = await exportBundleStream(vault, thread, {
         passphrase: await readPassphrase(args),
         ...(parsed && parsed.length === 2 && parsed.every(Number.isFinite)
           ? { range: [parsed[0] as number, parsed[1] as number] as [number, number] }
           : {}),
       });
       const out = str(args, "out") ?? `pylos-${thread}-${vault.threads.get(thread)?.headSeq ?? 0}.pylos`;
-      await Bun.write(out, bytes);
-      process.stdout.write(`wrote ${out} · ${(bytes.length / 1048576).toFixed(2)} MiB\n`);
+      const bytes = await writeBundleStream(out, stream);
+      process.stdout.write(`wrote ${out} · ${(bytes / 1048576).toFixed(2)} MiB\n`);
       vault.close();
       return 0;
     }
@@ -196,8 +232,9 @@ async function main(argv: string[]): Promise<number | null> {
         return 1;
       }
       const vault = openVault(vaultOptions);
-      const bytes = new Uint8Array(await Bun.file(file).arrayBuffer());
-      const result = await importBundle(vault, bytes, { passphrase: await readPassphrase(args) });
+      const result = await importBundleStream(vault, Bun.file(file).stream(), {
+        passphrase: await readPassphrase(args),
+      });
       process.stdout.write(
         `imported ${result.episodes} episodes into ${result.threadId} · head ${result.headHash.slice(0, 16)}… · chain ${result.verified ? "verified" : "UNVERIFIED"}\n`,
       );
@@ -227,6 +264,26 @@ async function main(argv: string[]): Promise<number | null> {
           budget: num(args, "budget") ?? 8192,
         });
         return result.ok ? 0 : 2;
+      }
+      if (which === "natural") {
+        const { runNaturalBench } = await import("../../../bench/natural.ts" as string);
+        const result = await runNaturalBench({
+          ...(str(args, "out") === undefined ? {} : { outputPath: str(args, "out") as string }),
+          ...(str(args, "markdown-out") === undefined
+            ? {}
+            : { markdownPath: str(args, "markdown-out") as string }),
+        });
+        process.stdout.write(
+          `pylos bench natural · ${result.cases.length} probes · ` +
+            `${result.metrics.oracleViolations} oracle violations · ${result.digest}\n`,
+        );
+        return result.ok ? 0 : 2;
+      }
+      // The funeral bench owns its own flag parser and ignores non-flag tokens,
+      // so the whole command line is forwarded rather than restated here.
+      if (which === "funeral") {
+        const { runFuneralCli } = await import("../../../bench/funeral.ts" as string);
+        return await runFuneralCli(argv);
       }
       process.stderr.write(`unknown bench "${which}"\n`);
       return 1;

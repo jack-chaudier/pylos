@@ -5,9 +5,10 @@
 Pylos is local-first: install it, run `pylos serve`, and the app opens at
 `http://127.0.0.1:7334/app/` on your own machine, with your thread in your
 own vault. The same React app is wrapped by a desktop shell (Tauri, macOS +
-Linux) for the same local experience without a terminal. `--hosted` turns the
-identical binary into a multi-user server for anyone who wants to run their
-own — Pylos itself does not operate one. Every surface is one text box, one
+Linux) for the same local experience without a terminal. `--hosted` is a
+trusted, operator-managed self-hosting mode; its operator supplies filesystem
+quotas and free-space monitoring, and it is not a public multi-tenant safety
+claim. Pylos itself does not operate one. Every surface is one text box, one
 scrolling conversation, an attachment control, and a small model switch. That
 is the whole visible product. The invisible product is the reason the
 conversation never has to end.
@@ -82,6 +83,27 @@ compact the source of truth, and never let the view forget what it forgot.**
 | **Context infinity** | Archive length can grow by orders of magnitude while the model-visible budget stays fixed and recovery stays exact. | `pylos bench million`: one million deterministic turns, resident packet ≤ budget at every checkpoint, every paged loss resolves to exact spans, zero ledger entries lost ("The Millionth Turn"). |
 | **Agency infinity** | Any model can continue the same thread from a compiled packet; provider sessions are caches, never state. | Mid-thread switch Grok → Claude → local (Ollama) with a visible handoff divider and no loss of frontier ("Brain Transplant"). |
 
+The v1 proof rows above remain historical evidence. The v2.0.0 contract extends
+the kernel's custody boundary rather than changing those claims: every retained
+byte receives a mechanical state or an opaque receipt; collection questions
+carry lower-bound coverage; remembered claims need a current witness or a
+visible qualification; and grounded query routes can be invalidated explicitly.
+The optional semantic runtime proposes addresses only, with pinned resources and
+fail-closed startup. [`natural.md`](../bench/results/natural.md) + `natural.json`
+(digest `cd86341177409aaebe090757920cf4d9866aa5ea266e058e69b331a324589202`) are an
+authored-fixture safety measurement: 13 probes, no safety-oracle violations,
+semantic receipt availability 13/13, model calls 0 — not recall, precision, or
+provider efficacy.
+The compile-only bench marks the `sqlite-vec` runtime mechanism
+implemented:yes/tested:no — the runtime exists in-tree with kernel tests, but
+this bench invokes no semantic runtime directly; a separate local arm64 macOS compiled-C
+preflight passed one runtime/KNN smoke path. The million-turn
+[`funeral-6.md`](../bench/results/funeral-6.md) + `funeral-6.json` artifacts
+verify episode/atom/capsule/loss/table transport, exact restore, and exact
+paging; the synthetic funeral had zero packet, answer, coverage, address, and
+alias rows, so it does not establish nonempty Phase 2/4 receipt survival or an
+RSS bound.
+
 ## What the user sees
 
 * An empty, calm conversation. One composer. A tiny model indicator. An
@@ -104,12 +126,20 @@ compact the source of truth, and never let the view forget what it forgot.**
   continued from the same thread.*
 * Click the evidence bar → the **X-ray**: the exact packet the model saw, the
   ledger, what was paged and why, the hash of the archive head.
+* On an empty local thread, **Open the proof thread** starts a deterministic
+  scripted tour. Five receipt-backed moments show a corrected fact, an
+  incomplete collection, an invalidated route, an exact attachment tail, and
+  the final memory gate. It is a product demo; the receipts, not a model's
+  reassurance, supply the figures.
 
 Everything else collapses inward. No dashboards. No vocabulary.
 
 ## What v1 deliberately is not
 
 * Not a vector database wearing a chat UI.
+* Not a semantic authority. The optional local vector route proposes an exact
+  address; it cannot create a fact, certificate, atom, or active route without
+  the ordinary kernel witnesses and gate.
 * Not a coding agent. Attachments are evidence, not a workspace.
 * Not a claim that a model cannot still be wrong. Pylos bounds *silent*
   false certainty from lost context; it does not police entailment.
@@ -121,6 +151,16 @@ Everything else collapses inward. No dashboards. No vocabulary.
 * Not a claim that a fault is evidence of absence. When Pylos cannot address a
   question against its index, it says the index missed — not that the archive
   lacks the answer.
+* Not a natural-language efficacy result. The frozen natural-question artifact
+  is authored fixture-safety evidence with most families single-denominator and
+  only two matched-pair families; it does not estimate recall, precision,
+  ranking, multilingual quality, graph reuse, or provider efficacy. Its
+  compile-only semantic runtime row is implemented:yes/tested:no, since the
+  runtime exists in-tree with kernel tests but this bench invokes no semantic
+  runtime directly; receipt availability is not proof of semantic efficacy. The proof thread is a scripted
+  demonstration. The v2 stream path has a million-turn transport/restore
+  result, but its synthetic funeral has empty Phase 2/4 receipt sets and RSS
+  snapshots are not bounds.
 
 ## Lineage
 

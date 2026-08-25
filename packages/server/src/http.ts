@@ -17,6 +17,30 @@ const JSON_HEADERS = {
   "X-Content-Type-Options": "nosniff",
 };
 
+/** Loopback JSON should never be idle this long between chunks. The server's
+ * socket idle timeout is disabled for SSE, so body reads enforce their own
+ * per-read deadline instead. */
+export const BODY_READ_INACTIVITY_MS = 1_000;
+export const JSON_BODY_TRANSFER_DEADLINE_MS = 10_000;
+export const UPLOAD_BODY_TRANSFER_DEADLINE_MS = 120_000;
+
+export type BodyReadProfile = "json" | "upload";
+
+function transferDeadline(profile: BodyReadProfile): number {
+  const fallback = profile === "upload" ? UPLOAD_BODY_TRANSFER_DEADLINE_MS : JSON_BODY_TRANSFER_DEADLINE_MS;
+  const override =
+    process.env.NODE_ENV === "test"
+      ? Number(
+          process.env[
+            profile === "upload"
+              ? "PYLOS_TEST_UPLOAD_TRANSFER_DEADLINE_MS"
+              : "PYLOS_TEST_JSON_TRANSFER_DEADLINE_MS"
+          ],
+        )
+      : Number.NaN;
+  return Number.isSafeInteger(override) && override > 0 ? override : fallback;
+}
+
 export function json(value: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(value), {
     ...init,
@@ -63,14 +87,15 @@ const ORIGIN_PATTERNS = [
 /**
  * Cross-site request forgery gate for mutations. Locally (`allowed` omitted)
  * browsers always send `Origin` on a cross-origin POST while native and CLI
- * clients send none, so a missing header is allowed and a foreign one refused.
+ * clients send none, so a missing header is allowed and a foreign one refused;
+ * the literal `null` is an opaque browser origin, not a missing header.
  * Hosted, only the configured origins pass.
  */
 export function originAllowed(origin: string | null, allowed?: readonly string[]): boolean {
   if (allowed !== undefined) {
     return origin !== null && origin !== "null" && allowed.includes(origin);
   }
-  if (origin === null || origin === "null") return true;
+  if (origin === null) return true;
   return ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
 }
 
@@ -80,26 +105,90 @@ export function corsHeaders(origin: string | null, allowed?: readonly string[]):
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Pylos-Thread, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, X-Pylos-Thread, Authorization, X-Pylos-Passphrase",
     "Access-Control-Max-Age": "600",
     Vary: "Origin",
   };
 }
 
 export async function readJson<T>(request: Request, limit = MAX_JSON_BYTES): Promise<T> {
-  if (declaredLength(request) > limit) {
-    throw new HttpError(413, "payload_too_large", "The request body is too large.");
-  }
-  const text = await request.text();
-  if (Buffer.byteLength(text, "utf8") > limit) {
-    throw new HttpError(413, "payload_too_large", "The request body is too large.");
-  }
+  const bytes = await readBody(request, limit);
+  const text = new TextDecoder().decode(bytes);
   if (text.trim().length === 0) return {} as T;
   try {
     return JSON.parse(text) as T;
   } catch {
     throw new HttpError(400, "invalid_json", "The request body is not valid JSON.");
   }
+}
+
+/**
+ * Read a request body with a hard byte ceiling, including when the transport
+ * is chunked and has no Content-Length. The previous `request.text()` path
+ * could allocate an entire untrusted body before checking its size.
+ */
+export async function readBody(
+  request: Request,
+  limit: number,
+  tooLargeMessage = "The request body is too large.",
+  profile: BodyReadProfile = "json",
+): Promise<Uint8Array> {
+  if (!Number.isSafeInteger(limit) || limit < 0) {
+    throw new RangeError("body limit must be a non-negative safe integer");
+  }
+  if (declaredLength(request) > limit) {
+    throw new HttpError(413, "payload_too_large", tooLargeMessage);
+  }
+  const body = request.body;
+  if (body === null) return new Uint8Array();
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const absoluteDeadline = Date.now() + transferDeadline(profile);
+  try {
+    for (;;) {
+      const remaining = absoluteDeadline - Date.now();
+      if (remaining <= 0) {
+        throw new HttpError(408, "request_timeout", "The request body exceeded its transfer deadline.");
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              Date.now() >= absoluteDeadline
+                ? new HttpError(408, "request_timeout", "The request body exceeded its transfer deadline.")
+                : new HttpError(408, "request_timeout", "The request body stopped sending bytes."),
+            ),
+          Math.min(BODY_READ_INACTIVITY_MS, remaining),
+        );
+      });
+      const item = await Promise.race([reader.read(), stalled]).finally(() => clearTimeout(timer));
+      if (item.done) break;
+      const chunk = item.value;
+      if (chunk.byteLength > limit - total) {
+        throw new HttpError(413, "payload_too_large", tooLargeMessage);
+      }
+      if (chunk.byteLength === 0) continue;
+      chunks.push(chunk);
+      total += chunk.byteLength;
+    }
+  } catch (error) {
+    void reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (chunks.length === 0) return new Uint8Array();
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 export function requireString(value: unknown, field: string): string {

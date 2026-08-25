@@ -4,15 +4,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  CHECKPOINT_EVERY,
   canonicalHash,
   chainHash,
   chainRecord,
   forget,
   genesisHash,
+  metaHashOf,
   openVault,
   type Provider,
   runTurn,
   sha256,
+  stats,
   verify,
 } from "../src/index.ts";
 import { cleanup, tempVault } from "./helpers.ts";
@@ -85,6 +88,54 @@ test("reordering the archive breaks prev_hash", () => {
   expect(result.reason).toBe("prev_hash mismatch");
 });
 
+test("full verification rejects a deleted and rechained middle sequence", () => {
+  const { vault, thread } = tempVault();
+  const [first, _second, third] = vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 3 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  if (first === undefined || third === undefined) throw new Error("chain gap fixture was not created");
+
+  const forgedHash = chainHash(
+    first.hash,
+    chainRecord({
+      seq: third.seq,
+      ts: third.ts,
+      role: third.role,
+      contentHash: sha256(third.content),
+      metaHash: metaHashOf(third.meta),
+    }),
+  );
+  vault.db.query("DELETE FROM episode WHERE thread_id = ? AND seq = 2").run(thread.id);
+  vault.db
+    .query("UPDATE episode SET prev_hash = ?, hash = ? WHERE thread_id = ? AND seq = 3")
+    .run(first.hash, forgedHash, thread.id);
+  vault.db.query("UPDATE thread SET head_hash = ? WHERE id = ?").run(forgedHash, thread.id);
+
+  const result = verify(vault, thread.id, { full: true });
+  expect(result.ok).toBe(false);
+  expect(result.checkedTo).toBe(1);
+  expect(result.failedAt).toBe(3);
+  expect(result.reason).toMatch(/episode.*sequence|sequence.*gap/i);
+});
+
+test("full verification rejects a missing tail with a forged head and head sequence", () => {
+  const { vault, thread } = tempVault();
+  const episodes = vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 3 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  const second = episodes[1];
+  if (second === undefined) throw new Error("chain tail fixture was not created");
+
+  vault.db.query("DELETE FROM episode WHERE thread_id = ? AND seq = 3").run(thread.id);
+  vault.db.query("UPDATE thread SET head_seq = 2, head_hash = ? WHERE id = ?").run(second.hash, thread.id);
+
+  const result = verify(vault, thread.id, { full: true });
+  expect(result.ok).toBe(false);
+  expect(result.reason).toMatch(/episode.*count|head.*sequence|sequence.*head/i);
+});
+
 test("checkpoints let verification start mid-chain", () => {
   const { vault, thread } = tempVault();
   vault.episodes.appendMany(
@@ -95,6 +146,35 @@ test("checkpoints let verification start mid-chain", () => {
   expect(incremental.ok).toBe(true);
   expect(incremental.checkedFrom).toBe(4096);
   expect(verify(vault, thread.id, { full: true }).checkedFrom).toBe(0);
+});
+
+test("checkpoint verification rejects a gap immediately before its anchor", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 4_100 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  vault.db.query("DELETE FROM episode WHERE thread_id = ? AND seq = 4095").run(thread.id);
+
+  const result = verify(vault, thread.id);
+  expect(result.ok).toBe(false);
+  expect(result.checkedFrom).toBe(4096);
+  expect(result.reason).toMatch(/checkpoint.*predecessor|episode.*count|sequence.*gap/i);
+});
+
+test("checkpoint verification rejects a gap immediately after its anchor", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 4_100 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  vault.db.query("DELETE FROM episode WHERE thread_id = ? AND seq = 4097").run(thread.id);
+
+  const result = verify(vault, thread.id);
+  expect(result.ok).toBe(false);
+  expect(result.checkedFrom).toBe(4096);
+  expect(result.failedAt).toBe(4098);
+  expect(result.reason).toMatch(/episode.*sequence|sequence.*gap/i);
 });
 
 test("the receipts of a turn are inside the chain (KERNEL A10.3)", async () => {
@@ -221,6 +301,10 @@ test("a vault whose removals predate the amendment still verifies", () => {
     // Rewind the vault to before migration 008: a tombstone, a removed episode,
     // and no column to record a chain event in.
     const raw = new Database(file, { readwrite: true });
+    // Later migrations index this column. SQLite cannot drop a column while a
+    // dependent index remains, so remove the modern derived index as part of
+    // constructing the intentionally pre-008 fixture.
+    raw.exec("DROP INDEX IF EXISTS tombstone_thread_removal");
     raw.exec("ALTER TABLE tombstone DROP COLUMN removal_seq");
     raw.exec("ALTER TABLE tombstone DROP COLUMN echoes");
     raw.query("DELETE FROM migration WHERE name = ?").run("008-removal-record");
@@ -233,4 +317,111 @@ test("a vault whose removals predate the amendment still verifies", () => {
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test("the verified frontier records what a pass certified, and no more", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 5 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  expect(vault.verifiedFrontier(thread.id)).toBe(0);
+  expect(stats(vault, thread.id).verifiedTo).toBeUndefined();
+
+  expect(verify(vault, thread.id).ok).toBe(true);
+  expect(vault.verifiedFrontier(thread.id)).toBe(5);
+  expect(stats(vault, thread.id).verifiedTo).toBe(5);
+
+  // Later turns are unverified until someone verifies them.
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 3 }, (_, i) => ({ role: "user" as const, content: `later ${i}` })),
+  );
+  expect(vault.verifiedFrontier(thread.id)).toBe(5);
+  const after = stats(vault, thread.id);
+  expect(after.verifiedTo).toBe(5);
+  expect(after.turns).toBe(8);
+
+  const again = verify(vault, thread.id);
+  expect(again.ok).toBe(true);
+  expect(vault.verifiedFrontier(thread.id)).toBe(again.checkedTo);
+  expect(stats(vault, thread.id).verifiedTo).toBe(8);
+});
+
+test("a checkpoint the writer left is not a claim that anything was verified", () => {
+  const { vault, thread } = tempVault();
+  for (let batch = 0; batch < 5; batch += 1) {
+    vault.episodes.appendMany(
+      thread.id,
+      Array.from({ length: 1000 }, (_, i) => ({ role: "user" as const, content: `turn ${batch}-${i}` })),
+    );
+  }
+  // Appending past 4,096 leaves a checkpoint a replay may resume from...
+  expect(vault.checkpointBefore(thread.id, 5000)?.seq).toBe(CHECKPOINT_EVERY);
+  // ...which says nothing about verification.
+  expect(vault.verifiedFrontier(thread.id)).toBe(0);
+  expect(stats(vault, thread.id).verifiedTo).toBeUndefined();
+
+  const result = verify(vault, thread.id);
+  expect(result.checkedFrom).toBe(CHECKPOINT_EVERY);
+  expect(vault.verifiedFrontier(thread.id)).toBe(5000);
+});
+
+test("a failed verify withdraws the frontier it had certified", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 20 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  expect(vault.verifiedFrontier(thread.id)).toBe(20);
+
+  vault.db
+    .query("UPDATE episode SET content = ? WHERE thread_id = ? AND seq = ?")
+    .run("turn 5 (edited)", thread.id, 6);
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(false);
+  expect(vault.verifiedFrontier(thread.id)).toBe(0);
+  expect(stats(vault, thread.id).verifiedTo).toBeUndefined();
+});
+
+test("the frontier is refused when the row it anchors on changed", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 10 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  expect(vault.verifiedFrontier(thread.id)).toBe(10);
+
+  // The same rule an incremental verify applies to a checkpoint anchor: the
+  // certified hash must still be the one stored at that seq.
+  vault.db
+    .query("UPDATE episode SET hash = ? WHERE thread_id = ? AND seq = ?")
+    .run("f".repeat(64), thread.id, 10);
+  expect(vault.verifiedFrontier(thread.id)).toBe(0);
+});
+
+test("the frontier stops counting when the head is rewound behind it", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 4 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  expect(verify(vault, thread.id).ok).toBe(true);
+  expect(vault.verifiedFrontier(thread.id)).toBe(4);
+  vault.db.query("UPDATE thread SET head_seq = head_seq - 1 WHERE id = ?").run(thread.id);
+  // A truncated tail puts the record beyond the head, so it stops counting.
+  expect(vault.verifiedFrontier(thread.id)).toBe(0);
+});
+
+test("verifying an unchanged chain again writes nothing", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 6 }, (_, i) => ({ role: "user" as const, content: `turn ${i}` })),
+  );
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  const settled = stats(vault, thread.id).archiveBytes;
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  expect(stats(vault, thread.id).archiveBytes).toBe(settled);
 });

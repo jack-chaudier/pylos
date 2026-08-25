@@ -1,5 +1,6 @@
 import type { ChatMessage, ModelInfo } from "@pylos/protocol";
-import { isRecord, streamOpenAiChat } from "./openai-chat.ts";
+import { fetchProvider } from "./fetch.ts";
+import { isRecord, readProviderJson, streamOpenAiChat } from "./openai-chat.ts";
 import type { Provider, ProviderEvent, StreamOptions } from "./types.ts";
 
 const HOST = process.env.OLLAMA_HOST?.replace(/\/+$/, "") ?? "http://127.0.0.1:11434";
@@ -23,11 +24,14 @@ export class OllamaProvider implements Provider {
 
   async models(): Promise<ModelInfo[]> {
     try {
-      const response = await fetch(`${HOST}/api/tags`, {
-        signal: AbortSignal.timeout(1200),
-      });
+      const response = await fetchProvider(
+        fetch,
+        `${HOST}/api/tags`,
+        {},
+        { label: "Ollama", timeoutMs: 1200 },
+      );
       if (!response.ok) return [];
-      const value: unknown = await response.json();
+      const value = await readProviderJson(response);
       const rows = isRecord(value) && Array.isArray(value.models) ? value.models : [];
       return rows.flatMap((row): ModelInfo[] => {
         if (!isRecord(row) || typeof row.name !== "string") return [];

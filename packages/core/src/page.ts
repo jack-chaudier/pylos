@@ -31,13 +31,48 @@
  * question alone.
  */
 
-import type { Atom, Episode, Epistemic, LossEntry, PageRecord, PageTrigger, Seq } from "@pylos/protocol";
+import type {
+  Atom,
+  AttachmentManifest,
+  AttachmentSpan,
+  Episode,
+  Epistemic,
+  LossEntry,
+  PageRecord,
+  PageTrigger,
+  SemanticReceipt,
+  Seq,
+} from "@pylos/protocol";
+import {
+  type AddressRouteRow,
+  type AddressWitness,
+  invalidateAddressRoute,
+  listCurrentAddressRoutes,
+  reuseAddressRoute,
+} from "./address.ts";
+import {
+  attachmentNameFromMeta,
+  attachmentNameProbes,
+  legacyAttachmentManifest,
+  manifestPartitionValid,
+  normalizeAttachmentName,
+  readAttachmentRange,
+  verifyAttachmentSpan,
+} from "./attachment.ts";
+import { sha256 } from "./hash.ts";
 import { KIND_PRIORITY, type NameHit, names, parseNumberName, retained } from "./pure/names.ts";
 import { epistemicOfRole, type PagedBlock, VIA_LABEL } from "./pure/render.ts";
 import { consumeRefs, sequenceRefs } from "./pure/sequence.ts";
 import { ftsTerms } from "./pure/terms.ts";
 import { approxTokens, type Tokenizer } from "./pure/tokens.ts";
-import type { Vault } from "./vault.ts";
+import {
+  buildSemanticReceipt,
+  probeSemanticCapability,
+  semanticPageRecord,
+  verifySemanticHits,
+} from "./semantic.ts";
+import { semanticEpistemic, semanticPhaseForSpanResolution } from "./semantic-phase.ts";
+import { COMPILER_VERSION, type Vault } from "./vault.ts";
 
 /** Tokens assumed per served page when sizing `P_max` (KERNEL A4). */
 export const TOKENS_PER_PAGE = 450;
@@ -80,6 +115,14 @@ export interface PageRequest {
   hits?: NameHit[];
   /** Serve user and tool locators before assistant ones (the check round). */
   userSourceFirst?: boolean;
+  /** Router version bound to persisted address edges. */
+  routerVersion?: string;
+  /** Request the optional address-only semantic route. */
+  semantic?: boolean;
+  /** Untrusted semantic addresses injected by an optional index/runtime. */
+  semanticHits?: readonly unknown[];
+  /** An already kernel-checked capability probe, when supplied by a runtime. */
+  semanticReceipt?: SemanticReceipt;
 }
 
 export interface PageResult {
@@ -88,6 +131,7 @@ export interface PageResult {
   /** Historical atoms surfaced by trigger §5.2, for the ledger digest. */
   historical: Array<{ key: string; current: string; previous: string; changedAtSeq: Seq }>;
   tokens: number;
+  semantic?: SemanticReceipt;
 }
 
 const INTERROGATIVE = /\b(?:what|where|when|who|which|why|how|did|do|does|is|are|was|were|can|could)\b/i;
@@ -131,11 +175,128 @@ function asks(text: string): boolean {
   return text.includes("?") || INTERROGATIVE.test(text);
 }
 
+const DEFAULT_ROUTER_VERSION = COMPILER_VERSION;
+const ADDRESS_PAGE_REASON = "address route could not be paged within the bounded read budget";
+const FATAL_UTF8 = new TextDecoder("utf-8", { fatal: true });
+const UTF8 = new TextEncoder();
+
+interface PageSource {
+  episode: Episode;
+  /** Bytes represented by `byteRange`; attachment reads are bounded to it. */
+  bytes: Uint8Array;
+  byteRange: [number, number];
+  size: number;
+  /** True when any selected manifest bytes are custody-only opaque bytes. */
+  opaque?: boolean;
+  source: string;
+  contentHash: string;
+  manifestId?: string;
+}
+
+/** Read the exact bytes behind a route witness.  Attachments use their
+ * content-addressed whole object; ordinary episodes use their UTF-8 content.
+ * Missing/tombstoned rows are deliberately returned as `null` so a caller can
+ * emit an invalidation receipt instead of substituting a lexical hit. */
+function pageSource(
+  vault: Vault,
+  threadId: string,
+  seq: Seq,
+  requestedRange?: [number, number],
+): PageSource | null {
+  const episode = vault.episodes.get(threadId, seq);
+  if (episode === null || episode.meta.removed === true) return null;
+  const manifest = episode.meta.manifest;
+  if (manifest !== undefined && typeof manifest.hash === "string") {
+    if (requestedRange !== undefined) {
+      const range = readAttachmentRange(vault, threadId, seq, requestedRange);
+      if (range === null) return null;
+      return {
+        episode,
+        bytes: range.bytes,
+        byteRange: range.byteRange,
+        size: manifest.size,
+        ...(range.opaque ? { opaque: true } : {}),
+        source: `blob:${manifest.hash}`,
+        contentHash: manifest.hash,
+        manifestId: manifest.id,
+      };
+    }
+    // Semantic/FTS validation is over the exact episode content, not the raw
+    // object.  Returning that text here avoids substituting a multi-gigabyte
+    // attachment for a bounded indexed episode span.
+    const bytes = UTF8.encode(episode.content);
+    return {
+      episode,
+      bytes,
+      byteRange: [0, bytes.byteLength],
+      size: bytes.byteLength,
+      source: `episode:${seq}`,
+      contentHash: sha256(bytes),
+    };
+  }
+  if (typeof episode.meta.blob === "string") {
+    if (requestedRange !== undefined) {
+      const range = readAttachmentRange(vault, threadId, seq, requestedRange);
+      if (range === null) return null;
+      return {
+        episode,
+        bytes: range.bytes,
+        byteRange: range.byteRange,
+        size: range.manifest.size,
+        ...(range.opaque ? { opaque: true } : {}),
+        source: `blob:${episode.meta.blob}`,
+        contentHash: episode.meta.blob,
+        ...(range.manifest.id === undefined ? {} : { manifestId: range.manifest.id }),
+      };
+    }
+  }
+  const bytes = UTF8.encode(episode.content);
+  return {
+    episode,
+    bytes,
+    byteRange: [0, bytes.byteLength],
+    size: bytes.byteLength,
+    source: `episode:${seq}`,
+    contentHash: sha256(bytes),
+  };
+}
+
+function decodeExact(bytes: Uint8Array, range: [number, number]): string | null {
+  const [from, to] = range;
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to <= from || to > bytes.byteLength) {
+    return null;
+  }
+  try {
+    return FATAL_UTF8.decode(bytes.subarray(from, to));
+  } catch {
+    return null;
+  }
+}
+
+function addressInvalidationRecord(route: AddressRouteRow, reason: string): PageRecord {
+  const label = `address route ${route.id}: ${reason}`;
+  return {
+    trigger: "invalidation",
+    name: label,
+    query: route.normalizedQuery,
+    seqs: [],
+    tokens: 0,
+    latencyMs: 0,
+    resolved: false,
+    routeId: route.id,
+    source: `address:${route.id} · ${reason}`,
+  };
+}
+
+function semanticUnavailableReceipt(): SemanticReceipt {
+  return buildSemanticReceipt(probeSemanticCapability());
+}
+
 /**
  * Serve pages for one turn. Triggers run in order and share one budget:
- * explicit/model recall → sequence → atom routing → ledger routing →
- * historical keys → lexical search → path. If every one of them came back
- * empty, the turn records a fault.
+ * explicit/model recall → sequence → persisted address → semantic address →
+ * atom routing → ledger routing → historical keys → lexical search → path. If
+ * every one of them came back empty, the turn records a fault.
  */
 export function page(vault: Vault, threadId: string, request: PageRequest): PageResult {
   const tokenizer = request.tokenizer ?? approxTokens;
@@ -150,6 +311,10 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   const historical: PageResult["historical"] = [];
   const servedSeqs = new Set<Seq>(residentSeqs);
   let used = 0;
+  const wantsSemantic = request.semantic === true || request.semanticHits !== undefined;
+  let semanticReceipt: SemanticReceipt | undefined = wantsSemantic
+    ? (request.semanticReceipt ?? semanticUnavailableReceipt())
+    : undefined;
 
   const room = (): number => budget - used;
   const canServe = (): boolean => records.filter((r) => r.resolved).length < maxPages && room() > 60;
@@ -160,7 +325,10 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     const from = request.range ? request.range[0] : (request.seq as Seq);
     const to = request.range ? request.range[1] : (request.seq as Seq);
     const started = performance.now();
-    const episodes = vault.episodes.range(threadId, Math.max(1, from), Math.max(1, to)).slice(0, 12);
+    // The range is model-controlled input. Bound the SQL read itself so a
+    // request such as [1, 1e9] never materializes the archive before the
+    // renderer keeps its first twelve witnesses.
+    const episodes = vault.episodes.range(threadId, Math.max(1, from), Math.max(1, to), 12);
     const seqs: Seq[] = [];
     let tokens = 0;
     for (const episode of episodes) {
@@ -272,8 +440,19 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   const queryHits = request.hits ?? (routableQuery.length > 0 ? names(routableQuery) : []);
   const prevHits = request.hits ? [] : names(request.prevAssistant ?? "");
   const stopNames =
-    queryHits.length + prevHits.length > 0 ? vault.stopNames.all(threadId) : new Set<string>();
+    queryHits.length + prevHits.length > 0
+      ? vault.stopNames.hasMany(
+          threadId,
+          [...queryHits, ...prevHits].map((hit) => hit.name),
+        )
+      : new Set<string>();
   const answered = new Set<string>();
+  // Pronoun questions do not yield a lexical NameHit, but a direct first-person
+  // location question has an exact atom slot.  Routing that slot prevents FTS
+  // from serving a superseded sentence merely because it still contains the
+  // word “live”.
+  const implicitAtomHits = implicitQueryAtomHits(queryText);
+  let atomAnsweredInView = false;
 
   // ---- 0. atom routing (deterministic, exact, cheap)
   //
@@ -285,9 +464,27 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     const atomHits = rank(dedupeHits(hits)).filter((hit) => !stopNames.has(hit.name));
     for (const hit of atomHits) {
       if (!canServe()) break;
-      const atoms = vault.atoms.byName(threadId, hit.name, 8);
-      if (atoms.length === 0) continue;
       const started = performance.now();
+      const atoms = vault.atoms.byName(threadId, hit.name, 8);
+      if (atoms.length === 0) {
+        // A bounded model pass may have emitted no addressable atom for this
+        // name.  If its durable receipt is incomplete, make that uncertainty
+        // an explicit route result rather than letting an empty index look
+        // like a clean miss (KERNEL A8/A11).
+        if (vault.atomization.hasIncomplete(threadId)) {
+          records.push({
+            trigger: "model",
+            name: hit.name,
+            query: queryText,
+            seqs: [],
+            tokens: 0,
+            latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+            resolved: false,
+            source: "atomization-incomplete",
+          });
+        }
+        continue;
+      }
       const lines: string[] = [];
       const seqs: Seq[] = [];
       const keys: string[] = [];
@@ -312,7 +509,11 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
         // Skip only when the *current* certificate is already legible in the
         // packet. A resident line carrying the superseded value is a reason to
         // page, not a reason to stay quiet.
-        if (current !== undefined && residentText.includes(`${key} = ${current.value}`)) continue;
+        if (current !== undefined && residentText.includes(`${key} = ${current.value}`)) {
+          answered.add(key);
+          atomAnsweredInView = true;
+          continue;
+        }
         answered.add(key);
         keys.push(key);
         if (proposed !== undefined) {
@@ -442,13 +643,32 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
           `${entry.key} = ${entry.current.value} ⟨#${entry.current.validFromSeq}⟩ (current)`,
           `${entry.key} = ${entry.previous.value} ⟨historical #${entry.previous.validFromSeq}→#${entry.previous.validToSeq ?? "?"}⟩`,
         ].join("\n");
-        const cost = tokenizer(lines) + 8;
+        const currentEpisode = vault.episodes.get(threadId, entry.current.sourceSeq);
+        const previousEpisode = vault.episodes.get(threadId, entry.previous.sourceSeq);
+        // This block is admitted to the check round as a page witness.  The
+        // verifier therefore needs the bytes at each locator exactly; an
+        // ellipsis-bearing excerpt is useful prose but is not a source witness.
+        // Keep both revisions in one block so the page admission has one
+        // deterministic recovered marker for the current route and the
+        // historical source remains inside that same admitted block.
+        const currentSource = historicalWitness(currentEpisode, entry.current.sourceSpan);
+        const previousSource = historicalWitness(previousEpisode, entry.previous.sourceSpan);
+        const currentText = [
+          currentSource,
+          lines,
+          ...(previousSource.length === 0
+            ? []
+            : [`⟦recovered #${entry.previous.validFromSeq} · historical source⟧`, previousSource]),
+        ]
+          .filter((part) => part.length > 0)
+          .join("\n\n");
+        const cost = tokenizer(currentText) + 8;
         if (cost > room()) break;
         blocks.push({
           seq: entry.current.validFromSeq,
           role: "system",
           trigger: `historical:${entry.key}`,
-          text: lines,
+          text: currentText,
           epistemic: authoritative(entry.current) ? "SUPPORTED" : "PROPOSED",
         });
         used += cost;
@@ -461,7 +681,10 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
         records.push({
           trigger: "historical",
           name: entry.key,
-          seqs: [entry.previous.validFromSeq, entry.current.validFromSeq],
+          // The retained block's outer marker is the current revision and its
+          // embedded historical marker follows it. Keep receipt order aligned
+          // with the admitted markers so packet verification is deterministic.
+          seqs: [entry.current.validFromSeq, entry.previous.validFromSeq],
           tokens: cost,
           latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
           resolved: true,
@@ -470,7 +693,462 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     }
   };
 
-  route(queryHits);
+  // ---- persisted address route (KERNEL A15.1)
+  //
+  // An address edge is a stronger address than mutable lexical ranking or an
+  // optional semantic index.  Revalidation happens before any bytes are handed
+  // to the renderer.  If a historical edge exists but no effective edge can be
+  // revalidated, the explicit invalidation receipt below is the whole route:
+  // falling through to a different hit would silently turn a stale address
+  // into a new claim.
+  if (queryText.trim().length > 0) {
+    const addressHistory = listCurrentAddressRoutes(vault, threadId, queryText);
+    if (addressHistory.length > 0) {
+      const reused = reuseAddressRoute(
+        vault,
+        threadId,
+        queryText,
+        request.routerVersion ?? DEFAULT_ROUTER_VERSION,
+      );
+      const latestHistory = listCurrentAddressRoutes(vault, threadId, queryText);
+      if (reused.route === null) {
+        const seen = new Set<string>();
+        const events = [
+          ...reused.invalidated,
+          // `listCurrentAddressRoutes` projects a closed original row with its
+          // effective status for public reads. The append-only event already
+          // represents that closure, so do not emit both as page receipts.
+          ...latestHistory.filter((row) => row.storedStatus !== "active"),
+        ]
+          .filter((row) => row.status !== "active")
+          .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+          .filter((row) => {
+            if (seen.has(row.id)) return false;
+            seen.add(row.id);
+            return true;
+          })
+          .slice(-4);
+        const receipts = events.length > 0 ? events : [addressHistory.at(-1) as AddressRouteRow];
+        for (const event of receipts) {
+          records.push(addressInvalidationRecord(event, event.reason ?? "address route is not effective"));
+        }
+        return {
+          blocks,
+          records,
+          historical,
+          tokens: used,
+          ...(semanticReceipt === undefined ? {} : { semantic: semanticReceipt }),
+        };
+      }
+
+      const route = reused.route;
+      const materials: Array<{ witness: AddressWitness; source: PageSource; text: string | null }> = [];
+      let invalidReason: string | undefined;
+      for (const witness of route.witnesses) {
+        // The asking turn is a question, never its own witness, even if a
+        // buggy writer placed it in a released route.
+        if (request.querySeq !== undefined && witness.seq === request.querySeq) {
+          invalidReason = "question self-hit";
+          break;
+        }
+        const source = pageSource(vault, threadId, witness.seq, witness.byteRange);
+        if (source === null) {
+          invalidReason = "source deleted";
+          break;
+        }
+        const [from, to] = witness.byteRange;
+        const span = source.bytes;
+        if (
+          from < 0 ||
+          to <= from ||
+          from !== source.byteRange[0] ||
+          to !== source.byteRange[1] ||
+          to > source.size ||
+          witness.contentHash !== source.contentHash ||
+          (witness.source !== undefined && witness.source !== source.source) ||
+          (witness.manifestId !== undefined && witness.manifestId !== source.manifestId) ||
+          (witness.spanHash !== undefined && witness.spanHash !== sha256(span))
+        ) {
+          invalidReason = "source hash or span changed";
+          break;
+        }
+        materials.push({
+          witness,
+          source,
+          text: source.opaque ? null : decodeExact(source.bytes, [0, span.byteLength]),
+        });
+      }
+      if (invalidReason !== undefined) {
+        const event =
+          reused.invalidated.at(-1) ??
+          // `reuseAddressRoute` normally writes this event atomically.  This
+          // fallback covers a race between the validation read and this final
+          // byte check without allowing a lexical/semantic substitute.
+          invalidateAddressRoute(vault, route.id, invalidReason);
+        records.push(addressInvalidationRecord(event ?? route, invalidReason));
+        return {
+          blocks,
+          records,
+          historical,
+          tokens: used,
+          ...(semanticReceipt === undefined ? {} : { semantic: semanticReceipt }),
+        };
+      }
+
+      for (const material of materials) {
+        const { witness, source, text } = material;
+        const base = {
+          trigger: "address" as const,
+          query: route.normalizedQuery,
+          seqs: [witness.seq],
+          routeId: route.id,
+          source: witness.source ?? source.source,
+          sourceHash: witness.contentHash,
+          contentHash: witness.contentHash,
+          spanHash:
+            witness.spanHash ?? sha256(source.bytes.slice(witness.byteRange[0], witness.byteRange[1])),
+          byteRange: witness.byteRange,
+          ...(witness.revision === undefined ? {} : { revision: witness.revision }),
+          authority: witness.authority,
+          ...(witness.manifestId === undefined ? {} : { manifest: witness.manifestId }),
+        } satisfies Partial<PageRecord>;
+
+        if (servedSeqs.has(witness.seq)) {
+          records.push({
+            ...base,
+            tokens: 0,
+            latencyMs: 0,
+            resolved: true,
+          } as PageRecord);
+          continue;
+        }
+        if (!canServe()) {
+          records.push({
+            ...addressInvalidationRecord(route, ADDRESS_PAGE_REASON),
+            query: route.normalizedQuery,
+            routeId: route.id,
+          });
+          continue;
+        }
+
+        let rendered = text;
+        let opaque = false;
+        if (rendered === null) {
+          opaque = true;
+          rendered = `⟦opaque address span · ${source.source} · bytes ${witness.byteRange[0]}–${witness.byteRange[1]} · sha256 ${base.spanHash} · not decoded⟧`;
+        }
+        const cost = tokenizer(rendered) + 8;
+        if (cost > room()) {
+          records.push({
+            ...addressInvalidationRecord(route, ADDRESS_PAGE_REASON),
+            query: route.normalizedQuery,
+            routeId: route.id,
+          });
+          continue;
+        }
+        blocks.push({
+          seq: source.episode.seq,
+          role: source.episode.role,
+          trigger: "address",
+          text: rendered,
+          epistemic: epistemicOfRole(source.episode.role),
+        });
+        servedSeqs.add(witness.seq);
+        used += cost;
+        records.push({
+          ...base,
+          ...(opaque ? { opaque: true } : { encoding: "utf-8" as const }),
+          tokens: cost,
+          latencyMs: 0,
+          resolved: true,
+        } as PageRecord);
+      }
+      return {
+        blocks,
+        records,
+        historical,
+        tokens: used,
+        ...(semanticReceipt === undefined ? {} : { semantic: semanticReceipt }),
+      };
+    }
+  }
+
+  // ---- optional semantic address route (KERNEL A15.2)
+  //
+  // The index supplies only a candidate sequence/span/hash.  `verifySemanticHits`
+  // checks those bytes, current revision and deletion state before a page can be
+  // emitted.  Rejected candidates remain explicit unresolved records and are
+  // never passed to atomization or lexical routing.
+  if (request.semanticHits !== undefined) {
+    const verified = verifySemanticHits(
+      request.semanticHits,
+      (seq) => {
+        if (request.querySeq !== undefined && seq === request.querySeq) return null;
+        const source = pageSource(vault, threadId, seq);
+        if (source === null) return null;
+        let content: string;
+        try {
+          content = FATAL_UTF8.decode(source.bytes);
+        } catch {
+          return null;
+        }
+        return {
+          seq,
+          content,
+          contentHash: sha256(source.bytes),
+          removed: source.episode.meta.removed === true,
+          role: source.episode.role,
+          revision: source.episode.hash,
+        };
+      },
+      { maxHits: Math.max(1, maxPages), maxBytes: 64 * 1024 },
+    );
+    const hitCount = verified.accepted.length + verified.rejected.length;
+    const runtimeReceipt = semanticReceipt;
+    semanticReceipt = {
+      ...(runtimeReceipt ?? {}),
+      status: verified.rejected.length > 0 ? "incomplete" : (runtimeReceipt?.status ?? "ready"),
+      indexed: runtimeReceipt?.indexed ?? verified.accepted.length,
+      eligible: runtimeReceipt?.eligible ?? hitCount,
+      ...(verified.rejected[0] === undefined
+        ? runtimeReceipt?.reason === undefined
+          ? {}
+          : { reason: runtimeReceipt.reason }
+        : { reason: `semantic address rejected: ${verified.rejected[0].reason}` }),
+    };
+    for (const rejected of verified.rejected) {
+      const record = semanticPageRecord(rejected, {
+        tokens: 0,
+        latencyMs: 0,
+        query: queryText,
+      });
+      record.name = `semantic ${rejected.reason}`;
+      record.semantic = semanticReceipt;
+      records.push(record);
+    }
+    for (const accepted of verified.accepted) {
+      const source = vault.episodes.get(threadId, accepted.seq);
+      if (source === null || source.meta.removed === true) continue;
+      const record = semanticPageRecord(accepted, {
+        tokens: 0,
+        latencyMs: 0,
+        query: queryText,
+      });
+      record.semantic = semanticReceipt;
+      // Keep an exact semantic page even when the compiler's first recent
+      // snapshot already contains this episode. The compiler refills that
+      // window after routing once fixed packet costs are known; treating the
+      // provisional snapshot as final can otherwise leave a resolved semantic
+      // record after its only resident witness was trimmed. Semantic hits are
+      // address-only, so the conservative outcome is the bounded duplicate
+      // page with its atom-derived phase, never a silently missing witness.
+      if (!canServe()) {
+        record.resolved = false;
+        record.seqs = [];
+        record.name = "semantic bounded page budget";
+        records.push(record);
+        continue;
+      }
+      const cost = tokenizer(accepted.text) + 8;
+      if (cost > room()) {
+        record.resolved = false;
+        record.seqs = [];
+        record.name = "semantic bounded page budget";
+        records.push(record);
+        continue;
+      }
+      blocks.push({
+        seq: accepted.seq,
+        role: source.role,
+        trigger: "semantic",
+        text: accepted.text,
+        epistemic: semanticEpistemic(
+          source.role,
+          semanticPhaseForSpanResolution(vault, threadId, source, accepted.byteRange),
+        ),
+      });
+      servedSeqs.add(accepted.seq);
+      used += cost;
+      record.tokens = cost;
+      record.resolved = true;
+      records.push(record);
+    }
+    return {
+      blocks,
+      records,
+      historical,
+      tokens: used,
+      ...(semanticReceipt === undefined ? {} : { semantic: semanticReceipt }),
+    };
+  }
+
+  route([...queryHits, ...implicitAtomHits]);
+
+  // ---- 2b. attachment tail route (KERNEL A12.3)
+  //
+  // Attachment names are addresses, not evidence.  When a question asks for
+  // the tail of a named file, resolve the final manifest span directly before
+  // ordinary FTS routing.  The route verifies the content-addressed span and
+  // reports the exact returned byte interval; opaque bytes receive a receipt
+  // and are never decoded through a replacement character.
+  const tail = attachmentTail(vault, threadId, queryText, request.querySeq);
+  if (tail?.kind === "unresolved" && canServe()) {
+    records.push({
+      trigger: "attachment-tail",
+      name: tail.name,
+      query: tail.name,
+      seqs: tail.seqs,
+      tokens: 0,
+      latencyMs: 0,
+      resolved: false,
+      source: `attachment-name-index:${tail.reason}`,
+    });
+  }
+  if (tail?.kind === "target" && canServe()) {
+    const started = performance.now();
+    const episode = tail.episode;
+    const manifest = tail.manifest;
+    const span = manifest.spans.at(-1) as AttachmentSpan | undefined;
+    const source = `blob:${manifest.hash}`;
+    if (span === undefined) {
+      records.push({
+        trigger: "attachment-tail",
+        query: manifest.name,
+        seqs: [episode.seq],
+        tokens: 0,
+        latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+        resolved: false,
+        source,
+        sourceHash: manifest.hash,
+        manifest: manifest.id,
+      });
+    } else {
+      const structurallyValid = manifestPartitionValid(manifest);
+      // Verify the complete manifest through fixed-size object reads.  This
+      // also handles imported legacy manifests whose one opaque span may be
+      // much larger than the page/evidence allocation cap.
+      const verified = structurallyValid
+        ? verifyAttachmentSpan(vault, threadId, episode.seq, span.ordinal)
+        : null;
+      if (
+        verified === null ||
+        verified.manifest.id !== manifest.id ||
+        verified.manifest.digest !== manifest.digest ||
+        verified.manifest.hash !== manifest.hash
+      ) {
+        records.push({
+          trigger: "attachment-tail",
+          query: manifest.name,
+          seqs: [episode.seq],
+          tokens: 0,
+          latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+          resolved: false,
+          source,
+          sourceHash: manifest.hash,
+          spanHash: span.hash,
+          byteRange: [span.from, span.to],
+          authority: "attachment",
+          manifest: manifest.id,
+          ...(span.state === "opaque" ? { opaque: true } : {}),
+        });
+      } else if (span.state === "opaque") {
+        const receipt = `⟦opaque attachment tail · ${manifest.name || "attachment"} · bytes ${span.from}–${span.to} · sha256 ${span.hash} · not decoded⟧`;
+        const cost = tokenizer(receipt) + 8;
+        if (cost <= room()) {
+          blocks.push({
+            seq: episode.seq,
+            role: "attachment",
+            trigger: "attachment-tail",
+            text: receipt,
+            epistemic: "SUPPORTED",
+          });
+          servedSeqs.add(episode.seq);
+          used += cost;
+          records.push({
+            trigger: "attachment-tail",
+            query: manifest.name,
+            seqs: [episode.seq],
+            tokens: cost,
+            latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+            resolved: true,
+            source,
+            sourceHash: manifest.hash,
+            spanHash: span.hash,
+            byteRange: [span.from, span.to],
+            authority: "attachment",
+            manifest: manifest.id,
+            opaque: true,
+          });
+        }
+      } else {
+        // Indexed spans are capped at ATTACHMENT_CHUNK_SIZE, so this read is
+        // bounded even when the complete attachment is multi-gigabyte.
+        const range = readAttachmentRange(vault, threadId, episode.seq, [span.from, span.to], {
+          requireIndexed: true,
+        });
+        if (range === null) {
+          records.push({
+            trigger: "attachment-tail",
+            query: manifest.name,
+            seqs: [episode.seq],
+            tokens: 0,
+            latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+            resolved: false,
+            source,
+            sourceHash: manifest.hash,
+            spanHash: span.hash,
+            byteRange: [span.from, span.to],
+            authority: "attachment",
+            manifest: manifest.id,
+          });
+          return {
+            blocks,
+            records,
+            historical,
+            tokens: used,
+            ...(semanticReceipt === undefined ? {} : { semantic: semanticReceipt }),
+          };
+        }
+        const decoded = new TextDecoder("utf-8", { fatal: true }).decode(range.bytes);
+        // `renderPaged` adds the archive heading, locator label and separators
+        // after this route returns.  Reserve that fixed overhead so a resolved
+        // tail cannot be dropped at render time while its receipt remains.
+        const pageBudget = Math.max(1, Math.min(TOKENS_PER_PAGE, room() - 120));
+        const suffix = boundedSuffix(decoded, pageBudget, tokenizer);
+        const suffixBytes = new TextEncoder().encode(suffix);
+        const from = span.to - suffixBytes.byteLength;
+        const to = span.to;
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(suffixBytes);
+        const cost = tokenizer(text) + 8;
+        if (from >= span.from && to <= span.to && suffixBytes.byteLength > 0 && cost <= room()) {
+          blocks.push({
+            seq: episode.seq,
+            role: "attachment",
+            trigger: "attachment-tail",
+            text,
+            epistemic: "SUPPORTED",
+          });
+          servedSeqs.add(episode.seq);
+          used += cost;
+          records.push({
+            trigger: "attachment-tail",
+            query: manifest.name,
+            seqs: [episode.seq],
+            tokens: cost,
+            latencyMs: Math.round((performance.now() - started) * 1000) / 1000,
+            resolved: true,
+            source,
+            sourceHash: manifest.hash,
+            spanHash: sha256(suffixBytes),
+            byteRange: [from, to],
+            authority: "attachment",
+            manifest: manifest.id,
+            encoding: "utf-8",
+          });
+        }
+      }
+    }
+  }
 
   // ---- 3. lexical search (KERNEL A9.4)
   //
@@ -492,7 +1170,12 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
   // names answered the model's sentence, not the user's question.
   const nothingNamed = references.length === 0 && queryHits.length === 0;
   const fires =
-    byModel || (asksSomething && terms.length >= 2 && (unknownName || noRouteResolved || nothingNamed));
+    byModel ||
+    (asksSomething &&
+      (terms.length >= 2 ||
+        (terms.length >= 1 && (FIRST_PERSON.test(queryText) || SECOND_PERSON.test(queryText)))) &&
+      !atomAnsweredInView &&
+      (unknownName || noRouteResolved || nothingNamed));
   /** The lexical search found every term of the question in a turn the view already holds. */
   let answeredInView = false;
   if (request.search !== false && fires && canServe()) {
@@ -623,6 +1306,7 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     terms.length >= 1 &&
     searchFoundNothing &&
     !addressedInView &&
+    !atomAnsweredInView &&
     !answeredInView &&
     records.every((record) => !record.resolved);
 
@@ -641,7 +1325,13 @@ export function page(vault: Vault, threadId: string, request: PageRequest): Page
     });
   }
 
-  return { blocks, records, historical, tokens: used };
+  return {
+    blocks,
+    records,
+    historical,
+    tokens: used,
+    ...(semanticReceipt === undefined ? {} : { semantic: semanticReceipt }),
+  };
 }
 
 /** Serve one `recall` tool call and render the result as tool-visible text. */
@@ -856,6 +1546,25 @@ export function containsName(content: string, hit: { name: string; raw?: string 
   return false;
 }
 
+function implicitQueryAtomHits(query: string): NameHit[] {
+  const normalized = query.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
+  if (
+    !/\bwhere\s+(?:do|did)\s+i\s+(?:live|reside)\b/u.test(normalized) &&
+    !/\b(?:where|what)\s+(?:is|was)\s+(?:my|our)\s+(?:location|address|home)\b/u.test(normalized)
+  ) {
+    return [];
+  }
+  return [
+    {
+      name: "user.location",
+      kind: "atom",
+      start: 0,
+      end: query.length,
+      raw: query,
+    },
+  ];
+}
+
 /**
  * Whether a ledger row's locator really resolves. Text-derived names must occur
  * in the episode text. `atom` names are normalized slots — a key like
@@ -898,15 +1607,188 @@ function historicalKeysFor(vault: Vault, threadId: string, hits: readonly NameHi
     for (const atom of vault.atoms.byName(threadId, hit.name, 6)) {
       if (seen.has(atom.key)) continue;
       seen.add(atom.key);
-      const history = vault.atoms.historyOf(threadId, atom.key);
-      const current = history.find((a) => a.phase === "SUPPORTED");
-      const previous = history.find((a) => a.phase === "HISTORICAL" && authoritative(a));
-      if (current === undefined || previous === undefined) continue;
+      const current = vault.atoms.latestByKey(threadId, atom.key, "SUPPORTED");
+      const previous = vault.atoms.latestByKey(threadId, atom.key, "HISTORICAL", "user");
+      if (current === null || previous === null) continue;
       out.push({ key: atom.key, current, previous });
       if (out.length >= 3) return out;
     }
   }
   return out;
+}
+
+const ATTACHMENT_TAIL_CUE = /\b(?:tail|end|ending|last|latest|final|bottom)\b/i;
+const ATTACHMENT_REFER_BACK = /\b(?:it|this|that|file|attachment|document|payload)\b/i;
+
+interface AttachmentTailTarget {
+  kind: "target";
+  episode: Episode;
+  manifest: AttachmentManifest;
+}
+
+interface AttachmentTailUnresolved {
+  kind: "unresolved";
+  name: string;
+  reason: "ambiguous" | "capped" | "index-incomplete" | "malformed" | "source-unavailable";
+  seqs: Seq[];
+}
+
+type AttachmentTailResult = AttachmentTailTarget | AttachmentTailUnresolved;
+
+/**
+ * Locate the one attachment a tail question addresses.  Filename matching is
+ * deliberately literal and case-insensitive; this route never treats a fuzzy
+ * lexical hit as an attachment identity.  A legacy `meta.blob` is exposed as a
+ * single opaque span so old archives retain a truthful tail receipt.
+ */
+function attachmentTail(
+  vault: Vault,
+  threadId: string,
+  query: string,
+  querySeq: Seq | undefined,
+): AttachmentTailResult | null {
+  const before = querySeq ?? (vault.threads.get(threadId)?.headSeq ?? 0) + 1;
+  const previous = querySeq === undefined ? null : vault.episodes.get(threadId, querySeq - 1);
+  const immediatelyPrevious =
+    previous?.role === "attachment" && previous.meta.removed !== true ? previous : null;
+  // A named file needs an explicit tail cue.  A refer-back immediately after
+  // an upload is the other A12.3 form: the newest attachment's indexed tail
+  // may not fit the resident window, so expose one exact tail page.
+  const hasTailCue = ATTACHMENT_TAIL_CUE.test(query);
+  const referBack = immediatelyPrevious !== null && ATTACHMENT_REFER_BACK.test(query);
+  if (!hasTailCue && !referBack) return null;
+  if (referBack && !hasTailCue) {
+    const manifest = attachmentManifestForTail(vault, immediatelyPrevious as Episode);
+    return manifest === null
+      ? { kind: "unresolved", name: "refer-back", reason: "malformed", seqs: [immediatelyPrevious.seq] }
+      : { kind: "target", episode: immediatelyPrevious as Episode, manifest };
+  }
+  const probes = attachmentNameProbes(query);
+  if (!vault.attachmentNamesReady(threadId)) {
+    return {
+      kind: "unresolved",
+      name: probes[0] ?? "attachment",
+      reason: "index-incomplete",
+      seqs: [],
+    };
+  }
+  if (probes.length === 0) {
+    if (!referBack) return null;
+    const manifest = attachmentManifestForTail(vault, immediatelyPrevious as Episode);
+    return manifest === null
+      ? { kind: "unresolved", name: "refer-back", reason: "malformed", seqs: [immediatelyPrevious.seq] }
+      : { kind: "target", episode: immediatelyPrevious as Episode, manifest };
+  }
+  const placeholders = probes.map(() => "?").join(", ");
+  const rows = vault.db
+    .query(
+      "SELECT n.seq, n.normalized_name, n.name FROM attachment_name n " +
+        "JOIN episode e ON e.thread_id = n.thread_id AND e.seq = n.seq " +
+        `WHERE n.thread_id = ? AND n.normalized_name IN (${placeholders}) AND n.seq < ? ` +
+        "AND e.role = 'attachment' AND json_valid(e.meta) = 1 " +
+        "AND COALESCE(json_extract(e.meta, '$.removed'), 0) != 1 " +
+        "ORDER BY n.seq DESC LIMIT ?",
+    )
+    .all(threadId, ...probes, before, ATTACHMENT_NAME_CANDIDATE_LIMIT + 1) as Array<{
+    seq: number;
+    normalized_name: string;
+    name: string;
+  }>;
+  if (rows.length > ATTACHMENT_NAME_CANDIDATE_LIMIT) {
+    return {
+      kind: "unresolved",
+      name: rows[0]?.name ?? probes[0] ?? "attachment",
+      reason: "capped",
+      seqs: rows.slice(0, ATTACHMENT_NAME_CANDIDATE_LIMIT).map((row) => row.seq),
+    };
+  }
+  if (rows.length > 1) {
+    return {
+      kind: "unresolved",
+      name: rows[0]?.name ?? probes[0] ?? "attachment",
+      reason: "ambiguous",
+      seqs: rows.map((row) => row.seq),
+    };
+  }
+  if (rows.length === 0) {
+    if (!referBack) return null;
+    const manifest = attachmentManifestForTail(vault, immediatelyPrevious as Episode);
+    return manifest === null
+      ? { kind: "unresolved", name: "refer-back", reason: "malformed", seqs: [immediatelyPrevious.seq] }
+      : { kind: "target", episode: immediatelyPrevious as Episode, manifest };
+  }
+  const candidate = rows[0] as (typeof rows)[number];
+  const episode = vault.episodes.get(threadId, candidate.seq);
+  if (episode === null || episode.role !== "attachment" || episode.meta.removed === true) {
+    return { kind: "unresolved", name: candidate.name, reason: "source-unavailable", seqs: [candidate.seq] };
+  }
+  const indexedName = attachmentNameFromMeta(episode.meta);
+  if (indexedName === null || normalizeAttachmentName(indexedName) !== candidate.normalized_name) {
+    return { kind: "unresolved", name: candidate.name, reason: "malformed", seqs: [candidate.seq] };
+  }
+  const manifest = attachmentManifestForTail(vault, episode);
+  if (manifest === null) {
+    return { kind: "unresolved", name: candidate.name, reason: "malformed", seqs: [candidate.seq] };
+  }
+  return { kind: "target", episode, manifest };
+}
+
+const ATTACHMENT_NAME_CANDIDATE_LIMIT = 64;
+
+function attachmentManifestForTail(vault: Vault, episode: Episode): AttachmentManifest | null {
+  const meta = episode.meta;
+  let manifest = meta.manifest;
+  if (manifest === undefined && typeof meta.blob === "string") {
+    manifest = legacyAttachmentManifest(
+      meta.blob,
+      meta.size ?? vault.blobs.size(meta.blob) ?? 0,
+      meta.mime ?? "application/octet-stream",
+      meta.name ?? episode.content,
+    );
+  }
+  if (manifest === undefined || typeof manifest !== "object" || Array.isArray(manifest)) return null;
+  return manifest;
+}
+
+/** Largest exact suffix whose decoded text fits the page budget. */
+function boundedSuffix(text: string, maxTokens: number, tokenizer: Tokenizer): string {
+  if (text.length === 0 || maxTokens <= 0) return "";
+  if (tokenizer(text) <= maxTokens) return text;
+  const units = Array.from(text);
+  let low = 0;
+  let high = units.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const candidate = units.slice(middle).join("");
+    if (tokenizer(candidate) <= maxTokens) high = middle;
+    else low = middle + 1;
+  }
+  const suffix = units.slice(low).join("");
+  return tokenizer(suffix) <= maxTokens ? suffix : "";
+}
+
+/**
+ * Return source bytes for a historical page without decorating them with an
+ * ellipsis.  Atom source spans are JavaScript character offsets (the same
+ * offsets persisted by atomization), so slicing here preserves the exact
+ * witness the route names.  A malformed/missing span falls back to a bounded
+ * prefix; the route remains a locator for the source and never pretends the
+ * prefix is the whole episode.
+ */
+function historicalWitness(episode: Episode | null, span: [number, number] | undefined): string {
+  if (episode === null || episode.meta.removed === true || episode.content.length === 0) return "";
+  if (
+    span !== undefined &&
+    span.length === 2 &&
+    Number.isInteger(span[0]) &&
+    Number.isInteger(span[1]) &&
+    span[0] >= 0 &&
+    span[1] > span[0] &&
+    span[1] <= episode.content.length
+  ) {
+    return episode.content.slice(span[0], span[1]);
+  }
+  return episode.content.slice(0, 256);
 }
 
 /**

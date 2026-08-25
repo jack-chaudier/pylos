@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AuthStatus, Episode, Me, ThreadStats } from "@pylos/protocol";
+import { type AuthStatus, type Episode, MAX_THREAD_BUDGET, type Me, type ThreadStats } from "@pylos/protocol";
+import { clientKey, HeavyOperationGate, MAX_RATE_LIMIT_KEYS, TokenBucket } from "../src/limits.ts";
+import { RAW_IMPORT_CONTENT_TYPE, RAW_IMPORT_PASSPHRASE_HEADER } from "../src/serve.ts";
+import { staticSite } from "../src/static.ts";
 import { HOSTED_ORIGIN, type HostedHarness, hostedHarness, jsonPost, withSession } from "./harness.ts";
 
 let h: HostedHarness;
@@ -96,8 +99,14 @@ describe("session guards", () => {
     expect(await response.json()).toMatchObject({ code: "origin_denied" });
   });
 
-  test("a client with no Origin needs a bearer to mutate", async () => {
+  test("a literal null Origin is rejected even with a bearer", async () => {
     const { session } = await h.login("sub-cli");
+    const read = await h.fetch("/api/health", {
+      headers: { origin: "null", Authorization: `Bearer ${session}` },
+    });
+    expect(read.status).toBe(403);
+    expect(read.headers.get("access-control-allow-origin")).toBeNull();
+
     const denied = await h.fetch("/api/threads", {
       method: "POST",
       headers: { "Content-Type": "application/json", origin: "null" },
@@ -105,7 +114,14 @@ describe("session guards", () => {
     });
     expect(denied.status).toBe(403);
 
-    const allowed = await h.fetch("/api/threads", {
+    const preflight = await h.fetch("/api/threads", {
+      method: "OPTIONS",
+      headers: { origin: "null" },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBeNull();
+
+    const stillDenied = await h.fetch("/api/threads", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -114,7 +130,7 @@ describe("session guards", () => {
       },
       body: "{}",
     });
-    expect(allowed.status).toBe(200);
+    expect(stillDenied.status).toBe(403);
   });
 
   test("CORS reflects only a configured origin and never grants credentials", async () => {
@@ -214,7 +230,281 @@ describe("one vault per account", () => {
   });
 });
 
+describe("hosted provider endpoint boundary", () => {
+  test("authenticated users cannot configure server-side gateway targets", async () => {
+    const local = await hostedHarness();
+    const { session } = await local.login("sub-provider-ssrf");
+    const targets = [
+      "http://127.0.0.1:11434/v1",
+      "http://[::1]:11434/v1",
+      "http://10.0.0.8/v1",
+      "http://172.16.0.8/v1",
+      "http://192.168.0.8/v1",
+      "http://169.254.169.254/latest/meta-data",
+      "https://user:password@example.test/v1",
+      "file:///etc/passwd",
+      "ftp://example.test/v1",
+      "https://public.example.test/redirect-to-127.0.0.1",
+      "https://rebind.example.test/v1",
+    ];
+
+    try {
+      for (const baseUrl of targets) {
+        const response = await local.fetch(
+          "/api/auth/openai-compatible/api-key",
+          withSession(jsonPost({ apiKey: "key-123456", baseUrl }), session),
+        );
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ code: "hosted_provider_forbidden" });
+      }
+
+      for (const model of ["ollama/llama3", "openai-compatible/redirecting-model"]) {
+        const response = await local.fetch(
+          "/v1/chat/completions",
+          withSession(jsonPost({ model, messages: [{ role: "user", content: "hello" }] }), session),
+        );
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ code: "hosted_provider_forbidden" });
+      }
+
+      const catalogue = await local.json<{ data: Array<{ owned_by: string }> }>("/v1/models", {}, session);
+      expect(catalogue.data.some((model) => model.owned_by === "ollama")).toBe(false);
+      expect(catalogue.data.some((model) => model.owned_by === "openai-compatible")).toBe(false);
+    } finally {
+      await local.dispose();
+    }
+  });
+});
+
 describe("limits", () => {
+  test("fresh forwarded client keys cannot grow one rate limiter past 8192", () => {
+    let now = 0;
+    const bucket = new TokenBucket(1, 60_000, () => now);
+    const proxy = { requestIP: () => ({ address: "127.0.0.1" }) };
+    const requestFor = (key: string): Request =>
+      new Request("https://pylos.test/api/login/xai/start", { headers: { "x-forwarded-for": key } });
+
+    let accepted = 0;
+    for (let index = 0; index < MAX_RATE_LIMIT_KEYS; index += 1) {
+      const request = requestFor(`198.51.${Math.floor(index / 256)}.${index % 256}`);
+      if (bucket.take(clientKey(request, proxy))) accepted += 1;
+    }
+    expect(accepted).toBe(MAX_RATE_LIMIT_KEYS);
+    expect(bucket.take(clientKey(requestFor("203.0.113.254"), proxy))).toBe(false);
+
+    // A direct public peer cannot manufacture new keys with X-Forwarded-For.
+    const publicPeer = { requestIP: () => ({ address: "203.0.113.9" }) };
+    expect(clientKey(requestFor("10.0.0.1"), publicPeer)).toBe("203.0.113.9");
+
+    now += 60_000;
+    expect(bucket.take(clientKey(requestFor("203.0.113.254"), proxy))).toBe(true);
+  });
+
+  test("a huge budget is rejected before the hosted lane or archive mutation", async () => {
+    const local = await hostedHarness();
+    try {
+      const { session } = await local.login("sub-budget-boundary");
+      const thread = await local.json<ThreadStats>("/api/threads", jsonPost({}), session);
+      for (let i = 0; i < 40; i += 1) {
+        local.provider.reply(`archive reply ${i}`);
+        await local.sse(
+          `/api/threads/${thread.threadId}/turn`,
+          { text: `archive turn ${i}`, budget: 1_024 },
+          session,
+        );
+      }
+      const before = await local.json<ThreadStats>(`/api/threads/${thread.threadId}`, {}, session);
+      expect(before.turns).toBeGreaterThanOrEqual(80);
+
+      const user = local.registry.resolve(session);
+      expect(user).toBeDefined();
+      const contextLease = await local.registry.acquire(user as NonNullable<typeof user>);
+      const kernel = contextLease.context.kernel;
+      const originalEnter = kernel.enterTurn;
+      let entered = 0;
+      kernel.enterTurn = (threadId) => {
+        entered += 1;
+        return originalEnter.call(kernel, threadId);
+      };
+      contextLease.release();
+      try {
+        const response = await local.fetch(
+          `/api/threads/${thread.threadId}/turn`,
+          withSession(jsonPost({ text: "must not compile", budget: MAX_THREAD_BUDGET + 1 }), session),
+        );
+        expect(response.status).toBe(413);
+        expect(await response.json()).toMatchObject({ code: "budget_too_large" });
+        expect(entered).toBe(0);
+
+        const afterRejected = await local.json<ThreadStats>(`/api/threads/${thread.threadId}`, {}, session);
+        expect(afterRejected.turns).toBe(before.turns);
+
+        local.provider.reply("the lane recovered");
+        const recovered = await local.sse(
+          `/api/threads/${thread.threadId}/turn`,
+          { text: "valid follow-up", budget: 1_024 },
+          session,
+        );
+        expect(recovered.at(-1)?.type).toBe("done");
+      } finally {
+        kernel.enterTurn = originalEnter;
+      }
+    } finally {
+      await local.dispose();
+    }
+  }, 20_000);
+
+  test("a second heavy request for one subject is refused before its handler enters", async () => {
+    const local = await hostedHarness({ heavy: new HeavyOperationGate(1, 4) });
+    try {
+      const { session } = await local.login("sub-heavy-serial");
+      const thread = await local.json<ThreadStats>("/api/threads", jsonPost({}), session);
+      const held = local.registry.heavy.tryAcquire("sub-heavy-serial");
+      expect(held).toBeDefined();
+      const acquire = local.registry.acquire;
+      let entered = 0;
+      local.registry.acquire = async (user) => {
+        entered += 1;
+        return acquire.call(local.registry, user);
+      };
+      try {
+        const light = await local.fetch("/api/me", withSession({}, session));
+        expect(light.status).toBe(200);
+        const requests = [
+          [`/api/threads/${thread.threadId}/verify`, jsonPost({})],
+          [`/api/threads/${thread.threadId}/forget`, jsonPost({})],
+          [`/api/threads/${thread.threadId}/demo`, jsonPost({})],
+          [`/api/threads/${thread.threadId}/export`, jsonPost({ passphrase: "heavy-passphrase" })],
+        ] as const;
+        for (const [path, init] of requests) {
+          const response = await local.fetch(path, withSession(init, session));
+          expect(response.status).toBe(429);
+          expect(await response.json()).toMatchObject({ code: "heavy_busy" });
+        }
+        expect(entered).toBe(0);
+      } finally {
+        local.registry.acquire = acquire;
+        held?.release();
+      }
+    } finally {
+      await local.dispose();
+    }
+  });
+
+  test("the global heavy cap refuses a different subject before its handler enters", async () => {
+    const local = await hostedHarness({ heavy: new HeavyOperationGate(1, 1) });
+    try {
+      const { session } = await local.login("sub-heavy-global");
+      const thread = await local.json<ThreadStats>("/api/threads", jsonPost({}), session);
+      const held = local.registry.heavy.tryAcquire("another-subject");
+      expect(held).toBeDefined();
+      const acquire = local.registry.acquire;
+      let entered = 0;
+      local.registry.acquire = async (user) => {
+        entered += 1;
+        return acquire.call(local.registry, user);
+      };
+      try {
+        const response = await local.fetch(
+          `/api/threads/${thread.threadId}/verify`,
+          withSession(jsonPost({}), session),
+        );
+        expect(response.status).toBe(429);
+        expect(await response.json()).toMatchObject({ code: "heavy_busy" });
+        expect(entered).toBe(0);
+      } finally {
+        local.registry.acquire = acquire;
+        held?.release();
+      }
+    } finally {
+      await local.dispose();
+    }
+  });
+
+  test("a failed heavy route releases its subject lease", async () => {
+    const local = await hostedHarness({ heavy: new HeavyOperationGate(1, 1) });
+    try {
+      const { session } = await local.login("sub-heavy-failure");
+      const thread = await local.json<ThreadStats>("/api/threads", jsonPost({}), session);
+      const user = local.registry.resolve(session);
+      expect(user).toBeDefined();
+      const contextLease = await local.registry.acquire(user as NonNullable<typeof user>);
+      const kernel = contextLease.context.kernel;
+      const verify = kernel.verify;
+      let fail = true;
+      kernel.verify = async (threadId) => {
+        if (fail) {
+          fail = false;
+          throw new Error("verify fixture failure");
+        }
+        return verify.call(kernel, threadId);
+      };
+      contextLease.release();
+      try {
+        const first = await local.fetch(
+          `/api/threads/${thread.threadId}/verify`,
+          withSession(jsonPost({}), session),
+        );
+        expect(first.status).toBe(500);
+        const second = await local.fetch(
+          `/api/threads/${thread.threadId}/verify`,
+          withSession(jsonPost({}), session),
+        );
+        expect(second.status).toBe(200);
+      } finally {
+        kernel.verify = verify;
+      }
+    } finally {
+      await local.dispose();
+    }
+  });
+
+  test("cancelling an export releases the heavy lease", async () => {
+    const local = await hostedHarness({ heavy: new HeavyOperationGate(1, 1) });
+    try {
+      const { session } = await local.login("sub-heavy-cancel");
+      const thread = await local.json<ThreadStats>("/api/threads", jsonPost({}), session);
+      const exportRequest = (): Promise<Response> =>
+        local.fetch(
+          `/api/threads/${thread.threadId}/export`,
+          withSession(jsonPost({ passphrase: "heavy-passphrase" }), session),
+        );
+      const first = await exportRequest();
+      expect(first.status).toBe(200);
+      await first.body?.cancel("client disconnected");
+      const second = await exportRequest();
+      expect(second.status).toBe(200);
+      await second.body?.cancel("test cleanup");
+    } finally {
+      await local.dispose();
+    }
+  });
+
+  test("a failed raw import releases the heavy lease for the next upload", async () => {
+    const local = await hostedHarness({ heavy: new HeavyOperationGate(1, 1) });
+    try {
+      const { session } = await local.login("sub-heavy-import");
+      const importRequest = (): Promise<Response> =>
+        local.fetch("/api/import", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session}`,
+            "Content-Type": RAW_IMPORT_CONTENT_TYPE,
+            [RAW_IMPORT_PASSPHRASE_HEADER]: Buffer.from("heavy-passphrase").toString("base64url"),
+          },
+          body: Uint8Array.of(0x00, 0x01, 0x02),
+        });
+      const first = await importRequest();
+      expect(first.status).not.toBe(429);
+      await first.arrayBuffer();
+      const second = await importRequest();
+      expect(second.status).not.toBe(429);
+      await second.arrayBuffer();
+    } finally {
+      await local.dispose();
+    }
+  });
+
   test("turns are capped per account", async () => {
     const local = await hostedHarness();
     const { session } = await local.login("sub-busy");
@@ -295,6 +585,7 @@ describe("serving the app", () => {
     await writeFile(join(web, "index.html"), "<!doctype html><title>Pylos</title>");
     await writeFile(join(web, "assets", "app.js"), "export const ok = 1;\n");
     await writeFile(join(base, "secret.txt"), "not for the web");
+    await symlink(join(base, "secret.txt"), join(web, "assets", "escape.js"));
     site = await hostedHarness({ web });
   });
 
@@ -341,6 +632,27 @@ describe("serving the app", () => {
     expect(await sibling.text()).not.toContain("not for the web");
     expect((await site.fetch("/app/..%2f..%2fetc%2fpasswd")).status).toBe(404);
     expect((await site.fetch("/app/%2e%2e%2fsecret.txt")).status).toBe(404);
+  });
+
+  test("symlinked assets and index files are refused", async () => {
+    const asset = await site.fetch("/app/assets/escape.js");
+    expect(asset.status).toBe(404);
+    expect(await asset.text()).not.toContain("not for the web");
+
+    const linkedRoot = join(base, "linked-dist");
+    await mkdir(linkedRoot, { recursive: true });
+    await symlink(join(base, "secret.txt"), join(linkedRoot, "index.html"));
+    const linked = staticSite(linkedRoot);
+    const index = await linked.handle(new URL("http://127.0.0.1:7334/app/"), "GET");
+    expect(index?.status).toBe(404);
+    expect(await index?.text()).not.toContain("not for the web");
+  });
+
+  test("literal null Origin cannot reach hosted static assets", async () => {
+    const response = await site.fetch("/app/", { headers: { origin: "null" } });
+    expect(response.status).toBe(403);
+    expect(await response.text()).not.toContain("Pylos");
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
   });
 
   test("the API still answers under a static site", async () => {

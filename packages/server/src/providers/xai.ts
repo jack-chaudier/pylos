@@ -1,7 +1,8 @@
 import type { ChatMessage, ModelInfo } from "@pylos/protocol";
 import type { AuthService } from "../auth/xai.ts";
 import { XAI_API_BASE } from "../auth/xai.ts";
-import { isRecord, streamOpenAiChat } from "./openai-chat.ts";
+import { fetchProvider } from "./fetch.ts";
+import { isRecord, readProviderJson, streamOpenAiChat } from "./openai-chat.ts";
 import type { Provider, ProviderEvent, StreamOptions } from "./types.ts";
 
 /** Ships first, defaults to grok-4.6 (PLAN.md). Used when /v1/models is unreachable. */
@@ -51,12 +52,17 @@ export class XaiProvider implements Provider {
 
   private async remoteModels(): Promise<ModelInfo[]> {
     const token = await this.auth.token("xai");
-    const response = await fetch(`${XAI_API_BASE}/language-models`, {
-      headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
-    });
+    const response = await fetchProvider(
+      fetch,
+      `${XAI_API_BASE}/language-models`,
+      {
+        headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
+      },
+      { label: "xAI" },
+    );
     const source = response.ok ? response : await fetchModels(token);
     if (!source.ok) return [];
-    const value: unknown = await source.json();
+    const value = await readProviderJson(source);
     const rows = isRecord(value) && Array.isArray(value.models) ? value.models : listOf(value);
     const models: ModelInfo[] = [];
     for (const row of rows) {
@@ -78,9 +84,14 @@ export class XaiProvider implements Provider {
 }
 
 async function fetchModels(token: string | undefined): Promise<Response> {
-  return fetch(`${XAI_API_BASE}/models`, {
-    headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
-  });
+  return fetchProvider(
+    fetch,
+    `${XAI_API_BASE}/models`,
+    {
+      headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
+    },
+    { label: "xAI" },
+  );
 }
 
 function listOf(value: unknown): unknown[] {

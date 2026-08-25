@@ -40,18 +40,23 @@ export interface Sentence {
 
 /** Split into sentences, keeping exact offsets. Breaks on `.!?` and newlines. */
 export function splitSentences(text: string): Sentence[] {
-  const out: Sentence[] = [];
+  return [...iterSentences(text)];
+}
+
+/** Stream sentence boundaries so bounded kernel extraction never builds the archive's sentence list. */
+function* iterSentences(text: string): Generator<Sentence> {
   let start = 0;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i] as string;
     const isBreak = ch === "\n" || ((ch === "." || ch === "!" || ch === "?") && isBoundary(text, i));
     if (!isBreak) continue;
     const end = ch === "\n" ? i : i + 1;
-    pushSentence(out, text, start, end);
+    const sentence = makeSentence(text, start, end);
+    if (sentence !== null) yield sentence;
     start = i + 1;
   }
-  pushSentence(out, text, start, text.length);
-  return out;
+  const sentence = makeSentence(text, start, text.length);
+  if (sentence !== null) yield sentence;
 }
 
 function isBoundary(text: string, index: number): boolean {
@@ -59,13 +64,13 @@ function isBoundary(text: string, index: number): boolean {
   return next === undefined || next === " " || next === "\n" || next === '"' || next === "'";
 }
 
-function pushSentence(out: Sentence[], text: string, from: number, to: number): void {
+function makeSentence(text: string, from: number, to: number): Sentence | null {
   let start = from;
   let end = to;
   while (start < end && /\s/.test(text[start] as string)) start += 1;
   while (end > start && /\s/.test(text[end - 1] as string)) end -= 1;
-  if (end - start < 2) return;
-  out.push({ text: text.slice(start, end), start, end });
+  if (end - start < 2) return null;
+  return { text: text.slice(start, end), start, end };
 }
 
 const SLUG_STOP = new Set(["a", "an", "the", "to", "of", "that", "is", "are", "was", "were"]);
@@ -319,7 +324,70 @@ export function applyRules(content: string, role: Role): AtomDraft[] {
   return drafts;
 }
 
+/** Result of the bounded deterministic rule pass. */
+export interface BoundedRuleResult {
+  /** At most `limit` drafts; the caller may commit a stricter prefix. */
+  drafts: AtomDraft[];
+  /** True when another rule candidate exists beyond the retained prefix. */
+  overflow: boolean;
+}
+
+/**
+ * Apply rules without materializing all source sentences or drafts. The kernel
+ * asks for one extra candidate (`512 + 1`) as a sentinel; a true overflow is
+ * therefore a durable lower-bound receipt, never an inferred count.
+ */
+export function applyRulesBounded(content: string, role: Role, limit: number): BoundedRuleResult {
+  const boundedLimit = Math.max(1, Math.floor(limit));
+  const drafts: AtomDraft[] = [];
+  for (const sentence of iterSentences(content)) {
+    if (collectBounded(drafts, sentence.text, sentence, role, false, boundedLimit)) {
+      return { drafts, overflow: true };
+    }
+    // Rules and decisions are often stated after a lead-in clause:
+    // "One ground rule for this project: never send a production migration …".
+    const colon = sentence.text.indexOf(": ");
+    if (colon > 0 && colon < sentence.text.length - 4) {
+      if (collectBounded(drafts, sentence.text.slice(colon + 2), sentence, role, false, boundedLimit)) {
+        return { drafts, overflow: true };
+      }
+    }
+    const corrected = CORRECTION_PREFIX.exec(sentence.text);
+    if (corrected) {
+      const before = drafts.length;
+      if (collectBounded(drafts, corrected[1] as string, sentence, role, true, boundedLimit)) {
+        return { drafts, overflow: true };
+      }
+      if (drafts.length === before) {
+        const clause = (corrected[1] as string).trim().replace(/[.]$/, "");
+        drafts.push({
+          kind: "correction",
+          key: `correction.${slug(clause, 6)}`,
+          value: clause,
+          text: sentence.text,
+          span: [sentence.start, sentence.end],
+          rule: "correction.bare",
+          confidence: 0.8,
+        });
+        if (drafts.length >= boundedLimit) return { drafts, overflow: true };
+      }
+    }
+  }
+  return { drafts, overflow: false };
+}
+
 function collect(out: AtomDraft[], probe: string, sentence: Sentence, role: Role, correction: boolean): void {
+  collectBounded(out, probe, sentence, role, correction, Number.MAX_SAFE_INTEGER);
+}
+
+function collectBounded(
+  out: AtomDraft[],
+  probe: string,
+  sentence: Sentence,
+  role: Role,
+  correction: boolean,
+  limit: number,
+): boolean {
   for (const spec of RULES) {
     if (!spec.roles.includes(role)) continue;
     const match = spec.re.exec(probe);
@@ -336,5 +404,7 @@ function collect(out: AtomDraft[], probe: string, sentence: Sentence, role: Role
       rule: correction ? `${spec.name}+correction` : spec.name,
       confidence: correction ? Math.min(1, built.confidence) : built.confidence,
     });
+    if (out.length >= limit) return true;
   }
+  return false;
 }

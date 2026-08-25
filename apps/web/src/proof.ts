@@ -7,7 +7,7 @@
  * claim: what can still be brought back, exactly, at each checkpoint.
  *
  * Everything is read from `/bench/series.json`, which `scripts/series.ts`
- * derives from `bench/results/million-5.json` at build time. Nothing here holds
+ * derives from `bench/results/million-6.json` at build time. Nothing here holds
  * a number of its own, and every figure in the receipt row links to the
  * artifact it came from.
  *
@@ -16,7 +16,7 @@
  * dropped.
  */
 
-const ARTIFACT = "https://github.com/jack-chaudier/pylos/blob/main/bench/results/million-5.md";
+const ARTIFACT = "https://github.com/jack-chaudier/pylos/blob/main/bench/results/million-6.md";
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 interface Point {
@@ -156,6 +156,7 @@ function residencyPanel(s: Series): HTMLElement {
   const p50Low = Math.min(...s.points.map((p) => p.viewP50));
   const p50High = Math.max(...s.points.map((p) => p.viewP50));
   const widest = Math.max(...s.points.map((p) => p.viewMax));
+  const end = s.points[s.points.length - 1] as Point;
   return panel(
     svg,
     null,
@@ -163,7 +164,9 @@ function residencyPanel(s: Series): HTMLElement {
       `${mib(maxBytes)} of exact, hash-chained text; the view the model reads stays between ` +
       `${nf.format(p50Low)} and ${nf.format(p50High)} tokens at the median, and its largest single ` +
       `packet across the whole run was ${nf.format(widest)} — under the hard cap of ${nf.format(s.budget)}. ` +
-      "A rolling summary is flat too: flatness is the table stakes, not the claim. The claim is below.",
+      "A rolling summary is flat too, so the claim is the panel below: what can still be brought " +
+      `back exactly. Pylos ${pct(end.pylos)} at every checkpoint; a rolling summary falls to ` +
+      `${pct(end.rolling)}; BM25 to ${pct(end.bm25)}.`,
   );
 }
 
@@ -177,7 +180,7 @@ function survivalPanel(s: Series): HTMLElement {
   const svg = root(
     W,
     H,
-    "What can still be brought back exactly at each checkpoint: Pylos flat at " +
+    "What can still be brought back exactly for the bench's planted probes at each checkpoint: Pylos flat at " +
       `${pct(end.pylos)}, the rolling summary falling to ${pct(end.rolling)}, BM25 to ${pct(end.bm25)}.`,
   );
 
@@ -239,7 +242,7 @@ function survivalPanel(s: Series): HTMLElement {
     "What can still be brought back, exactly, at each checkpoint — across every planted family: " +
       "revised facts, exact quotes, numbers with their units, turns addressed by number, name-free " +
       "memories, the authority law, and a fault receipted rather than answered. Pylos holds every " +
-      "family at every checkpoint; the two baselines are measured on the same archive and the same probes.",
+      "planted family at every checkpoint; the two baselines are measured on the same archive and the same probes.",
   );
 }
 

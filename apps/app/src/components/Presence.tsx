@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { groupedNumber } from "../format.ts";
 import {
+  ARRIVAL_MS,
+  arrivalAlpha,
   breathScale,
   dotAlpha,
   dotAngle,
@@ -22,6 +24,12 @@ export interface Pulse {
   at: number;
 }
 
+/** A turn that has just been written: its slot lights and spreads to the rim. */
+export interface Arrival {
+  seq: number;
+  at: number;
+}
+
 export interface PresenceProps {
   /** Turns in the archive; the ring's angle and density are both this. */
   turns: number;
@@ -29,6 +37,8 @@ export interface PresenceProps {
   /** How full the packet is, 0–1, while it is being built. */
   fill: number;
   pulses: Pulse[];
+  /** Turns that have just entered the archive; the newest slot lights as each lands. */
+  arrivals: Arrival[];
   /** KERNEL A11.1: turns whose fault nothing answered; one ash dot at the rim each. */
   faults: number[];
   /** When a handoff was appended; the ring flickers once. */
@@ -81,7 +91,7 @@ export function Presence(props: PresenceProps): React.JSX.Element {
 
     /** Draws one frame and says whether anything is still moving. */
     const draw = (now: number): { animating: boolean; idleOnly: boolean } => {
-      const { turns, state, pulses, faults, flickerAt } = live.current;
+      const { turns, state, pulses, arrivals, faults, flickerAt } = live.current;
       const still = motion.matches;
       const target = state === "building" ? Math.min(1, Math.max(0, live.current.fill)) : 0;
       fill = still ? target : fill + (target - fill) * 0.18;
@@ -127,6 +137,25 @@ export function Presence(props: PresenceProps): React.JSX.Element {
       }
 
       let lit = false;
+      // A turn that has just been written lights its own slot and spreads out.
+      for (const arrival of arrivals) {
+        const elapsed = now - arrival.at;
+        if (elapsed < 0 || elapsed >= ARRIVAL_MS) continue;
+        lit = true;
+        const angle = seqAngle(arrival.seq, Math.max(turns, arrival.seq));
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        for (let ring = 0; ring < RINGS.length; ring += 1) {
+          const alpha = arrivalAlpha(elapsed, ring, still);
+          if (alpha <= 0) continue;
+          const radius = outer * (RINGS[ring] ?? 0) * scale;
+          context.globalAlpha = alpha;
+          context.beginPath();
+          context.arc(cx + radius * cos, cy + radius * sin, (1.7 + 1.5 * alpha) * plate, 0, Math.PI * 2);
+          context.fill();
+        }
+      }
+
       for (const pulse of pulses) {
         const alpha = pulseAlpha(now - pulse.at, still);
         if (alpha <= 0) continue;

@@ -126,18 +126,28 @@ function render(d: TrapArtifact): DocumentFragment {
 
   const hashes = el("p", "mono story__hashes");
   hashes.append(
-    el("span", "", `seed ${d.seed}`),
-    el("span", "", `archive head ${short(d.hashes.archiveHead)}`),
-    el("span", "", `packet ${short(d.hashes.packet)}`),
+    receipt(
+      `run seed · ${d.seed}`,
+      "The seed this run used. The same seed replays the same thread, turn for turn.",
+    ),
+    receipt(
+      `hash of the last turn · ${short(d.hashes.archiveHead)}`,
+      "Every turn is hashed into the one after it. This is the end of that chain, so changing any " +
+        "earlier turn would change this number.",
+    ),
+    receipt(
+      `hash of what the model read · ${short(d.hashes.packet)}`,
+      "The exact text handed to the model for this question, hashed — so the answer above can be " +
+        "checked against what was actually asked.",
+    ),
+    link(LIVE_RESULT, "check them in the artifact"),
   );
   frag.append(hashes);
 
   const caption = el("p", "story__caption");
   caption.append(
     document.createTextNode(
-      `A live sample at turn ${nf.format(d.turns)} — one model, one seed, ` +
-        `${nf.format(d.pylos.probes?.n ?? 0)} probes per arm, deterministic string scoring. ` +
-        "Not a benchmark: the deterministic proof is below. ",
+      `A live sample at turn ${nf.format(d.turns)} — the deterministic proof is below. `,
     ),
     link(LIVE_RESULT, "bench/results/million-live-live-1.md"),
   );
@@ -218,6 +228,13 @@ function el(tag: string, cls = "", text = ""): HTMLElement {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
   if (text) node.textContent = text;
+  return node;
+}
+
+/** A figure a stranger can hover: what it is in words, then the figure itself. */
+function receipt(text: string, title: string): HTMLElement {
+  const node = el("span", "", text);
+  node.title = title;
   return node;
 }
 

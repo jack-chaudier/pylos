@@ -1,6 +1,7 @@
 import type {
   AuthStatus,
-  Capsule,
+  CapsuleView,
+  DemoSummary,
   Episode,
   Me,
   ModelInfo,
@@ -9,7 +10,7 @@ import type {
   Seq,
   ThreadStats,
 } from "@pylos/protocol";
-import { DEFAULT_BUDGET } from "@pylos/protocol";
+import { DEFAULT_BUDGET, MAX_THREAD_LIST_ROWS } from "@pylos/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ApiError, api, onSessionExpired, resolveBase, session, setSession, streamTurn } from "./api.ts";
 import { Account } from "./components/Account.tsx";
@@ -18,21 +19,52 @@ import { Composer } from "./components/Composer.tsx";
 import { Connect } from "./components/Connect.tsx";
 import { EvidenceFigures } from "./components/Evidence.tsx";
 import { Exchange } from "./components/Exchange.tsx";
+import {
+  CompactionBanner,
+  FragmentBanner,
+  isReadOnlyFragment,
+  isReadOnlySource,
+  SourceReadinessBanner,
+} from "./components/FragmentBanner.tsx";
 import { Gate } from "./components/Gate.tsx";
-import { Presence, type Pulse } from "./components/Presence.tsx";
+import { type Arrival, Presence, type Pulse } from "./components/Presence.tsx";
+import { isProofDemoThread, ProofDemoPrompt, ProofDemoReentry, ProofTour } from "./components/ProofTour.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 import { ConfirmSheet, PassphraseSheet, ThreadMenu } from "./components/ThreadMenu.tsx";
 import type { StreamingTurn } from "./components/Transcript.tsx";
 import { Xray } from "./components/Xray.tsx";
-import { PULSE_MS } from "./ring.ts";
-import { inTauri, isMac, pickBundle, saveBytes, showWindow } from "./tauri.ts";
+import { ARRIVAL_MS, PULSE_MS } from "./ring.ts";
+import {
+  type BundleTransfer,
+  chooseBundleOpenPath,
+  chooseBundleSavePath,
+  inTauri,
+  isMac,
+  pickBundle,
+  saveBytes,
+  showWindow,
+} from "./tauri.ts";
+import { selectedBudgetForThread, selectedModelForThread } from "./thread-selection.ts";
 
 const PAGE = 60;
 const MAX_LOADED = 400;
+const MAX_THREAD_PAGE_HISTORY = 64;
+const MAX_THREAD_MENU_ROWS = MAX_THREAD_LIST_ROWS + 1;
 const THREAD_KEY = "pylos.threadId";
+
+/** How long the sent words take to shrink into the ring. */
+const ENTERING_MS = 700;
+
+const reducedMotion = (): boolean =>
+  globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
 /** The evidence counts what came back, not what was tried: a fault recovers nothing. */
 const resolvedPages = (pages: PageRecord[]): number => pages.filter((page) => page.resolved).length;
+
+function boundedThreadWindow(page: ThreadStats[], pinned: ThreadStats | undefined): ThreadStats[] {
+  if (pinned === undefined || page.some((thread) => thread.threadId === pinned.threadId)) return page;
+  return [pinned, ...page].slice(0, MAX_THREAD_MENU_ROWS);
+}
 
 interface Window_ {
   episodes: Episode[];
@@ -42,8 +74,8 @@ interface Window_ {
 
 type Sheet =
   | { kind: "connect"; provider: ProviderId | undefined; select: string | undefined }
-  | { kind: "export" }
-  | { kind: "import"; name: string; bytes: Uint8Array }
+  | { kind: "export"; partial?: boolean }
+  | { kind: "import"; name: string; path?: string; bytes?: Uint8Array }
   | { kind: "forget"; episode: Episode }
   /** KERNEL A10.6: replies that quoted the removed text, named but never removed on a guess. */
   | { kind: "echoes"; seqs: Seq[]; reason: string }
@@ -57,12 +89,17 @@ export function App(): React.JSX.Element {
   const [signedIn, setSignedIn] = useState(false);
   const [stats, setStats] = useState<ThreadStats | undefined>(undefined);
   const [threads, setThreads] = useState<ThreadStats[]>([]);
+  const [threadNextCursor, setThreadNextCursor] = useState<string | undefined>(undefined);
+  const [threadHasMore, setThreadHasMore] = useState(false);
+  const [threadPageAfter, setThreadPageAfter] = useState<string | undefined>(undefined);
+  const [threadPageHistory, setThreadPageHistory] = useState<Array<string | undefined>>([]);
+  const [loadingThreads, setLoadingThreads] = useState(false);
   const [window_, setWindow] = useState<Window_>({
     episodes: [],
     hasOlder: false,
     hasNewer: false,
   });
-  const [capsules, setCapsules] = useState<Capsule[]>([]);
+  const [capsules, setCapsules] = useState<CapsuleView[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [auth, setAuth] = useState<AuthStatus[]>([]);
   const [grokCli, setGrokCli] = useState(false);
@@ -74,6 +111,10 @@ export function App(): React.JSX.Element {
   const [building, setBuilding] = useState<number | undefined>(undefined);
   const [recovered, setRecovered] = useState(0);
   const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [arrivals, setArrivals] = useState<Arrival[]>([]);
+  /** The newest turn whose arrival has landed on the ring; the count follows it. */
+  const [landedSeq, setLandedSeq] = useState(0);
+  const [entering, setEntering] = useState<{ text: string; at: number } | undefined>(undefined);
   const [faults, setFaults] = useState<number[]>([]);
   const [flickerAt, setFlickerAt] = useState<number | undefined>(undefined);
   const [lastTurnSeq, setLastTurnSeq] = useState<number | undefined>(undefined);
@@ -89,10 +130,22 @@ export function App(): React.JSX.Element {
   const [jumpTo, setJumpTo] = useState<number | undefined>(undefined);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [pendingText, setPendingText] = useState<string | undefined>(undefined);
+  const [proofDemo, setProofDemo] = useState<DemoSummary | undefined>(undefined);
+  const [proofDemoBusy, setProofDemoBusy] = useState(false);
+  const [proofDemoError, setProofDemoError] = useState<string | undefined>(undefined);
 
   const turn = useRef<{ abort: () => void } | undefined>(undefined);
+  const maintenanceThread = useRef<string | undefined>(undefined);
+  const bundleTransfer = useRef<Pick<BundleTransfer<unknown>, "abort"> | undefined>(undefined);
   const threadId = stats?.threadId;
   const hosted = me?.hosted === true;
+  const fragmentReadOnly = isReadOnlyFragment(stats);
+  const sourceReadiness = stats?.sourceReadiness;
+  const sourceReadOnly = isReadOnlySource(stats);
+  const mutationReadOnly = fragmentReadOnly || sourceReadOnly;
+  const compactionPending = stats?.compaction?.pending === true || stats?.compactionPending === true;
+  const writeBlocked = mutationReadOnly || compactionPending;
+  const proofDemoAvailable = !writeBlocked && isProofDemoThread(stats);
 
   const say = useCallback((text: string, tone?: "bad"): void => {
     setToast(tone === undefined ? { text } : { text, tone });
@@ -100,6 +153,18 @@ export function App(): React.JSX.Element {
   }, []);
 
   const currentTurn = useRef<number | undefined>(undefined);
+  /** The answer's own arrival is lit once, on its first delta. */
+  const answerArrived = useRef(false);
+
+  /**
+   * A turn has been written: its slot on the ring lights and spreads outward,
+   * and the archive figure counts it at the moment the light settles.
+   */
+  const arrive = useCallback((seq: number): void => {
+    const at = performance.now();
+    setArrivals((current) => [...current.filter((item) => at - item.at < ARRIVAL_MS), { seq, at }]);
+    setTimeout(() => setLandedSeq((current) => Math.max(current, seq)), reducedMotion() ? 0 : ARRIVAL_MS);
+  }, []);
 
   /** Every span that came back lights its own angle on the ring. */
   const light = useCallback((pages: PageRecord[]): void => {
@@ -134,17 +199,20 @@ export function App(): React.JSX.Element {
       hasNewer: false,
     });
     setAttachments([]);
+    setProofDemo(undefined);
+    setProofDemoError(undefined);
     setViewTokens(thread.lastPacket?.tokens);
+    setBudget(selectedBudgetForThread(thread));
     setViewRounds(undefined);
     setRecovered(thread.lastPacket?.pages ?? 0);
     setPulses([]);
+    setArrivals([]);
+    setLandedSeq(0);
+    setEntering(undefined);
     setFaults([]);
     const lastUser = [...episodes].reverse().find((episode) => episode.role === "user");
     setLastTurnSeq(lastUser?.seq);
-    if (thread.models.length > 0) {
-      const latest = thread.models.at(-1);
-      if (latest !== undefined) setModel(latest);
-    }
+    setModel(selectedModelForThread(thread));
     setView({ firstSeq: episodes[0]?.seq ?? 1, lastSeq: episodes.at(-1)?.seq ?? 1 });
   }, []);
 
@@ -159,11 +227,18 @@ export function App(): React.JSX.Element {
   }, []);
 
   const openWorkspace = useCallback(async (): Promise<void> => {
-    const list = await api.listThreads();
-    setThreads(list);
+    const page = await api.listThreadsPage();
     const remembered = localStorage.getItem(THREAD_KEY);
-    const target =
-      list.find((thread) => thread.threadId === remembered) ?? list[0] ?? (await api.createThread());
+    let target = page.threads.find((thread) => thread.threadId === remembered);
+    if (target === undefined && remembered !== null) {
+      target = await api.thread(remembered).catch(() => undefined);
+    }
+    target ??= page.threads[0] ?? (await api.createThread());
+    setThreads(boundedThreadWindow(page.threads, target));
+    setThreadNextCursor(page.nextCursor);
+    setThreadHasMore(page.hasMore);
+    setThreadPageAfter(undefined);
+    setThreadPageHistory([]);
     await openThread(target.threadId);
     setSignedIn(true);
     void refreshAuth();
@@ -180,6 +255,11 @@ export function App(): React.JSX.Element {
       onSessionExpired(() => {
         setSignedIn(false);
         setStats(undefined);
+        setThreads([]);
+        setThreadNextCursor(undefined);
+        setThreadHasMore(false);
+        setThreadPageAfter(undefined);
+        setThreadPageHistory([]);
         setWindow({ episodes: [], hasOlder: false, hasNewer: false });
       });
 
@@ -223,15 +303,96 @@ export function App(): React.JSX.Element {
 
   const refreshThread = useCallback(async (): Promise<void> => {
     if (threadId === undefined) return;
-    const [thread, capsuleList, list] = await Promise.all([
+    const [thread, capsuleList, page] = await Promise.all([
       api.thread(threadId),
       api.capsules(threadId).catch(() => capsules),
-      api.listThreads().catch(() => threads),
+      api
+        .listThreadsPage()
+        .catch(() => ({ threads, nextCursor: threadNextCursor, hasMore: threadHasMore, byteLength: 0 })),
     ]);
     setStats(thread);
     setCapsules(capsuleList);
-    setThreads(list);
-  }, [threadId, capsules, threads]);
+    setThreads(boundedThreadWindow(page.threads, thread));
+    setThreadNextCursor(page.nextCursor);
+    setThreadHasMore(page.hasMore);
+    setThreadPageAfter(undefined);
+    setThreadPageHistory([]);
+  }, [threadId, capsules, threads, threadNextCursor, threadHasMore]);
+
+  // Imported zero-capsule backlogs can be very large. Drive one fixed-size
+  // maintenance request at a time and yield to the browser between passes;
+  // no user click or turn retry is needed, and no provider lane is touched.
+  useEffect(() => {
+    if (threadId === undefined || !compactionPending || mutationReadOnly) {
+      if (threadId === undefined || maintenanceThread.current === threadId) {
+        maintenanceThread.current = undefined;
+      }
+      return;
+    }
+    if (maintenanceThread.current === threadId) return;
+    maintenanceThread.current = threadId;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const advance = async (): Promise<void> => {
+      try {
+        const next = await api.maintenance(threadId);
+        if (cancelled) return;
+        setStats(next);
+        const pending = next.compaction?.pending === true || next.compactionPending === true;
+        if (pending) {
+          timer = setTimeout(() => void advance(), 16);
+        } else {
+          maintenanceThread.current = undefined;
+        }
+      } catch (error) {
+        if (!cancelled) {
+          say(
+            `Archive index rebuilding paused: ${error instanceof Error ? error.message : String(error)}`,
+            "bad",
+          );
+        }
+        maintenanceThread.current = undefined;
+      }
+    };
+    void advance();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      if (maintenanceThread.current === threadId) maintenanceThread.current = undefined;
+    };
+  }, [threadId, compactionPending, mutationReadOnly, say]);
+
+  const loadOlderThreads = useCallback((): void => {
+    if (loadingThreads || !threadHasMore || threadNextCursor === undefined) return;
+    const after = threadNextCursor;
+    setLoadingThreads(true);
+    void api
+      .listThreadsPage({ after })
+      .then((page) => {
+        setThreads(boundedThreadWindow(page.threads, stats));
+        setThreadNextCursor(page.nextCursor);
+        setThreadHasMore(page.hasMore);
+        setThreadPageHistory((current) => [...current, threadPageAfter].slice(-MAX_THREAD_PAGE_HISTORY));
+        setThreadPageAfter(after);
+      })
+      .finally(() => setLoadingThreads(false));
+  }, [loadingThreads, threadHasMore, threadNextCursor, stats, threadPageAfter]);
+
+  const loadNewerThreads = useCallback((): void => {
+    if (loadingThreads || threadPageHistory.length === 0) return;
+    const previousAfter = threadPageHistory.at(-1);
+    setLoadingThreads(true);
+    void api
+      .listThreadsPage(previousAfter === undefined ? {} : { after: previousAfter })
+      .then((page) => {
+        setThreads(boundedThreadWindow(page.threads, stats));
+        setThreadNextCursor(page.nextCursor);
+        setThreadHasMore(page.hasMore);
+        setThreadPageHistory((current) => current.slice(0, -1));
+        setThreadPageAfter(previousAfter);
+      })
+      .finally(() => setLoadingThreads(false));
+  }, [loadingThreads, threadPageHistory, stats]);
 
   // ---------- paging ----------
 
@@ -316,23 +477,29 @@ export function App(): React.JSX.Element {
 
   const send = useCallback(
     (text: string): void => {
-      if (threadId === undefined || streaming !== undefined) return;
+      if (threadId === undefined || streaming !== undefined || writeBlocked) return;
       if (!providerConfigured(model)) {
         setPendingText(text);
         setSheet({ kind: "connect", provider: providerOf(model), select: undefined });
         return;
       }
+      setProofDemo(undefined);
       setStreaming({ text: "", model, pages: [] });
       setBuilding(0.08);
       setRecovered(0);
       setViewRounds(undefined);
       setFaults([]);
+      // What you just said leaves the composer and goes into the ring.
+      answerArrived.current = false;
+      setEntering({ text, at: performance.now() });
+      setTimeout(() => setEntering(undefined), ENTERING_MS);
 
       const handle = streamTurn(threadId, { text, model, budget }, (event) => {
         if (event.type === "episode") {
           if (event.episode.role === "user") {
             setLastTurnSeq(event.episode.seq);
             currentTurn.current = event.episode.seq;
+            arrive(event.episode.seq);
           }
           if (event.episode.role === "handoff") setFlickerAt(performance.now());
           setWindow((current) =>
@@ -346,9 +513,16 @@ export function App(): React.JSX.Element {
           setBuilding(Math.min(1, event.tokens / Math.max(1, event.budget)));
           setRecovered(resolvedPages(event.pages));
           light(event.pages);
-          if (event.pages.length > 0) {
-            setStreaming((current) => (current === undefined ? current : { ...current, pages: event.pages }));
-          }
+          setStreaming((current) =>
+            current === undefined
+              ? current
+              : {
+                  ...current,
+                  ...(event.pages.length > 0 ? { pages: event.pages } : {}),
+                  ...(event.coverage === undefined ? {} : { coverage: event.coverage }),
+                  ...(event.reachability === undefined ? {} : { reachability: event.reachability }),
+                },
+          );
         } else if (event.type === "page") {
           const page: PageRecord = event.page;
           setRecovered((count) => count + (page.resolved ? 1 : 0));
@@ -357,10 +531,17 @@ export function App(): React.JSX.Element {
             current === undefined ? current : { ...current, pages: [...current.pages, page] },
           );
         } else if (event.type === "delta") {
-          setBuilding(undefined);
-          setStreaming((current) =>
-            current === undefined ? current : { ...current, text: current.text + event.text },
-          );
+          if (!answerArrived.current) {
+            answerArrived.current = true;
+            arrive((currentTurn.current ?? stats?.turns ?? 0) + 1);
+          }
+          // The gate is the only release point. A provider or adapter that
+          // leaks an early delta must not put provisional prose in the view.
+          setStreaming((current) => {
+            if (current === undefined || current.gate === undefined) return current;
+            return { ...current, text: current.text + event.text };
+          });
+          setBuilding((current) => (current === undefined ? current : undefined));
         } else if (event.type === "check") {
           // The draft named lost values: everything streamed so far is void,
           // and the deltas after this one are the answer that was checked.
@@ -375,6 +556,12 @@ export function App(): React.JSX.Element {
                   check: { names: event.names },
                   pages: [...current.pages, ...event.pages],
                 },
+          );
+        } else if (event.type === "gate") {
+          // Clear any draft that may have arrived before the gate. Only deltas
+          // after this receipt are committed to the live answer surface.
+          setStreaming((current) =>
+            current === undefined ? current : { ...current, gate: event.receipt, text: "" },
           );
         } else if (event.type === "done") {
           const finished = event.episode;
@@ -403,8 +590,54 @@ export function App(): React.JSX.Element {
         turn.current = undefined;
       });
     },
-    [threadId, streaming, model, budget, providerConfigured, providerOf, refreshThread, say, light],
+    [
+      threadId,
+      streaming,
+      writeBlocked,
+      model,
+      budget,
+      stats?.turns,
+      providerConfigured,
+      providerOf,
+      refreshThread,
+      say,
+      light,
+      arrive,
+    ],
   );
+
+  const openProofDemo = useCallback((): void => {
+    if (
+      threadId === undefined ||
+      writeBlocked ||
+      proofDemoBusy ||
+      (stats?.turns !== 0 && !proofDemoAvailable)
+    )
+      return;
+    setProofDemoBusy(true);
+    setProofDemoError(undefined);
+    const summary = stats?.turns === 0 ? api.demo(threadId) : api.demoSummary(threadId);
+    void summary
+      .then(async (summary) => {
+        await openThread(summary.thread.threadId);
+        // `GET /threads/:id` is intentionally cheap and does not run full
+        // verification. The demo response has just verified the entire proof
+        // chain, so keep that witnessed summary instead of replacing it with
+        // the cheaper unverified refresh performed by `openThread`.
+        setStats(summary.thread);
+        setProofDemo(summary);
+        const page = await api.listThreadsPage();
+        setThreads(boundedThreadWindow(page.threads, summary.thread));
+        setThreadNextCursor(page.nextCursor);
+        setThreadHasMore(page.hasMore);
+        setThreadPageAfter(undefined);
+        setThreadPageHistory([]);
+      })
+      .catch((error: unknown) => {
+        setProofDemoError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => setProofDemoBusy(false));
+  }, [threadId, stats?.turns, writeBlocked, proofDemoBusy, proofDemoAvailable, openThread]);
 
   const stop = useCallback((): void => {
     turn.current?.abort();
@@ -419,17 +652,17 @@ export function App(): React.JSX.Element {
   /** The handoff line is the server's to write, once the next turn actually runs. */
   const pickModel = useCallback(
     (next: string): void => {
-      if (next === model) return;
+      if (writeBlocked || next === model) return;
       setModel(next);
       if (threadId === undefined) return;
       void api.settings(threadId, { model: next }).catch(() => undefined);
     },
-    [model, threadId],
+    [writeBlocked, model, threadId],
   );
 
   const attach = useCallback(
     (files: File[]): void => {
-      if (threadId === undefined) return;
+      if (writeBlocked || threadId === undefined) return;
       void api
         .attach(threadId, files)
         .then((episodes) => {
@@ -443,42 +676,90 @@ export function App(): React.JSX.Element {
         })
         .catch((error: Error) => say(error.message, "bad"));
     },
-    [threadId, refreshThread, say],
+    [writeBlocked, threadId, refreshThread, say],
   );
 
   const doExport = useCallback(
-    (passphrase: string): void => {
-      if (threadId === undefined) return;
+    (passphrase: string, partial = false): void => {
+      const fragment = stats?.fragment;
+      if (threadId === undefined || (fragmentReadOnly && !partial)) return;
+      if (partial && fragment === undefined) return;
       setSheetBusy(true);
       setSheetError(undefined);
-      void api
-        .exportBundle(threadId, passphrase)
-        .then(async (bytes) => {
-          const name = `pylos-${threadId.slice(0, 8)}-${stats?.turns ?? 0}.pylos`;
+      void (async () => {
+        const range: [Seq, Seq] | undefined =
+          partial && fragment !== undefined ? [fragment.fromSeq, fragment.toSeq] : undefined;
+        const name = partial
+          ? `pylos-fragment-${threadId.slice(0, 8)}-${fragment?.fromSeq ?? 0}-${fragment?.toSeq ?? 0}.pylos`
+          : `pylos-${threadId.slice(0, 8)}-${stats?.turns ?? 0}.pylos`;
+        let transfer: Pick<BundleTransfer<unknown>, "abort"> | undefined;
+        try {
+          if (inTauri && !partial) {
+            const path = await chooseBundleSavePath(name);
+            if (path === undefined) return;
+            const native = api.exportBundleToFile(threadId, passphrase, path);
+            transfer = native;
+            bundleTransfer.current = native;
+            await native.done;
+            setSheet(undefined);
+            say(`Exported ${name}`);
+            return;
+          }
+          const bytes = await api.exportBundle(threadId, passphrase, range);
           const path = await saveBytes(name, bytes);
           setSheet(undefined);
           if (path !== undefined) say(`Exported ${name}`);
-        })
-        .catch((error: Error) => setSheetError(error.message))
-        .finally(() => setSheetBusy(false));
+        } catch (error) {
+          setSheetError(error instanceof Error ? error.message : String(error));
+        } finally {
+          if (bundleTransfer.current === transfer) bundleTransfer.current = undefined;
+          setSheetBusy(false);
+        }
+      })();
     },
-    [threadId, stats?.turns, say],
+    [threadId, stats?.turns, stats?.fragment, fragmentReadOnly, say],
   );
 
   const doImport = useCallback(
-    (passphrase: string, name: string, bytes: Uint8Array): void => {
+    (passphrase: string, name: string, selection: { path?: string; bytes?: Uint8Array }): void => {
       setSheetBusy(true);
       setSheetError(undefined);
-      void api
-        .importBundle(bytes, name, passphrase)
-        .then(async (imported) => {
+      void (async () => {
+        let transfer: Pick<BundleTransfer<unknown>, "abort"> | undefined;
+        try {
+          let imported: ThreadStats;
+          if (inTauri && selection.path !== undefined) {
+            const native = api.importBundleFromFile(selection.path, name, passphrase);
+            transfer = native;
+            bundleTransfer.current = native;
+            imported = await native.done;
+          } else if (selection.bytes !== undefined) {
+            imported = await api.importBundle(selection.bytes, name, passphrase);
+          } else {
+            throw new Error("No bundle file was selected.");
+          }
           setSheet(undefined);
           await openThread(imported.threadId);
-          setThreads(await api.listThreads());
-          say(`Imported ${imported.turns} turns · chain verified`);
-        })
-        .catch((error: Error) => setSheetError(error.message))
-        .finally(() => setSheetBusy(false));
+          const page = await api.listThreadsPage();
+          setThreads(boundedThreadWindow(page.threads, imported));
+          setThreadNextCursor(page.nextCursor);
+          setThreadHasMore(page.hasMore);
+          setThreadPageAfter(undefined);
+          setThreadPageHistory([]);
+          say(
+            imported.fragment === undefined
+              ? imported.sourceReadiness === undefined
+                ? `Imported ${imported.turns} turns · chain verified`
+                : `Imported ${imported.turns} turns · read-only quarantine at #${imported.sourceReadiness.seq}`
+              : `Imported ${imported.turns} turns · read-only fragment #${imported.fragment.fromSeq}-#${imported.fragment.toSeq}`,
+          );
+        } catch (error) {
+          setSheetError(error instanceof Error ? error.message : String(error));
+        } finally {
+          if (bundleTransfer.current === transfer) bundleTransfer.current = undefined;
+          setSheetBusy(false);
+        }
+      })();
     },
     [openThread, say],
   );
@@ -490,7 +771,7 @@ export function App(): React.JSX.Element {
    */
   const doForget = useCallback(
     (seqs: Seq[], reason: string, offerEchoes: boolean): void => {
-      if (threadId === undefined) return;
+      if (fragmentReadOnly || threadId === undefined) return;
       void api
         .forget(threadId, seqs, reason)
         .then(async (result) => {
@@ -507,11 +788,15 @@ export function App(): React.JSX.Element {
             return;
           }
           setSheet(undefined);
-          say("Forgotten, and recorded as forgotten.");
+          say(
+            result.cleanupPending
+              ? "Forgotten and recorded; attachment cleanup is pending the next vault recovery."
+              : "Forgotten, and recorded as forgotten.",
+          );
         })
         .catch((error: Error) => say(error.message, "bad"));
     },
-    [threadId, refreshThread, say],
+    [fragmentReadOnly, threadId, refreshThread, say],
   );
 
   const signOut = useCallback((): void => {
@@ -572,6 +857,10 @@ export function App(): React.JSX.Element {
     exchange.answer === undefined;
 
   const empty = window_.episodes.length === 0 && streaming === undefined;
+  /** Local first run: models are listed but none of their providers holds credentials yet. */
+  const noProviderConnected = !hosted && models.length > 0 && !models.some((entry) => entry.available);
+  /** A turn is counted when its light settles on the ring, not when it is asked for. */
+  const shownTurns = Math.max(stats?.turns ?? 0, landedSeq);
   const presenceState = streaming === undefined ? "idle" : building === undefined ? "streaming" : "building";
 
   // KERNEL A10.3: a turn may cost more than one request. The receipt says how
@@ -655,6 +944,9 @@ export function App(): React.JSX.Element {
   return (
     <div className="app">
       <header className={`titlebar${isMac && inTauri ? " macos" : ""}`}>
+        <span className="mark" aria-hidden="true">
+          <img src={`${import.meta.env.BASE_URL}art/empyrean.webp`} alt="" />
+        </span>
         <span className="menu-anchor title-slot">
           <button type="button" className="thread-title" onClick={() => setTitleMenu((value) => !value)}>
             {stats?.title ?? "Pylos"}
@@ -668,9 +960,19 @@ export function App(): React.JSX.Element {
                 setTitleMenu(false);
                 void api.createThread().then(async (created) => {
                   await openThread(created.threadId);
-                  setThreads(await api.listThreads());
+                  const page = await api.listThreadsPage();
+                  setThreads(boundedThreadWindow(page.threads, created));
+                  setThreadNextCursor(page.nextCursor);
+                  setThreadHasMore(page.hasMore);
+                  setThreadPageAfter(undefined);
+                  setThreadPageHistory([]);
                 });
               }}
+              hasMore={threadHasMore}
+              loadingMore={loadingThreads}
+              hasNewer={threadPageHistory.length > 0}
+              onLoadOlder={loadOlderThreads}
+              onLoadNewer={loadNewerThreads}
               onOpen={(id) => {
                 setTitleMenu(false);
                 void openThread(id);
@@ -680,13 +982,34 @@ export function App(): React.JSX.Element {
                 setSheetError(undefined);
                 setSheet({ kind: "export" });
               }}
+              onExportPartial={() => {
+                setTitleMenu(false);
+                setSheetError(undefined);
+                setSheet({ kind: "export", partial: true });
+              }}
               onImport={() => {
                 setTitleMenu(false);
-                void pickBundle().then((picked) => {
-                  if (picked === undefined) return;
-                  setSheetError(undefined);
-                  setSheet({ kind: "import", name: picked.name, bytes: picked.bytes });
-                });
+                void (async () => {
+                  try {
+                    if (inTauri) {
+                      const path = await chooseBundleOpenPath();
+                      if (path === undefined) return;
+                      setSheetError(undefined);
+                      setSheet({
+                        kind: "import",
+                        name: path.split(/[\\/]/).pop() ?? "thread.pylos",
+                        path,
+                      });
+                      return;
+                    }
+                    const picked = await pickBundle();
+                    if (picked === undefined) return;
+                    setSheetError(undefined);
+                    setSheet({ kind: "import", name: picked.name, bytes: picked.bytes });
+                  } catch (error) {
+                    say(error instanceof Error ? error.message : String(error), "bad");
+                  }
+                })();
               }}
             />
           ) : null}
@@ -695,20 +1018,27 @@ export function App(): React.JSX.Element {
         {hosted && me !== undefined ? <Account me={me} onSignOut={signOut} /> : null}
       </header>
 
-      <main className="stage">
-        <div className="presence-stage">
+      <main className="stage" data-proof-tour={proofDemo === undefined ? undefined : "true"}>
+        {stats?.fragment !== undefined ? <FragmentBanner fragment={stats.fragment} /> : null}
+        {sourceReadOnly && stats?.sourceReadiness !== undefined ? (
+          <SourceReadinessBanner readiness={stats.sourceReadiness} />
+        ) : null}
+        {stats?.compaction !== undefined ? <CompactionBanner status={stats.compaction} /> : null}
+        <div className="presence-stage" data-empty={empty ? "true" : undefined}>
           <div className="presence-frame">
             <Presence
-              turns={stats?.turns ?? 0}
+              turns={shownTurns}
               state={presenceState}
               fill={building ?? 0}
               pulses={pulses}
+              arrivals={arrivals}
               faults={faults}
               flickerAt={flickerAt}
             />
           </div>
           <EvidenceFigures
             stats={stats}
+            turns={shownTurns}
             recovered={recovered}
             viewTokens={viewTokens}
             viewRounds={viewRounds}
@@ -718,50 +1048,103 @@ export function App(): React.JSX.Element {
         </div>
 
         {empty ? (
-          <p className="coldstart-line">Say anything. It will be kept.</p>
+          writeBlocked ? (
+            <div className="empty fragment-empty" data-fragment-read-only="true">
+              {sourceReadiness
+                ? "This legacy source is quarantined until its offending episode is remediated."
+                : "This authenticated fragment has no writable continuation."}
+            </div>
+          ) : (
+            <ProofDemoPrompt
+              busy={proofDemoBusy}
+              error={proofDemoError}
+              onOpen={openProofDemo}
+              onConnect={
+                noProviderConnected
+                  ? () => {
+                      setSheetError(undefined);
+                      setSheet({ kind: "connect", provider: providerOf(model), select: undefined });
+                    }
+                  : undefined
+              }
+            />
+          )
         ) : (
-          <Exchange
-            threadId={threadId ?? ""}
-            question={exchange.question}
-            answer={exchange.answer}
-            streaming={streaming}
-            awaitingReply={awaitingReply}
-            hasEarlier={window_.hasOlder || window_.episodes.length > 2}
-            onEarlier={() => setArchive(true)}
-          />
+          <>
+            {proofDemo !== undefined ? (
+              <ProofTour summary={proofDemo} onClose={() => setProofDemo(undefined)} />
+            ) : null}
+            {proofDemo === undefined ? (
+              <>
+                {proofDemoAvailable ? (
+                  <ProofDemoReentry busy={proofDemoBusy} error={proofDemoError} onOpen={openProofDemo} />
+                ) : null}
+                <Exchange
+                  threadId={threadId ?? ""}
+                  question={exchange.question}
+                  answer={exchange.answer}
+                  streaming={streaming}
+                  awaitingReply={awaitingReply}
+                  hasEarlier={window_.hasOlder || window_.episodes.length > 2}
+                  onEarlier={() => setArchive(true)}
+                />
+              </>
+            ) : null}
+          </>
         )}
       </main>
 
-      <Composer
-        models={models}
-        model={model}
-        budget={budget}
-        busy={streaming !== undefined}
-        attachments={attachments}
-        onSend={send}
-        onStop={stop}
-        onPickModel={pickModel}
-        onConnectModel={(provider, next) => {
-          setSheetError(undefined);
-          setSheet({ kind: "connect", provider, select: next });
-        }}
-        onEarlier={() => setArchive(true)}
-        onAttach={attach}
-        onRemoveAttachment={(seq) => setAttachments((current) => current.filter((item) => item.seq !== seq))}
-        onBudget={(next) => {
-          setBudget(next);
-          if (threadId !== undefined) void api.settings(threadId, { budget: next });
-        }}
-        onRefreshModels={() => {
-          void api
-            .models()
-            .then(setModels)
-            .catch(() => undefined);
-        }}
-      />
+      {entering === undefined ? null : (
+        <p className="entering" key={entering.at} aria-hidden="true">
+          {entering.text}
+        </p>
+      )}
+
+      {proofDemo === undefined ? (
+        <Composer
+          readOnly={writeBlocked}
+          readOnlyMessage={
+            compactionPending
+              ? "The bounded archive index is rebuilding; questions, attachments, handoffs, and settings will unlock automatically."
+              : sourceReadOnly
+                ? "This legacy source is quarantined; questions, attachments, handoffs, and settings are disabled until remediation."
+                : undefined
+          }
+          models={models}
+          model={model}
+          budget={budget}
+          busy={streaming !== undefined}
+          attachments={attachments}
+          onSend={send}
+          onStop={stop}
+          onError={(message) => say(message, "bad")}
+          onPickModel={pickModel}
+          onConnectModel={(provider, next) => {
+            setSheetError(undefined);
+            setSheet({ kind: "connect", provider, select: next });
+          }}
+          onEarlier={() => setArchive(true)}
+          onAttach={attach}
+          onRemoveAttachment={(seq) =>
+            setAttachments((current) => current.filter((item) => item.seq !== seq))
+          }
+          onBudget={(next) => {
+            if (writeBlocked) return;
+            setBudget(next);
+            if (threadId !== undefined) void api.settings(threadId, { budget: next });
+          }}
+          onRefreshModels={() => {
+            void api
+              .models()
+              .then(setModels)
+              .catch(() => undefined);
+          }}
+        />
+      ) : null}
 
       {archive ? (
         <Archive
+          readOnly={fragmentReadOnly}
           threadId={threadId ?? ""}
           turns={stats?.turns ?? 0}
           episodes={window_.episodes}
@@ -776,7 +1159,9 @@ export function App(): React.JSX.Element {
           dateFor={dateFor}
           onNearTop={loadOlder}
           onViewportChange={setView}
-          onForget={(episode) => setSheet({ kind: "forget", episode })}
+          onForget={(episode) => {
+            if (!fragmentReadOnly) setSheet({ kind: "forget", episode });
+          }}
           onJump={jump}
           onNow={jumpToNow}
           onClose={() => setArchive(false)}
@@ -820,13 +1205,21 @@ export function App(): React.JSX.Element {
 
       {sheet?.kind === "export" ? (
         <PassphraseSheet
-          title="Export this thread"
-          note="The bundle is encrypted with this passphrase, and carries the receipts — what each turn was compiled from — so the X-ray survives the move. Credentials are never included."
+          title={sheet.partial ? "Export this fragment range" : "Export this thread"}
+          note={
+            sheet.partial
+              ? `Only the authenticated range #${stats?.fragment?.fromSeq ?? 0}–#${stats?.fragment?.toSeq ?? 0} will be exported. The original thread provenance is retained.`
+              : "The bundle is encrypted with this passphrase, and carries the receipts — what each turn was compiled from — so the X-ray survives the move. Credentials are never included."
+          }
           confirm="Export"
           busy={sheetBusy}
           error={sheetError}
-          onCancel={() => setSheet(undefined)}
-          onSubmit={doExport}
+          onCancel={() => {
+            bundleTransfer.current?.abort();
+            bundleTransfer.current = undefined;
+            setSheet(undefined);
+          }}
+          onSubmit={(passphrase) => doExport(passphrase, sheet.partial === true)}
         />
       ) : null}
 
@@ -837,8 +1230,12 @@ export function App(): React.JSX.Element {
           confirm="Import"
           busy={sheetBusy}
           error={sheetError}
-          onCancel={() => setSheet(undefined)}
-          onSubmit={(passphrase) => doImport(passphrase, sheet.name, sheet.bytes)}
+          onCancel={() => {
+            bundleTransfer.current?.abort();
+            bundleTransfer.current = undefined;
+            setSheet(undefined);
+          }}
+          onSubmit={(passphrase) => doImport(passphrase, sheet.name, sheet)}
         />
       ) : null}
 

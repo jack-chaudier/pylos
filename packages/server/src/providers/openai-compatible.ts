@@ -1,6 +1,7 @@
 import type { ChatMessage, ModelInfo } from "@pylos/protocol";
 import type { AuthService } from "../auth/xai.ts";
-import { isRecord, streamOpenAiChat } from "./openai-chat.ts";
+import { fetchProvider } from "./fetch.ts";
+import { isRecord, readProviderJson, streamOpenAiChat } from "./openai-chat.ts";
 import { type Provider, ProviderError, type ProviderEvent, type StreamOptions } from "./types.ts";
 
 /** Any other endpoint that speaks `/chat/completions`: base URL + key. */
@@ -31,12 +32,16 @@ export class OpenAiCompatibleProvider implements Provider {
     if (baseUrl === undefined) return [];
     try {
       const key = await this.auth.token("openai-compatible");
-      const response = await fetch(`${baseUrl}/models`, {
-        headers: key === undefined ? {} : { Authorization: `Bearer ${key}` },
-        signal: AbortSignal.timeout(3000),
-      });
+      const response = await fetchProvider(
+        fetch,
+        `${baseUrl}/models`,
+        {
+          headers: key === undefined ? {} : { Authorization: `Bearer ${key}` },
+        },
+        { label: "The configured endpoint", timeoutMs: 3000 },
+      );
       if (!response.ok) return [];
-      const value: unknown = await response.json();
+      const value = await readProviderJson(response);
       const rows = isRecord(value) && Array.isArray(value.data) ? value.data : [];
       return rows.flatMap((row): ModelInfo[] => {
         if (!isRecord(row) || typeof row.id !== "string") return [];

@@ -1,11 +1,13 @@
 import { afterAll, expect, test } from "bun:test";
 import type { ChatMessage, TurnEvent } from "@pylos/protocol";
+import { MAX_THREAD_MODEL_BYTES } from "@pylos/protocol";
 import {
   approxTokens,
   atomize,
   compact,
   fitRound,
   handoff,
+  PROVIDER_TURN_OUTPUT_BYTES,
   type Provider,
   packetText,
   roundsDigest,
@@ -40,8 +42,35 @@ test("a turn appends both episodes, writes a packet and closes it", async () => 
   expect(result.assistantEpisode.meta.packetId).toBe(result.packet.id);
   expect(vault.packets.get(thread.id, 1)?.status).toBe("done");
   expect(vault.atoms.byKey(thread.id, "identity.name")[0]?.value).toBe("Ada Okafor");
-  expect(events.map((e) => e.type)).toEqual(["episode", "packet", "delta", "done"]);
-  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  expect(events.map((e) => e.type)).toEqual(["episode", "packet", "gate", "delta", "done"]);
+  expect(events.findIndex((event) => event.type === "gate")).toBeLessThan(
+    events.findIndex((event) => event.type === "delta"),
+  );
+  const verification = verify(vault, thread.id, { full: true });
+  expect(verification.ok, verification.reason).toBe(true);
+});
+
+test("an oversized model identifier is rejected before turn rows or provider work", async () => {
+  const { vault, thread } = tempVault();
+  let called = false;
+  const provider: Provider = async function* () {
+    called = true;
+    yield { type: "done" };
+  };
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "must not persist",
+      model: "m".repeat(MAX_THREAD_MODEL_BYTES + 1),
+      provider,
+      budget: 8192,
+    }),
+  ).rejects.toThrow(/model/iu);
+  expect(called).toBe(false);
+  expect(vault.episodes.count(thread.id)).toBe(0);
+  expect(
+    (vault.db.query("SELECT COUNT(*) AS n FROM packet WHERE thread_id = ?").get(thread.id) as { n: number })
+      .n,
+  ).toBe(0);
 });
 
 test("the recall tool loop serves exact archive material and records the pages", async () => {
@@ -182,6 +211,214 @@ test("a provider error does not leave a half-written turn", async () => {
   expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
 });
 
+test("a provider that streams nothing is a failed turn, not an empty assistant episode", async () => {
+  const { vault, thread } = tempVault();
+  const events: TurnEvent[] = [];
+  const silent: Provider = async function* () {
+    yield { type: "done", usage: { inputTokens: 120, outputTokens: 0 } };
+  };
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "Who signed the Valletta contract?",
+      model: "m",
+      provider: silent,
+      budget: 8192,
+      onEvent: (event) => events.push(event),
+    }),
+  ).rejects.toMatchObject({ code: "empty_answer" });
+
+  // The same shape a mid-stream provider failure leaves: one error event, no
+  // gate, no `done`, the user's turn durable and the packet still `pending`.
+  expect(events.filter((event) => event.type === "error")).toEqual([
+    expect.objectContaining({ type: "error", code: "empty_answer" }),
+  ]);
+  expect(
+    events.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+  ).toBe(false);
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(1);
+  expect(vault.episodes.list(thread.id, { limit: 10 }).map((episode) => episode.role)).toEqual(["user"]);
+  const packet = vault.packets.get(thread.id, 1);
+  expect(packet?.status).toBe("pending");
+  expect(packet?.answerReceipt).toBeUndefined();
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+
+  // Resending the same question is an ordinary retry: nothing had to be undone.
+  const retry = await runTurn(vault, thread.id, {
+    text: "Who signed the Valletta contract?",
+    model: "m",
+    provider: echo,
+    budget: 8192,
+  });
+  expect(retry.assistantEpisode.seq).toBe(3);
+  expect(retry.assistantEpisode.content.length).toBeGreaterThan(0);
+  expect(vault.episodes.list(thread.id, { limit: 10 }).map((episode) => episode.role)).toEqual([
+    "user",
+    "user",
+    "assistant",
+  ]);
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+});
+
+test("a whitespace-only answer is refused the same way silence is", async () => {
+  const { vault, thread } = tempVault();
+  const blank: Provider = async function* () {
+    yield { type: "delta", text: " \n" };
+    yield { type: "delta", text: "\t" };
+    yield { type: "done" };
+  };
+  await expect(
+    runTurn(vault, thread.id, { text: "Say something.", model: "m", provider: blank, budget: 8192 }),
+  ).rejects.toMatchObject({ code: "empty_answer" });
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(1);
+  expect(vault.packets.get(thread.id, 1)?.status).toBe("pending");
+});
+
+test("a recall loop that never answers records no assistant episode", async () => {
+  const { vault, thread } = tempVault();
+  let ordinal = 0;
+  const evasive: Provider = async function* () {
+    ordinal += 1;
+    yield { type: "tool_call", id: `call_${ordinal}`, name: "recall", arguments: JSON.stringify({ seq: 1 }) };
+    yield { type: "done" };
+  };
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "Keep looking and never answer.",
+      model: "m",
+      provider: evasive,
+      budget: 8192,
+      maxRecallRounds: 2,
+    }),
+  ).rejects.toMatchObject({ code: "empty_answer" });
+  expect(ordinal).toBe(3);
+  expect(vault.episodes.list(thread.id, { limit: 10 }).map((episode) => episode.role)).toEqual(["user"]);
+  expect(vault.packets.get(thread.id, 1)?.status).toBe("pending");
+});
+test("provider output bytes are refused before tx B and cancel the active round", async () => {
+  const { vault, thread } = tempVault();
+  const events: TurnEvent[] = [];
+  let cancelled = false;
+  const malicious: Provider = async function* (request) {
+    request.signal?.addEventListener("abort", () => {
+      cancelled = true;
+    });
+    try {
+      for (let i = 0; i < 65; i += 1) {
+        // Two UTF-8 bytes per character: the oracle fails if the meter counts
+        // JavaScript code units instead of bytes.
+        yield { type: "delta", text: "¢".repeat(512) };
+      }
+      yield { type: "done" };
+    } finally {
+      cancelled ||= request.signal?.aborted === true;
+    }
+  };
+
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "Keep this user episode, but never commit the oversized answer.",
+      model: "m",
+      provider: malicious,
+      budget: 8192,
+      onEvent: (event) => events.push(event),
+    }),
+  ).rejects.toMatchObject({ code: "provider_output_limit" });
+
+  expect(cancelled).toBe(true);
+  expect(
+    events.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+  ).toBe(false);
+  expect(events.filter((event) => event.type === "error")).toEqual([
+    expect.objectContaining({ type: "error", code: "provider_output_limit" }),
+  ]);
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(1);
+  expect(vault.episodes.get(thread.id, 1)?.role).toBe("user");
+  expect(vault.packets.get(thread.id, 1)?.status).toBe("pending");
+  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+});
+
+test("oversized tool arguments are never accumulated or committed", async () => {
+  const { vault, thread } = tempVault();
+  const malicious: Provider = async function* () {
+    yield {
+      type: "tool_call",
+      id: "call_oversized",
+      name: "recall",
+      arguments: JSON.stringify({ query: "x".repeat(65 * 1024) }),
+    };
+    yield { type: "done" };
+  };
+
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "Try the malicious tool call.",
+      model: "m",
+      provider: malicious,
+      budget: 8192,
+    }),
+  ).rejects.toMatchObject({ code: "provider_output_limit" });
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(1);
+  expect(vault.episodes.list(thread.id, { limit: 10 }).map((episode) => episode.role)).toEqual(["user"]);
+  expect(vault.packets.get(thread.id, 1)?.status).toBe("pending");
+});
+
+test("recall rounds share one fixed provider-output ceiling for the whole turn", async () => {
+  const { vault, thread } = tempVault();
+  let ordinal = 0;
+  const malicious: Provider = async function* () {
+    ordinal += 1;
+    yield { type: "delta", text: "a".repeat(60 * 1024) };
+    yield {
+      type: "tool_call",
+      id: `recall_${ordinal}`,
+      name: "recall",
+      arguments: JSON.stringify({ seq: 1 }),
+    };
+    yield { type: "done" };
+  };
+
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "Keep paging forever.",
+      model: "m",
+      provider: malicious,
+      budget: 8192,
+      maxRecallRounds: 3,
+    }),
+  ).rejects.toMatchObject({
+    code: "provider_output_limit",
+    message: `Provider output exceeded the ${PROVIDER_TURN_OUTPUT_BYTES}-byte turn limit.`,
+  });
+  expect(ordinal).toBe(3);
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(1);
+  expect(vault.packets.get(thread.id, 1)?.status).toBe("pending");
+});
+
+test("an oversized check reissue is fatal instead of committing the provisional draft", async () => {
+  const { vault, thread } = threadWithLostNumber();
+  const before = vault.threads.get(thread.id)?.headSeq ?? 0;
+  let ordinal = 0;
+  const malicious: Provider = async function* () {
+    ordinal += 1;
+    if (ordinal === 1) yield { type: "delta", text: "The amount was 48250 usd." };
+    else yield { type: "delta", text: "x".repeat(65 * 1024) };
+    yield { type: "done" };
+  };
+
+  await expect(
+    runTurn(vault, thread.id, {
+      text: "Tell me the number again.",
+      model: "m",
+      provider: malicious,
+      budget: 8192,
+    }),
+  ).rejects.toMatchObject({ code: "provider_output_limit" });
+  expect(ordinal).toBe(2);
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(before + 1);
+  expect(vault.episodes.get(thread.id, before + 1)?.role).toBe("user");
+  expect(vault.packets.get(thread.id, before + 1)?.status).toBe("pending");
+});
+
 test("a model switch is a handoff episode and the thread continues", async () => {
   const { vault, thread } = tempVault();
   await runTurn(vault, thread.id, { text: "first", model: "grok-4.6", provider: echo, budget: 8192 });
@@ -210,7 +447,8 @@ test("many turns keep the packet within budget and the chain intact", async () =
     });
     expect(result.packet.tokens).toBeLessThanOrEqual(4096);
   }
-  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  const verification = verify(vault, thread.id, { full: true });
+  expect(verification.ok, verification.reason).toBe(true);
   const summary = stats(vault, thread.id);
   expect(summary.turns).toBe(300);
   expect(summary.episodes.user).toBe(150);
@@ -267,15 +505,19 @@ test("a draft that states a lost value is checked against the archive (KERNEL A9
   expect(last.content).toContain("⟦recovered #1 · user⟧");
   expect(last.content).toContain("an assistant turn is a previous model's word, not confirmation");
   expect((seen[1] as ChatMessage[]).at(-2)?.content).toBe("The amount was 48250 usd.");
-  // The episode is the reissued answer, and the receipt says so.
-  expect(result.assistantEpisode.content).toBe("The amount was 48250 usd — Valletta contract.");
+  // The episode is the reissued answer, and A14 qualifies the sentence-level
+  // paraphrase even though the nested number was recovered from the archive.
+  expect(result.assistantEpisode.content).toContain("The amount was 48250 usd — Valletta contract.");
+  expect(result.assistantEpisode.content).toMatch(/UNKNOWN|INFERENCE/i);
+  expect(result.packet.answerReceipt?.qualifications.length).toBeGreaterThan(0);
   expect(result.text).toBe(result.assistantEpisode.content);
   expect(result.assistantEpisode.meta.check).toEqual({
     names: ["48250 usd"],
     status: "revised",
     draftSha256: sha256("The amount was 48250 usd."),
   });
-  expect(verify(vault, thread.id, { full: true }).ok).toBe(true);
+  const verification = verify(vault, thread.id, { full: true });
+  expect(verification.ok, verification.reason).toBe(true);
 });
 
 test("a draft that stays inside the view costs exactly one provider round", async () => {
@@ -320,11 +562,14 @@ test("a failed check round keeps the draft: a reply is never lost to the check",
     budget: 8192,
   });
   expect(rounds).toBe(2);
-  // The draft stands — and says, in one kernel line, that it could not be checked.
-  expect(result.assistantEpisode.content).toBe(
-    "The amount was 48250 usd.\n\n" +
-      "⟨pylos: the archive could not be re-read for: 48250 usd — treat these values as unverified⟩",
-  );
+  // The draft stands, but A14 qualifies its sentence-level paraphrase. The
+  // failed provider receipt must not leave a contradictory legacy note.
+  expect(result.assistantEpisode.content).toContain("The amount was 48250 usd.");
+  expect(result.assistantEpisode.content).toMatch(/UNKNOWN|INFERENCE/i);
+  expect(
+    result.packet.answerReceipt?.classifications.some((entry) => entry.classification === "SUPPORTED"),
+  ).toBe(true);
+  expect(result.packet.answerReceipt?.qualifications.length).toBeGreaterThan(0);
   expect(result.assistantEpisode.meta.check).toEqual({
     names: ["48250 usd"],
     status: "check-failed",
@@ -344,7 +589,9 @@ test("a check round that reissues the same text is recorded as confirmed", async
     provider: steady,
     budget: 8192,
   });
-  expect(result.assistantEpisode.content).toBe("The amount was 48250 usd.");
+  expect(result.assistantEpisode.content).toContain("The amount was 48250 usd.");
+  expect(result.assistantEpisode.content).toMatch(/UNKNOWN|INFERENCE/i);
+  expect(result.packet.answerReceipt?.qualifications.length).toBeGreaterThan(0);
   expect(result.assistantEpisode.meta.check?.status).toBe("confirmed");
 });
 

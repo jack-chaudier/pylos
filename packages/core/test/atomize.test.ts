@@ -1,5 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
+import { CAPSULE_SOURCE_EPISODE_BYTES, CAPSULE_SOURCE_NAMES_PER_EPISODE } from "@pylos/protocol";
 import { atomize, compile, packetText, page, stats } from "../src/index.ts";
+import { names } from "../src/pure/names.ts";
 import { applyRules } from "../src/pure/rules.ts";
 import { cleanup, tempVault } from "./helpers.ts";
 
@@ -263,4 +265,119 @@ test("model-extracted atoms are proposals, whichever episode they quote", async 
   expect(created[0]?.authority).toBe("model");
   expect(created[0]?.phase).toBe("PROPOSED");
   expect(vault.atoms.byKey(thread.id, "launch.date", "SUPPORTED")).toHaveLength(0);
+});
+
+test("model candidate overflow is bounded, durable, and unresolved for name routes", async () => {
+  const { vault, thread } = tempVault();
+  const source = vault.episodes.append(thread.id, {
+    role: "user",
+    content: "Remember the bounded model marker: Valletta.",
+  });
+  const { atomizeWithModel, MAX_MODEL_ATOM_CANDIDATES } = await import("../src/index.ts");
+  const created = await atomizeWithModel(vault, thread.id, [source.seq], async () => ({
+    model: "bounded-test",
+    atoms: Array.from({ length: MAX_MODEL_ATOM_CANDIDATES + 1 }, (_, index) => ({
+      kind: "fact" as const,
+      key: `bounded.fact.${index}`,
+      value: "Valletta",
+      text: "Remember the bounded model marker: Valletta.",
+      quote: "Remember the bounded model marker: Valletta.",
+    })),
+  }));
+  expect(created).toHaveLength(MAX_MODEL_ATOM_CANDIDATES);
+  expect(vault.atomization.get(thread.id, source.seq)).toMatchObject({
+    status: "incomplete",
+    candidateCount: MAX_MODEL_ATOM_CANDIDATES + 1,
+    acceptedCount: MAX_MODEL_ATOM_CANDIDATES,
+    omittedCount: 1,
+    reason: "candidate-cap",
+  });
+  expect(vault.atoms.byName(thread.id, "valletta")).toHaveLength(0);
+  const routed = page(vault, thread.id, { query: "Where is Valletta?", budget: 1200 });
+  expect(
+    routed.records.some((record) => record.source === "atomization-incomplete" && !record.resolved),
+  ).toBe(true);
+});
+
+test("rule extraction caps a legal near-million-byte candidate stream with a durable receipt", () => {
+  const { vault, thread } = tempVault();
+  const content = Array.from(
+    { length: 10_000 },
+    (_, index) => `Remember that item ${index % 513} is ${"v".repeat(76)}.`,
+  ).join("\n");
+  const contentBytes = Buffer.byteLength(content, "utf8");
+  expect(contentBytes).toBeGreaterThan(1_000_000);
+  expect(contentBytes).toBeLessThanOrEqual(CAPSULE_SOURCE_EPISODE_BYTES);
+  expect(
+    names(content, { max: CAPSULE_SOURCE_NAMES_PER_EPISODE + 1, stopWhenExceeded: true }).length,
+  ).toBeLessThanOrEqual(CAPSULE_SOURCE_NAMES_PER_EPISODE);
+  const source = vault.episodes.append(thread.id, { role: "user", content });
+
+  const atomsApi = vault.atoms as unknown as {
+    insert: (atom: Parameters<typeof vault.atoms.insert>[0]) => void;
+  };
+  const originalInsert = atomsApi.insert;
+  let inserted = 0;
+  atomsApi.insert = ((atom) => {
+    inserted += 1;
+    return originalInsert.call(vault.atoms, atom);
+  }) as typeof atomsApi.insert;
+  try {
+    atomize(vault, thread.id, [source.seq]);
+  } finally {
+    atomsApi.insert = originalInsert;
+  }
+
+  expect(inserted).toBeLessThanOrEqual(512);
+  expect(vault.atoms.list(thread.id, { limit: 513 })).toHaveLength(512);
+  expect(vault.atomization.get(thread.id, source.seq)).toMatchObject({
+    status: "incomplete",
+    candidateCount: 513,
+    acceptedCount: 512,
+    omittedCount: 1,
+    reason: "candidate-cap",
+  });
+  expect(vault.atoms.byName(thread.id, "item-512")).toHaveLength(0);
+  const routed = page(vault, thread.id, { query: "Where is item 512?", budget: 1200 });
+  expect(
+    routed.records.some((record) => record.source === "atomization-incomplete" && !record.resolved),
+  ).toBe(true);
+});
+
+test("a later model pass cannot erase an incomplete rule receipt", async () => {
+  const { vault, thread } = tempVault();
+  const source = vault.episodes.append(thread.id, {
+    role: "user",
+    content: Array.from(
+      { length: 513 },
+      (_, index) => `Remember that rule item ${index} is value ${index}.`,
+    ).join("\n"),
+  });
+  atomize(vault, thread.id, [source.seq]);
+  expect(vault.atomization.get(thread.id, source.seq)).toMatchObject({
+    status: "incomplete",
+    candidateCount: 513,
+    reason: "candidate-cap",
+  });
+
+  const { atomizeWithModel } = await import("../src/index.ts");
+  await atomizeWithModel(vault, thread.id, [source.seq], async () => ({
+    model: "later-model",
+    atoms: [
+      {
+        kind: "fact",
+        key: "later.rule",
+        value: "value 512",
+        text: "value 512",
+        quote: "Remember that rule item 512 is value 512.",
+      },
+    ],
+  }));
+  expect(vault.atomization.get(thread.id, source.seq)).toMatchObject({
+    status: "incomplete",
+    candidateCount: 513,
+    omittedCount: 1,
+    reason: "candidate-cap",
+  });
+  expect(vault.atoms.byName(thread.id, "later.rule")).toHaveLength(0);
 });

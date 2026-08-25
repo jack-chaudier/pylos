@@ -1,8 +1,11 @@
 import type { Episode, ModelInfo, ProviderId } from "@pylos/protocol";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { bytesLabel, providerLabel } from "../format.ts";
+import { createDictation, type Dictation, dictationSupported } from "../speech.ts";
 
 export interface ComposerProps {
+  readOnly?: boolean;
+  readOnlyMessage?: string;
   models: ModelInfo[];
   model: string;
   budget: number;
@@ -10,6 +13,8 @@ export interface ComposerProps {
   attachments: Episode[];
   onSend: (text: string) => void;
   onStop: () => void;
+  /** Something the composer could not do — dictation refused, mostly. */
+  onError: (message: string) => void;
   onPickModel: (model: string) => void;
   /** A model whose provider is not connected: connect it, then switch. */
   onConnectModel: (provider: ProviderId, model: string) => void;
@@ -22,14 +27,20 @@ export interface ComposerProps {
 }
 
 export function Composer(props: ComposerProps): React.JSX.Element {
-  const { onAttach } = props;
+  const { onAttach, readOnly = false } = props;
   const [text, setText] = useState("");
   const [focus, setFocus] = useState(false);
   const [drop, setDrop] = useState(false);
-  const [menu, setMenu] = useState<"model" | "settings" | undefined>(undefined);
+  const [menu, setMenu] = useState<"model" | undefined>(undefined);
+  const [listening, setListening] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const dropDepth = useRef(0);
+  const dictation = useRef<Dictation | undefined>(undefined);
+  /** What was in the box when the microphone opened; the speech is added to it. */
+  const spokenOnto = useRef("");
+  const notify = useRef(props.onError);
+  notify.current = props.onError;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `text` is the trigger, not a read
   useLayoutEffect(() => {
@@ -40,11 +51,49 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   }, [text]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    if (!readOnly) inputRef.current?.focus();
+  }, [readOnly]);
+
+  // Built once, and only where the browser has a recognizer of its own.
+  useEffect(() => {
+    const handle = createDictation({
+      onHeard: (heard) => setText(spokenOnto.current + heard),
+      onError: (message) => {
+        setListening(false);
+        notify.current(message);
+      },
+      onEnd: () => setListening(false),
+    });
+    dictation.current = handle;
+    return () => {
+      handle?.stop();
+      dictation.current = undefined;
+    };
   }, []);
+
+  const listen = useCallback((): void => {
+    const handle = dictation.current;
+    if (handle === undefined) return;
+    if (listening) {
+      handle.stop();
+      setListening(false);
+      return;
+    }
+    setText((current) => {
+      spokenOnto.current = current.length === 0 || current.endsWith(" ") ? current : `${current} `;
+      return spokenOnto.current;
+    });
+    try {
+      handle.start();
+      setListening(true);
+    } catch (error) {
+      notify.current(error instanceof Error ? error.message : String(error));
+    }
+  }, [listening]);
 
   // Evidence can be dropped anywhere in the window, not just on the composer.
   useEffect(() => {
+    if (readOnly) return;
     const onEnter = (event: DragEvent): void => {
       event.preventDefault();
       dropDepth.current += 1;
@@ -72,16 +121,37 @@ export function Composer(props: ComposerProps): React.JSX.Element {
       window.removeEventListener("dragleave", onLeave);
       window.removeEventListener("drop", onDrop);
     };
-  }, [onAttach]);
+  }, [onAttach, readOnly]);
 
   const send = (): void => {
     const value = text.trim();
-    if (value.length === 0 || props.busy) return;
+    if (readOnly || value.length === 0 || props.busy) return;
+    if (listening) {
+      dictation.current?.stop();
+      setListening(false);
+    }
     setText("");
     props.onSend(value);
   };
 
+  if (readOnly) {
+    return (
+      <div className="composer-dock">
+        <div className="composer composer-readonly" data-read-only="true">
+          <div className="composer-readonly-copy">
+            <span className="badge">read-only</span>
+            <span>
+              {props.readOnlyMessage ??
+                "Questions, attachments, model handoffs, and settings are disabled for this fragment."}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const current = props.models.find((model) => model.id === props.model);
+  const chip = modelChipState(current);
 
   return (
     <div className="composer-dock">
@@ -160,12 +230,15 @@ export function Composer(props: ComposerProps): React.JSX.Element {
               type="button"
               className="model-chip"
               data-open={menu === "model"}
+              title={chip.title}
+              aria-label={chip.connected ? undefined : chip.title}
               onClick={() => {
                 setMenu((value) => (value === "model" ? undefined : "model"));
                 props.onRefreshModels();
               }}
             >
               {current?.label ?? props.model}
+              {chip.connected ? null : <span className="not-connected">· not connected</span>}
               {current !== undefined && !current.supportsTools ? (
                 <span className="no-tools" title="This model cannot call the recall tool">
                   no recall
@@ -177,6 +250,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
               <ModelMenu
                 models={props.models}
                 current={props.model}
+                budget={props.budget}
                 onPick={(model) => {
                   setMenu(undefined);
                   props.onPickModel(model);
@@ -185,6 +259,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
                   setMenu(undefined);
                   props.onConnectModel(provider, model);
                 }}
+                onBudget={props.onBudget}
                 onClose={() => setMenu(undefined)}
               />
             ) : null}
@@ -192,27 +267,19 @@ export function Composer(props: ComposerProps): React.JSX.Element {
 
           <span className="composer-flex" />
 
-          <span className="menu-anchor">
+          {dictationSupported() ? (
             <button
               type="button"
-              className="icon-button"
-              title="View budget"
-              aria-label="Settings"
-              onClick={() => setMenu((value) => (value === "settings" ? undefined : "settings"))}
+              className="icon-button record"
+              data-listening={listening}
+              title={listening ? "Stop dictating" : "Dictate"}
+              aria-label={listening ? "Stop dictating" : "Dictate"}
+              aria-pressed={listening}
+              onClick={listen}
             >
-              <Gauge />
+              <Microphone />
             </button>
-            {menu === "settings" ? (
-              <BudgetPopover
-                budget={props.budget}
-                onPick={(budget) => {
-                  props.onBudget(budget);
-                  setMenu(undefined);
-                }}
-                onClose={() => setMenu(undefined)}
-              />
-            ) : null}
-          </span>
+          ) : null}
 
           {props.busy ? (
             <button
@@ -244,20 +311,44 @@ export function Composer(props: ComposerProps): React.JSX.Element {
 }
 
 /**
+ * The chip is the only place the chosen model is named at rest, so it must not
+ * read as ready when its provider holds no credentials — the send that fails is
+ * too late to learn it. An unknown id (the list has not arrived) claims nothing.
+ */
+export function modelChipState(current: ModelInfo | undefined): { connected: boolean; title: string } {
+  if (current === undefined || current.available) {
+    return {
+      connected: true,
+      title: "The model this thread will use next. Tap to switch model or set the view budget.",
+    };
+  }
+  return {
+    connected: false,
+    title: `${current.label} is not connected — tap to connect it, or to pick a model that is.`,
+  };
+}
+
+/**
  * Connected providers first and selectable; the rest sit under a rule and open
- * the Connect sheet instead of switching (docs/DESIGN.md, the composer).
+ * the Connect sheet instead of switching (docs/DESIGN.md, the composer). The
+ * view budget is the foot of the same menu: it is a property of the next turn,
+ * not a control of its own.
  */
 function ModelMenu({
   models,
   current,
+  budget,
   onPick,
   onConnect,
+  onBudget,
   onClose,
 }: {
   models: ModelInfo[];
   current: string;
+  budget: number;
   onPick: (model: string) => void;
   onConnect: (provider: ProviderId, model: string) => void;
+  onBudget: (budget: number) => void;
   onClose: () => void;
 }): React.JSX.Element {
   useDismiss(onClose);
@@ -303,9 +394,27 @@ function ModelMenu({
         </>
       ) : null}
       {models.length === 0 ? <div className="empty">No models available.</div> : null}
+      <div className="menu-foot">
+        <div className="menu-group">view budget</div>
+        <div className="segmented">
+          {BUDGETS.map(([value, label]) => (
+            <button key={value} type="button" data-active={budget === value} onClick={() => onBudget(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="menu-foot-note">How much the model may see each turn. The archive is never affected.</p>
+      </div>
     </div>
   );
 }
+
+/** The three budgets the app offers, smallest first. */
+const BUDGETS: ReadonlyArray<readonly [number, string]> = [
+  [8192, "8k demo"],
+  [32768, "32k"],
+  [131072, "128k"],
+];
 
 function byProvider(models: ModelInfo[]): Array<[ProviderId, ModelInfo[]]> {
   const groups = new Map<ProviderId, ModelInfo[]>();
@@ -317,35 +426,6 @@ function byProvider(models: ModelInfo[]): Array<[ProviderId, ModelInfo[]]> {
   return [...groups.entries()];
 }
 
-function BudgetPopover({
-  budget,
-  onPick,
-  onClose,
-}: {
-  budget: number;
-  onPick: (budget: number) => void;
-  onClose: () => void;
-}): React.JSX.Element {
-  useDismiss(onClose);
-  return (
-    <div className="popover">
-      <h4>View budget</h4>
-      <p>How much the model may see each turn. The archive is never affected.</p>
-      <div className="segmented">
-        <button type="button" data-active={budget === 8192} onClick={() => onPick(8192)}>
-          8k demo
-        </button>
-        <button type="button" data-active={budget === 32768} onClick={() => onPick(32768)}>
-          32k
-        </button>
-        <button type="button" data-active={budget === 131072} onClick={() => onPick(131072)}>
-          128k
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function useDismiss(onClose: () => void): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -353,7 +433,7 @@ export function useDismiss(onClose: () => void): void {
     };
     const onClick = (event: MouseEvent): void => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest(".menu, .popover, .model-chip, .icon-button, .thread-title, .account") === null) {
+      if (target?.closest(".menu, .model-chip, .icon-button, .thread-title, .account") === null) {
         onClose();
       }
     };
@@ -380,11 +460,25 @@ function Paperclip(): React.JSX.Element {
   );
 }
 
-function Gauge(): React.JSX.Element {
+function Microphone(): React.JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 16a8 8 0 1 1 16 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M12 16 16 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect
+        x="9"
+        y="3"
+        width="6"
+        height="11"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

@@ -1,7 +1,9 @@
+import type { ProviderId } from "@pylos/protocol";
 import { DEFAULT_BUDGET } from "@pylos/protocol";
 import type { ServerContext } from "./context.ts";
 import { HttpError, json, readJson, SseStream } from "./http.ts";
 import { DEFAULT_MODEL } from "./providers/registry.ts";
+import { optionalModel, requiredModel } from "./validation.ts";
 
 interface GatewayRequest {
   model?: string;
@@ -16,21 +18,46 @@ interface GatewayRequest {
  * the whole Pylos thread behind its last user message: the archive is the
  * conversation, so only that last message is the turn.
  *
- * The check round (KERNEL A9.5) makes a turn's text non-monotonic: a draft can
- * be retracted and reissued. A non-streaming response therefore carries only the
- * committed text. A stream cannot take words back, so it says so — one chunk
- * with an empty delta and `x_pylos: {event:"check", names, retract:true}`, then
- * the replacement deltas. A client that ignores `x_pylos` must not treat the
- * stream as append-only once that chunk has appeared.
+ * The kernel settles the answer gate before it emits committed text. The
+ * OpenAI-compatible stream carries that receipt as an `x_pylos.event="gate"`
+ * chunk, then the committed delta. The native check event is deliberately not
+ * translated: it describes an internal re-read, not text a client can retract.
+ * A non-streaming response therefore carries only the committed answer.
  */
-export async function handleGatewayCompletions(context: ServerContext, request: Request): Promise<Response> {
+export async function handleGatewayCompletions(
+  context: ServerContext,
+  request: Request,
+  allowedProviders?: readonly ProviderId[],
+): Promise<Response> {
   const body = await readJson<GatewayRequest>(request);
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "invalid_request", "The completion body must be a JSON object.");
+  }
   const text = lastUserText(body);
   if (text === undefined) {
     throw new HttpError(400, "no_user_message", "The request has no user message.");
   }
+  // Reject a malformed model before resolving or creating the backing thread.
+  const requestedModel = optionalModel(body.model);
 
   const threadId = await resolveThread(context, request.headers.get("x-pylos-thread"));
+  const fragment = await context.kernel.fragmentStatus(threadId);
+  if (fragment !== undefined) {
+    throw new HttpError(
+      409,
+      "fragment_read_only",
+      `Thread ${threadId} is an authenticated read-only fragment (#${fragment.fromSeq}-#${fragment.toSeq}).`,
+    );
+  }
+  const readiness = await context.kernel.sourceReadiness(threadId);
+  if (readiness !== undefined) {
+    throw new HttpError(
+      409,
+      "source_not_ready",
+      `Thread ${threadId} is quarantined at episode #${readiness.seq ?? "?"}: ${readiness.reason}. ` +
+        "Forget the offending episode before starting a new turn.",
+    );
+  }
 
   // The lane is claimed as soon as the thread is known: everything that can
   // reorder two requests — resolving the model, checking the provider — happens
@@ -39,32 +66,43 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
   const ticket = context.kernel.enterTurn(threadId);
   try {
     const settings = await context.kernel.settings(threadId);
-    const model = body.model ?? settings.model ?? DEFAULT_MODEL;
+    const model =
+      requestedModel ?? (settings.model === undefined ? DEFAULT_MODEL : requiredModel(settings.model));
     const budget = settings.budget ?? DEFAULT_BUDGET;
 
-    const resolved = await context.registry.resolve(model);
+    const resolved = await context.registry.resolve(model, allowedProviders);
     if (resolved.provider !== "ollama" && !(await context.auth.configured(resolved.provider))) {
       throw new HttpError(401, "no_provider", `Connect ${resolved.provider} first.`);
     }
-    const bound = await context.registry.providerFn(model);
+    const bound = await context.registry.providerFn(model, allowedProviders);
+    // Keep the OpenAI-compatible route on the same catalogue contract as the
+    // native turn route. A catalogue entry is the only authority for whether
+    // the kernel may expose recall/claim-map tools; do not let the adapter's
+    // backwards-compatible `undefined` default turn a toolless model into a
+    // tool-capable one.
+    const catalogue = await context.registry.models(false, allowedProviders);
+    const supportsTools = catalogue.find((entry) => entry.id === bound.model)?.supportsTools !== false;
 
     const id = `chatcmpl-${crypto.randomUUID()}`;
     const created = Math.floor(Date.now() / 1000);
     const turn = context.kernel.runTurn(
       threadId,
-      { text, model: bound.model, provider: bound.provider, budget, signal: request.signal },
+      { text, model: bound.model, provider: bound.provider, budget, supportsTools, signal: request.signal },
       bound.fn,
       ticket,
     );
 
     if (body.stream !== true) {
       let answer = "";
+      let gateSeen = false;
       let usage = { inputTokens: 0, outputTokens: 0 };
       for await (const event of turn) {
-        // The committed episode is the final text: it is the reissued answer when
-        // a check replaced the draft, and the draft plus the kernel's unverified
-        // line when the check could not be run (KERNEL A9.5, A10.4).
-        if (event.type === "done") {
+        if (event.type === "gate") {
+          gateSeen = true;
+        } else if (event.type === "done") {
+          if (!gateSeen) {
+            throw new HttpError(502, "missing_gate", "The kernel completed a turn without an answer gate.");
+          }
           answer = event.episode.content;
           if (event.usage !== undefined) usage = event.usage;
         } else if (event.type === "error") {
@@ -97,31 +135,43 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
     const stream = new SseStream({ "X-Pylos-Thread": threadId });
     const head = { id, object: "chat.completion.chunk", created, model: bound.model };
     void (async () => {
-      /** Text streamed since the draft was last retracted. */
-      let sinceCheck = "";
-      let retracted = false;
+      /** Drop provisional text until the kernel has committed the answer gate. */
+      let gateSeen = false;
+      let committedText = "";
       try {
-        stream.send({ ...head, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
         for await (const event of turn) {
           if (stream.isClosed) break;
           if (event.type === "delta") {
-            sinceCheck += event.text;
+            if (!gateSeen) continue;
+            committedText += event.text;
             stream.send({
               ...head,
               choices: [{ index: 0, delta: { content: event.text }, finish_reason: null }],
             });
           } else if (event.type === "check") {
-            retracted = true;
-            sinceCheck = "";
+            // Native clients receive this event. An OpenAI-compatible client
+            // cannot retract already-emitted text, so keep it internal and
+            // expose only the final gate below.
+          } else if (event.type === "gate") {
+            gateSeen = true;
             stream.send({
               ...head,
-              choices: [{ index: 0, delta: {}, finish_reason: null }],
-              x_pylos: { event: "check", names: event.names, retract: true },
+              choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
+              x_pylos: { event: "gate", receipt: event.receipt },
             });
           } else if (event.type === "done") {
-            // A check that could not be run streams no replacement; the kept draft
-            // and its unverified line are the answer, and must still arrive.
-            if (retracted && sinceCheck.length === 0 && event.episode.content.length > 0) {
+            if (!gateSeen) {
+              stream.send({
+                error: {
+                  message: "The kernel completed a turn without an answer gate.",
+                  code: "missing_gate",
+                },
+              });
+              continue;
+            }
+            // A provider that emits no post-gate delta still has a committed
+            // episode. Release that exact answer rather than a provisional draft.
+            if (committedText.length === 0 && event.episode.content.length > 0) {
               stream.send({
                 ...head,
                 choices: [{ index: 0, delta: { content: event.episode.content }, finish_reason: null }],
@@ -160,8 +210,11 @@ export async function handleGatewayCompletions(context: ServerContext, request: 
   }
 }
 
-export async function handleGatewayModels(context: ServerContext): Promise<Response> {
-  const models = await context.registry.models();
+export async function handleGatewayModels(
+  context: ServerContext,
+  allowedProviders?: readonly ProviderId[],
+): Promise<Response> {
+  const models = await context.registry.models(false, allowedProviders);
   return json({
     object: "list",
     data: models

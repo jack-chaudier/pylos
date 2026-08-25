@@ -72,7 +72,9 @@
   --gutter: clamp(1.5rem, 5vw, 4.5rem);
   --inset: clamp(10px, 1.4vw, 22px);
   --section: clamp(6rem, 12vw, 11rem);
+  /* Two registers: the engraved one is square, the invitations are round. */
   --corner: 2px;
+  --pill: 999px;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -87,7 +89,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
-  scroll-padding-top: 5rem;
+  /* the frame's inset, the bar, and a breath under it */
+  scroll-padding-top: 6.5rem;
 }
 
 body {
@@ -122,12 +125,14 @@ body > * {
   z-index: 1;
 }
 
-/* The hairline frame: inset from the viewport, fixed, above the content and
-   below the nav. */
+/* The hairline frame: inset from the viewport, fixed, and the topmost thing on
+   the page apart from the skip link. The nav bar is inset to the same clamp, so
+   the frame draws the bar's top edge and its two ends and the rectangle is
+   never broken. */
 .frame {
   position: fixed;
   inset: var(--inset);
-  z-index: 20;
+  z-index: 31;
   border: 1px solid var(--hairline-kiln);
   pointer-events: none;
 }
@@ -289,20 +294,23 @@ section {
   border-bottom-color: currentcolor;
 }
 
-/* One-line glosses for the four words the exhibit cannot avoid. */
+/* One quiet line saying how the exhibit's labels are written; the words it
+   cannot avoid are marked where they are first used, not learnt up front. */
 .glosses {
   max-width: 92ch;
   margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
   line-height: 2;
   text-transform: none;
   letter-spacing: 0.02em;
+  opacity: 0.72;
 }
-.glosses dfn {
+
+/* A term Pylos cannot avoid: the plain words carry the line, the term is marked
+   after them, and the whole definition is one hover away. */
+dfn {
   font-style: normal;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  border-bottom: 1px solid var(--bone);
+  border-bottom: 1px dashed var(--hairline-kiln);
   cursor: help;
 }
 
@@ -342,7 +350,19 @@ section {
   transition:
     background-color 170ms var(--ease),
     border-color 170ms var(--ease),
+    box-shadow 150ms var(--ease),
     color 170ms var(--ease);
+}
+
+/* The invitations — the things you are meant to press — are round. */
+.btn--bone,
+.btn--ghost {
+  border-radius: var(--pill);
+  padding: 0.85rem 1.6rem;
+}
+.btn--bone:active,
+.btn--ghost:active {
+  transform: translateY(1px);
 }
 
 .btn--bone {
@@ -352,17 +372,33 @@ section {
 .btn--bone:hover {
   background: var(--tablet);
   color: var(--kiln-deep);
+  box-shadow: 0 0 0 4px rgba(244, 235, 221, 0.18);
 }
 
+/* The ghost inverts on hover — bone ground, kiln type. The page turns inside
+   out under the pointer and nothing else has to move. */
 .btn--ghost {
   background: transparent;
   border-color: var(--hairline-kiln);
   color: var(--bone);
 }
 .btn--ghost:hover {
+  background: var(--bone);
   border-color: var(--bone);
+  color: var(--kiln);
 }
 
+.btn__arrow {
+  transition: transform 150ms var(--ease);
+}
+.btn:hover .btn__arrow,
+.link:hover .btn__arrow,
+.card:hover .btn__arrow {
+  transform: translateX(3px);
+}
+
+/* The engraved controls stay square and take a low bone wash rather than a
+   colour: the same gesture as the ghost, a whisper of it. */
 .btn--quiet {
   padding: 0.5rem 0.9rem;
   font-size: 0.72rem;
@@ -372,7 +408,11 @@ section {
   color: var(--bone);
 }
 .btn--quiet:hover {
+  background: rgba(244, 235, 221, 0.12);
   border-color: var(--bone);
+}
+.btn--quiet:active {
+  transform: translateY(1px);
 }
 
 .btn--sm {
@@ -380,29 +420,129 @@ section {
   font-size: 0.72rem;
 }
 
-/* ── Nav ────────────────────────────────────────────────────────────────── */
+/* ── Nav ──────────────────────────────────────────────────────────────────
+
+   The bar is the first cell inside the frame: inset by the same clamp, so the
+   frame's hairline is its top edge and its two ends. Flat kiln at the top of
+   the page; it lifts off the page only once you leave.                       */
 
 .nav {
   position: sticky;
   top: 0;
   z-index: 30;
-  padding-block: 0;
+  padding: var(--inset) var(--inset) 0;
+}
+/* The margin outside the frame stays kiln at every scroll position: the page
+   slides under it, never over it. */
+.nav::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--inset);
   background: var(--kiln);
-  border-bottom: 1px solid var(--hairline-kiln);
+}
+
+.nav__bar {
+  position: relative;
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color 200ms var(--ease),
+    border-color 200ms var(--ease);
+}
+.nav[data-scrolled="true"] .nav__bar {
+  background: color-mix(in srgb, var(--kiln) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom-color: var(--hairline-kiln);
 }
 
 .nav__in {
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  height: 4.25rem;
+  height: 4.5rem;
 }
 
 .wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   font-size: 1.75rem;
   letter-spacing: 0.02em;
-  margin-right: auto;
   line-height: 1;
+}
+
+/* The Empyrean seen end-on: the plate cropped to its bright core, turning once
+   every two minutes. The offsets put the core (47.7%, 41.0% of the plate) at
+   the centre of the disc, so the rose turns about its own light. */
+.mark {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--hairline-kiln);
+  animation: mark-turn 120s linear infinite;
+}
+.mark img {
+  position: absolute;
+  width: 200%;
+  height: auto;
+  max-width: none;
+  left: -45.3%;
+  top: -51.2%;
+}
+.wordmark:hover .mark {
+  animation-duration: 20s;
+}
+
+@keyframes mark-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The pulse: the bench's headline figure engraved on a capsule, with a dot that
+   breathes kiln to bone. Square, because it is evidence and not an invitation. */
+.nav__pulse {
+  margin-right: auto;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--hairline-kiln);
+  border-radius: var(--corner);
+  font-size: 0.72rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The capsule says what it is counting before it counts: a quiet label, then
+   the figure, so the number is never read as a statistic about the visitor. */
+.nav__tag {
+  opacity: 0.72;
+  margin-right: 0.5rem;
+}
+
+.nav__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  /* optically centred on the mono x-height, not the baseline */
+  vertical-align: 0.03em;
+  margin-right: 0.55rem;
+  border-radius: 50%;
+  background: var(--bone);
+  animation: pulse-breathe 3.4s var(--ease) infinite;
+}
+
+/* Ends on bone, which is also the static state a reduced-motion visitor sees. */
+@keyframes pulse-breathe {
+  0%,
+  100% {
+    background: var(--kiln);
+  }
+  50% {
+    background: var(--bone);
+  }
 }
 
 .nav__links {
@@ -414,12 +554,19 @@ section {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+/* A bone rule that draws itself in from the left, rather than appearing whole:
+   one flat colour, painted as a background so it can be measured. */
 .nav__links > a:not(.btn) {
-  border-bottom: 1px solid transparent;
-  padding-bottom: 2px;
+  padding-bottom: 3px;
+  background-image: linear-gradient(var(--bone), var(--bone));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0 1px;
+  transition: background-size 200ms var(--ease);
 }
-.nav__links > a:not(.btn):hover {
-  border-bottom-color: var(--bone);
+.nav__links > a:not(.btn):hover,
+.nav__links > a:not(.btn):focus-visible {
+  background-size: 100% 1px;
 }
 
 /* ── Hero ───────────────────────────────────────────────────────────────── */
@@ -499,6 +646,42 @@ section {
   height: min(78vh, 780px);
   object-fit: cover;
   object-position: 50% 38%;
+}
+
+/* ── What is proven, what is not ────────────────────────────────────────────
+   Three columns after the chart, no panel: the register is the mono label and
+   the hairline above it, so the block reads as an annotation on the proof. */
+
+.boundary {
+  padding-block: clamp(2.5rem, 5vw, 4rem);
+}
+.boundary__title {
+  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
+}
+.boundary__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+}
+.boundary__col {
+  min-width: 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline-kiln);
+}
+.boundary__label {
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+.boundary__body {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  line-height: 1.8;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.boundary__more {
+  margin-top: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 700;
 }
 
 /* ── The story ──────────────────────────────────────────────────────────── */
@@ -611,10 +794,14 @@ section {
   flex-wrap: wrap;
   gap: 0.3rem 1.75rem;
   margin-top: 1.5rem;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   letter-spacing: 0.06em;
   text-transform: none;
   word-break: break-all;
+}
+
+.story__hashes span[title] {
+  cursor: help;
 }
 
 .story__caption {
@@ -666,11 +853,12 @@ section {
   object-position: 50% 30%;
   border-radius: var(--corner);
 }
+/* The three best sentences on the page: set to be read, not to be decorative. */
 .feature__caption {
   color: var(--ink);
-  font-size: 0.75rem;
-  line-height: 1.9;
-  letter-spacing: 0.09em;
+  font-size: 0.85rem;
+  line-height: 1.75;
+  letter-spacing: 0.035em;
   margin-top: auto;
 }
 
@@ -913,8 +1101,10 @@ section {
   min-height: 3.25rem;
   overflow: hidden;
 }
+/* The label names the strip; it may wrap rather than be cut off on a phone. */
 .ap__ledger .mono {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 0.68rem;
 }
 
@@ -1109,10 +1299,16 @@ section {
   border-radius: var(--corner);
   padding: 0.35rem 0.8rem;
   cursor: pointer;
-  transition: border-color 150ms var(--ease);
+  transition:
+    background-color 150ms var(--ease),
+    border-color 150ms var(--ease);
 }
 .ask:hover {
+  background: rgba(244, 235, 221, 0.12);
   border-color: var(--bone);
+}
+.ask:active {
+  transform: translateY(1px);
 }
 
 .console__status {
@@ -1450,6 +1646,13 @@ section {
   }
 }
 
+/* The capsule keeps the figure and the check; the words go. */
+@media (max-width: 1000px) {
+  .nav__long {
+    display: none;
+  }
+}
+
 @media (max-width: 860px) {
   .hero__in {
     grid-template-columns: minmax(0, 1fr);
@@ -1465,6 +1668,7 @@ section {
   }
   .ap__grid,
   .features__grid,
+  .boundary__row,
   .answers,
   .ans__cols,
   .dl__grid {
@@ -1507,8 +1711,21 @@ section {
     justify-content: flex-start;
     mask-image: linear-gradient(to left, transparent, #000 12%, #000 100%);
   }
-  .nav__links .is-hide-sm {
+  /* Below this the row cannot hold the figure and the invitation both, and the
+     invitation wins; the same number opens the aperture two screens down. */
+  .nav__pulse {
     display: none;
+  }
+  .nav__in {
+    gap: 1rem;
+  }
+  .wordmark {
+    margin-right: auto;
+    font-size: 1.5rem;
+  }
+  .mark {
+    width: 34px;
+    height: 34px;
   }
   .cta .btn {
     flex: 1 1 auto;
@@ -1524,6 +1741,22 @@ section {
   .steps li {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.2rem;
+  }
+}
+
+/* The row gives up its secondary links before it gives up the figure: Theory
+   and GitHub are in the footer, and the pulse is the page's one result. */
+@media (max-width: 780px) {
+  .nav__links .is-hide-sm {
+    display: none;
+  }
+}
+
+/* A phone holds the mark and the one invitation; Install has a button of its
+   own in the hero and a section of its own below. */
+@media (max-width: 440px) {
+  .nav__links > a:not(.btn) {
+    display: none;
   }
 }
 

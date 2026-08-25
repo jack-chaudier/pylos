@@ -10,8 +10,31 @@
  * checked in a test without a database. The database is only an index over it.
  */
 
-import type { LossEntry, LossKind, Seq } from "@pylos/protocol";
+import {
+  CAPSULE_SOURCE_EPISODE_BYTES,
+  CAPSULE_SOURCE_NAMES_PER_EPISODE,
+  type LossEntry,
+  type LossKind,
+  type Seq,
+} from "@pylos/protocol";
 import { names } from "./names.ts";
+
+export function capsuleSourceContentFailure(content: string): string | null {
+  if (
+    content.length > CAPSULE_SOURCE_EPISODE_BYTES / 4 &&
+    new TextEncoder().encode(content).byteLength > CAPSULE_SOURCE_EPISODE_BYTES
+  ) {
+    return `episode exceeds capsule source byte capacity (${CAPSULE_SOURCE_EPISODE_BYTES})`;
+  }
+  if (!/[`"'“”0-9A-Z_./$€£-]/u.test(content)) return null;
+  if (
+    names(content, { max: CAPSULE_SOURCE_NAMES_PER_EPISODE, stopWhenExceeded: true }).length >
+    CAPSULE_SOURCE_NAMES_PER_EPISODE
+  ) {
+    return `episode exceeds capsule source-name capacity (${CAPSULE_SOURCE_NAMES_PER_EPISODE})`;
+  }
+  return null;
+}
 
 /** A routing key found in a capsule's source material, with its deepest locator. */
 export interface SourceName {
@@ -36,7 +59,7 @@ export interface LedgerResult {
 
 /** Extract the routing keys of one episode as `SourceName`s. */
 export function sourceNamesOfEpisode(seq: Seq, content: string, max?: number): SourceName[] {
-  return names(content, max === undefined ? {} : { max }).map((hit) => ({
+  return names(content, max === undefined ? {} : { max, stopWhenExceeded: true }).map((hit) => ({
     name: hit.name,
     kind: hit.kind,
     seq,
@@ -50,7 +73,7 @@ export function sourceNamesOfEpisode(seq: Seq, content: string, max?: number): S
  * Duplicate names collapse to their **most recent** locator: when a value is
  * mentioned repeatedly, the newest mention is the one worth paging back.
  */
-export function deriveLedger(source: readonly SourceName[], capsuleText: string): LedgerResult {
+export function deriveLedger(source: Iterable<SourceName>, capsuleText: string): LedgerResult {
   const present = new Set<string>();
   for (const hit of names(capsuleText, { max: 4096 })) present.add(hit.name);
 
@@ -100,7 +123,7 @@ export function conservationViolations(
  * surviving text, or named in the ledger. Nothing vanishes silently.
  */
 export function unaccountedNames(
-  source: readonly SourceName[],
+  source: Iterable<SourceName>,
   survivingText: string,
   ledger: Iterable<string>,
 ): string[] {

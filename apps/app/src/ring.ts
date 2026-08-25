@@ -155,6 +155,35 @@ export function breathScale(ms: number, reduced = false): number {
   return 1 + BREATH_DEPTH * Math.sin((TAU * ms) / BREATH_PERIOD);
 }
 
+/** How long a turn entering the archive takes to spread across the rings and settle. */
+export const ARRIVAL_MS = 900;
+
+/** The share of that window the light spends travelling from the hole to the rim. */
+const TRAVEL = 0.55;
+
+/** How long one ring takes to reach full light once the wave has reached it. */
+const ATTACK_MS = 90;
+
+/**
+ * A turn arriving in the archive, ring by ring: the light appears at its
+ * angular position in the middle of the halo and spreads outward, each ring
+ * flaring as the wave reaches it and settling back into the plate by
+ * `ARRIVAL_MS`. Reduced motion holds every ring at full and then cuts, so the
+ * arrival is stated without anything moving.
+ */
+export function arrivalAlpha(elapsed: number, ring: number, reduced = false): number {
+  if (elapsed < 0 || elapsed >= ARRIVAL_MS) return 0;
+  if (reduced) return 1;
+  const last = Math.max(1, RING_COUNT - 1);
+  const reach = (Math.min(Math.max(ring, 0), last) / last) * TRAVEL * ARRIVAL_MS;
+  const since = elapsed - reach;
+  if (since < 0) return 0;
+  if (since < ATTACK_MS) return since / ATTACK_MS;
+  const settle = ARRIVAL_MS - reach - ATTACK_MS;
+  const remaining = 1 - (since - ATTACK_MS) / settle;
+  return remaining * remaining;
+}
+
 /** How long a served page lights its angular position. */
 export const PULSE_MS = 1200;
 

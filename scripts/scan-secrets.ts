@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Fails if anything that looks like a live credential is tracked by git.
 import { $ } from "bun";
+
 const patterns: Array<[string, RegExp]> = [
   ["xai api key", /xai-[A-Za-z0-9]{20,}/],
   ["anthropic key", /sk-ant-[A-Za-z0-9_-]{20,}/],
@@ -14,11 +15,21 @@ let bad = 0;
 for (const f of files) {
   if (/\.(png|jpg|jpeg|webp|ico|woff2?|ttf|otf|pdf|sqlite)$/i.test(f)) continue;
   let text: string;
-  try { text = await Bun.file(f).text(); } catch { continue; }
+  try {
+    text = await Bun.file(f).text();
+  } catch {
+    continue;
+  }
   // Lines carrying the marker are declared fixtures (tests with obviously fake keys).
-  const scanned = text.split("\n").filter((line) => !line.includes("scan-secrets:allow")).join("\n");
+  const scanned = text
+    .split("\n")
+    .filter((line) => !line.includes("scan-secrets:allow"))
+    .join("\n");
   for (const [name, re] of patterns) {
-    if (re.test(scanned)) { console.error(`secret-like content (${name}) in ${f}`); bad++; }
+    if (re.test(scanned)) {
+      console.error(`secret-like content (${name}) in ${f}`);
+      bad++;
+    }
   }
 }
 if (bad) process.exit(1);

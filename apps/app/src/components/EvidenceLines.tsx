@@ -1,4 +1,4 @@
-import type { PageRecord } from "@pylos/protocol";
+import type { AnswerReceipt, PageRecord } from "@pylos/protocol";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.ts";
 import { fullStamp, pageLabel, spelled, turnList } from "../format.ts";
@@ -32,6 +32,29 @@ export function CheckLine({ meta }: { meta: unknown }): React.JSX.Element | null
     <div className="checked">
       ↺ reopened the archive · {names.join(", ")}
       {status === "confirmed" ? " · answer stood" : ""}
+    </div>
+  );
+}
+
+/**
+ * A compact live receipt for the A14 release point. It deliberately says
+ * "classified" and "current evidence" rather than implying that the kernel
+ * proved entailment: the gate only controls remembered claims.
+ */
+export function GateLine({ receipt }: { receipt: AnswerReceipt | undefined }): React.JSX.Element | null {
+  if (receipt === undefined) return null;
+  const currentEvidence = receipt.classifications.filter(
+    (claim) => claim.witness !== undefined || claim.basis !== undefined,
+  ).length;
+  const qualified = receipt.status === "qualified";
+  return (
+    <div className="evidence-gate" data-status={receipt.status}>
+      <span className="evidence-gate-label">kernel gate · {qualified ? "qualified" : "released"}</span>
+      <span>
+        {receipt.classifications.length} remembered claim
+        {receipt.classifications.length === 1 ? "" : "s"} classified · {currentEvidence} current evidence
+      </span>
+      {qualified ? <span>some claims remain visibly qualified</span> : null}
     </div>
   );
 }

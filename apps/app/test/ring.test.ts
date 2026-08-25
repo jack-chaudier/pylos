@@ -5,6 +5,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
+  ARRIVAL_MS,
+  arrivalAlpha,
   breathScale,
   dotAlpha,
   dotAngle,
@@ -149,6 +151,65 @@ describe("the two animations", () => {
     expect(pulseAlpha(0, true)).toBe(1);
     expect(pulseAlpha(1199, true)).toBe(1);
     expect(pulseAlpha(PULSE_MS, true)).toBe(0);
+  });
+});
+
+describe("a turn arriving in the archive", () => {
+  const rings = [...Array(RING_COUNT).keys()];
+
+  test("nothing is lit before it lands or after it has settled", () => {
+    for (const ring of rings) {
+      expect(arrivalAlpha(-1, ring)).toBe(0);
+      expect(arrivalAlpha(ARRIVAL_MS, ring)).toBe(0);
+      expect(arrivalAlpha(ARRIVAL_MS + 400, ring)).toBe(0);
+    }
+  });
+
+  test("the light spreads outward: the inner rings answer before the rim", () => {
+    expect(arrivalAlpha(60, 0)).toBeGreaterThan(0);
+    expect(arrivalAlpha(60, RING_COUNT - 1)).toBe(0);
+    let previous = -1;
+    for (const ring of rings) {
+      // The moment a ring first shows light never falls as you go outward.
+      let onset = ARRIVAL_MS;
+      for (let ms = 0; ms < ARRIVAL_MS; ms += 1) {
+        if (arrivalAlpha(ms, ring) > 0) {
+          onset = ms;
+          break;
+        }
+      }
+      expect(onset).toBeGreaterThan(previous);
+      previous = onset;
+    }
+  });
+
+  test("every ring flares to full and then decays to nothing", () => {
+    for (const ring of rings) {
+      const samples = Array.from({ length: ARRIVAL_MS }, (_unused, ms) => arrivalAlpha(ms, ring));
+      // Sampled every millisecond, so the exact crest may fall between samples.
+      expect(Math.max(...samples)).toBeCloseTo(1, 2);
+      for (const value of samples) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+      const peak = samples.indexOf(Math.max(...samples));
+      for (let ms = peak + 1; ms < ARRIVAL_MS; ms += 1) {
+        expect(samples[ms] ?? 1).toBeLessThanOrEqual(samples[ms - 1] ?? 0);
+      }
+    }
+  });
+
+  test("reduced motion cuts the arrival to its final state", () => {
+    for (const ring of rings) {
+      expect(arrivalAlpha(0, ring, true)).toBe(1);
+      expect(arrivalAlpha(ARRIVAL_MS - 1, ring, true)).toBe(1);
+      expect(arrivalAlpha(ARRIVAL_MS, ring, true)).toBe(0);
+    }
+  });
+
+  test("a ring outside the plate is treated as the one at the rim", () => {
+    expect(arrivalAlpha(400, RING_COUNT + 6)).toBe(arrivalAlpha(400, RING_COUNT - 1));
+    expect(arrivalAlpha(400, -3)).toBe(arrivalAlpha(400, 0));
   });
 });
 

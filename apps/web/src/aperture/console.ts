@@ -13,7 +13,7 @@
  *   atom       the user's turn is the certificate; the assistant's restatement
  *              is a proposal, and a proposal is never promoted (KERNEL A9.1)
  *   lexical    a sentence with no name, number or quote has no ledger address;
- *              stemmed terms, ANDed, are the only way back to it (KERNEL A9.4)
+ *              this browser exhibit's fallback is stemmed, ANDed terms (KERNEL A9.4)
  *
  * A name the thread holds is a route even when the question gives only part of
  * it, or gives it in lower case — `names()` sees capitalized runs, a visitor
@@ -84,7 +84,7 @@ export interface AnswerLine {
 
 export interface Answer {
   question: string;
-  /** `⟦recovered #345 · sequence⟧` — the packet's own label for the material. */
+  /** `⟦brought back turn #345 · by its number⟧` — plain speech; the route is named in `meta`. */
   headline: string;
   lines: AnswerLine[];
   /** Mono receipts: trigger, locator, cost. */
@@ -246,7 +246,7 @@ function sequenceAnswer(question: string, seq: number): Answer {
   const episode = episodeAt(seq);
   return {
     question,
-    headline: `⟦recovered #${nf.format(seq)} · sequence⟧`,
+    headline: `⟦brought back turn #${nf.format(seq)} · by its number⟧`,
     lines: [{ kind: "text", text: `${episode.role} · ${episode.content}` }],
     meta: [
       "trigger sequence",
@@ -267,12 +267,12 @@ function trapAnswer(question: string): Answer {
   if (rule.historical !== null) lines.push({ kind: "historical", text: rule.historical });
   lines.push({
     kind: "text",
-    text: `⟦#${nf.format(REVISION_SEQ)} · the turn the certificate points at⟧ ${revision.content}`,
+    text: `⟦turn #${nf.format(REVISION_SEQ)} · where you changed the rule⟧ ${revision.content}`,
     mark: "additive-only",
   });
   return {
     question,
-    headline: `● resident #${nf.format(rule.seq)} · frontier certificate`,
+    headline: `● already in the view · turn #${nf.format(rule.seq)} · nothing had to be fetched`,
     lines,
     meta: [
       "trigger frontier · no page needed",
@@ -303,7 +303,7 @@ function spanAnswer(question: string, subject: PlantedQuote | PlantedNumber): An
   const mark = episode.content.slice(subject.span[0], subject.span[1]);
   return {
     question,
-    headline: `⟦recovered #${nf.format(subject.seq)} · ledger⟧`,
+    headline: `⟦brought back turn #${nf.format(subject.seq)} · by the name beside it⟧`,
     lines: [{ kind: "text", text: `user · ${episode.content}`, mark }],
     meta: [
       `trigger ledger · "${subject.person.toLowerCase()}"`,
@@ -386,7 +386,9 @@ function personAnswer(question: string, entry: Subject): Answer {
   return {
     question,
     headline:
-      seq === null ? "⟦no certificate · one unconfirmed proposal⟧" : `⟦certificate #${nf.format(seq)}⟧`,
+      seq === null
+        ? "⟦you never stated it · one unconfirmed claim by the model⟧"
+        : `⟦you stated it, and it still stands · turn #${nf.format(seq)}⟧`,
     lines,
     meta,
     seq,
@@ -418,7 +420,7 @@ function ambiguousAnswer(question: string, part: string, keys: string[]): Answer
   const capitalized = part.charAt(0).toUpperCase() + part.slice(1);
   return {
     question,
-    headline: `⟦ambiguous · ${nf.format(keys.length)} people named ${capitalized}⟧`,
+    headline: `⟦${nf.format(keys.length)} people in this thread are named ${capitalized}⟧`,
     lines: [
       {
         kind: "absent",
@@ -444,7 +446,7 @@ function memoryAnswer(question: string, found: { memory: PlantedMemory; terms: s
   const { memory, terms } = found;
   return {
     question,
-    headline: `⟦recovered #${nf.format(memory.seq)} · lexical⟧`,
+    headline: `⟦brought back turn #${nf.format(memory.seq)} · by its own words⟧`,
     lines: [{ kind: "text", text: `user · ${memory.text}`, mark: memory.adj }],
     meta: [
       `trigger lexical · ${terms.join(" AND ")}`,
@@ -454,10 +456,10 @@ function memoryAnswer(question: string, found: { memory: PlantedMemory; terms: s
     seq: memory.seq,
     caption:
       "That sentence carries no name, no number, no quote and no identifier, so the loss ledger has no " +
-      "address for it — the only way back is search. Lexical, stemmed, ANDed: the kernel's own tokenizer " +
-      "over the 2,000 name-free memories this thread plants. In the app the same query runs as SQLite " +
-      "FTS5 with the porter stemmer over the whole archive; a browser has no SQLite, so the stemmer here " +
-      "is a suffix rule. No meaning model, either way.",
+      "direct address for it. A bounded address proposal may still nominate a source; this browser card " +
+      "exercises the lexical fallback — stemmed, ANDed terms over the 2,000 name-free memories this " +
+      "thread plants. Any semantic mechanism remains only an address until the kernel verifies the exact " +
+      "witness. The browser has no SQLite or meaning model here.",
   };
 }
 
@@ -465,7 +467,7 @@ function memoryAnswer(question: string, found: { memory: PlantedMemory; terms: s
 function toldAnswer(question: string, turn: ToldTurn): Answer {
   return {
     question,
-    headline: `⟦appended #${nf.format(turn.seq)} · user⟧`,
+    headline: `⟦added to the thread · turn #${nf.format(turn.seq)}⟧`,
     lines: [{ kind: "text", text: `user · ${turn.text}` }],
     meta: [
       "trigger append",
@@ -480,17 +482,25 @@ function toldAnswer(question: string, turn: ToldTurn): Answer {
   };
 }
 
+/** How each route reads in plain speech; the route's own name stays in the receipt line. */
+const ROUTE_PLAINLY: Record<string, string> = {
+  sequence: "by its number",
+  name: "by a name in it",
+  lexical: "by its own words",
+};
+
 /** A turn the visitor added, reached again by one of the thread's own routes. */
 function toldRecovered(question: string, turn: ToldTurn, trigger: string, locator: string): Answer {
   return {
     question,
-    headline: `⟦recovered #${nf.format(turn.seq)} · ${trigger}⟧`,
+    headline: `⟦brought back turn #${nf.format(turn.seq)} · ${ROUTE_PLAINLY[trigger] ?? trigger}⟧`,
     lines: [{ kind: "text", text: `user · ${turn.text}` }],
     meta: [`trigger ${trigger}`, locator, `${nf.format(K.countTokens(turn.text))} tokens paged`],
     seq: turn.seq,
     caption:
       "The turn you added is addressed by the same routes as the other million: a number is an " +
-      "address, a name is a ledger key, and a sentence with neither can still be found by its words.",
+      "address, a name is a ledger key, and a sentence with neither gets only a bounded lexical fallback " +
+      "in this browser card.",
   };
 }
 
@@ -502,7 +512,7 @@ function toldRecovered(question: string, turn: ToldTurn, trigger: string, locato
 function notAMemory(question: string): Answer {
   return {
     question,
-    headline: "⟦not a memory⟧",
+    headline: "⟦no turn about that · not a memory⟧",
     lines: [
       {
         kind: "absent",
@@ -521,7 +531,7 @@ function notAMemory(question: string): Answer {
 function nothing(question: string): Answer {
   return {
     question,
-    headline: "⟦page fault · no route fired⟧",
+    headline: "⟦looked back, found no route to a turn · page fault⟧",
     lines: [
       {
         kind: "absent",
@@ -682,8 +692,8 @@ interface BenchFinal {
 function subsetGloss(final: BenchFinal | null): string {
   const bench = final === null ? "" : ` (${nf.format(final.entries)} entries · ${nf.format(final.mib)} MiB)`;
   return (
-    "The subset running in this tab keeps no vault and no index, so its ledger and byte counts are " +
-    `smaller than the full kernel's bench${bench}; the turns are the same million.`
+    "This tab keeps no vault and no index, so its ledger and byte counts are smaller than the " +
+    `bench's${bench}; the turns are the same million.`
   );
 }
 
@@ -772,7 +782,7 @@ function rail(seq: number): HTMLElement {
 function meter(state: RunState): HTMLElement {
   const bar = el("div", "meter");
   bar.setAttribute("role", "img");
-  bar.setAttribute("aria-label", "Packet composition against the token budget");
+  bar.setAttribute("aria-label", "What fills the model's view, against its fixed budget");
   for (const slot of SLOTS) {
     const span = el("span", "meter__slot");
     span.dataset.slot = slot;

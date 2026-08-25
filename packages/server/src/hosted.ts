@@ -12,10 +12,12 @@ import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { prepareSemanticSqlite } from "@pylos/core";
 import type { Me } from "@pylos/protocol";
 import { CredentialStore } from "./auth/store.ts";
 import { AuthError, AuthService, jwtClaims, type XaiProfile } from "./auth/xai.ts";
 import { createContext, type ServerContext } from "./context.ts";
+import { HeavyOperationGate, TurnConcurrencyGate } from "./limits.ts";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const TOUCH_INTERVAL_MS = 60_000;
@@ -69,6 +71,10 @@ export interface Lease {
 export interface HostedOptions {
   home: string;
   now?: () => number;
+  /** Process-local cap for expensive imports, exports and proof operations. */
+  heavy?: HeavyOperationGate;
+  /** Body-held active turn cap across this hosted process. */
+  turns?: TurnConcurrencyGate;
   /** Injected for tests, and for anything that needs to reach auth.x.ai differently. */
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
   /** Per-user context factory; the default opens that user's vault and auth.json. */
@@ -97,6 +103,8 @@ interface OpenUser {
 
 export class HostedRegistry {
   readonly home: string;
+  readonly heavy: HeavyOperationGate;
+  readonly turns: TurnConcurrencyGate;
   private readonly db: Database;
   private readonly now: () => number;
   private readonly makeContext: (dir: string) => Promise<ServerContext>;
@@ -109,7 +117,12 @@ export class HostedRegistry {
   private readonly login: AuthService;
 
   constructor(options: HostedOptions) {
+    // Hosted mode opens its registry before any per-user vault. Select the
+    // packaged SQLite here so later vault connections can load vec0/lembed0.
+    prepareSemanticSqlite();
     this.home = options.home;
+    this.heavy = options.heavy ?? new HeavyOperationGate();
+    this.turns = options.turns ?? new TurnConcurrencyGate();
     this.now = options.now ?? Date.now;
     this.makeContext = options.context ?? defaultContext;
     this.login = new AuthService({

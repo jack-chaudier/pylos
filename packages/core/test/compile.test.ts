@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { MAX_THREAD_BUDGET, MAX_THREAD_MODEL_BYTES } from "@pylos/protocol";
 import { approxTokens, atomize, compact, compile, compileView, nameSet, packetText } from "../src/index.ts";
 import { cleanup, rng, syntheticTurn, tempVault } from "./helpers.ts";
 
@@ -31,6 +32,20 @@ const QUERIES = [
   "Nothing in particular, just chatting.",
   "What is the deploy window on 2026-03-13?",
 ];
+
+test("the kernel rejects non-positive and oversized token budgets", () => {
+  const { vault, thread } = tempVault();
+  expect(() => vault.threads.create("zero", { budget: 0 })).toThrow(/budget/iu);
+  expect(() => vault.threads.create("oversized", { budget: MAX_THREAD_BUDGET + 1 })).toThrow(/budget/iu);
+  expect(() => compile(vault, thread.id, { budget: 0 })).toThrow(/budget/iu);
+  expect(() => compile(vault, thread.id, { budget: MAX_THREAD_BUDGET + 1 })).toThrow(/budget/iu);
+  expect(() => vault.threads.create("model", { model: "m".repeat(MAX_THREAD_MODEL_BYTES + 1) })).toThrow(
+    /model/iu,
+  );
+  expect(() => compile(vault, thread.id, { model: "m".repeat(MAX_THREAD_MODEL_BYTES + 1) })).toThrow(
+    /model/iu,
+  );
+});
 
 test("the packet never exceeds the budget, at 2k / 8k / 32k", () => {
   for (const budget of [2048, 8192, 32768]) {
@@ -279,4 +294,290 @@ test("the fault line is in the view at every budget, and the budget still holds 
     expect(packet.tokens).toBeLessThanOrEqual(budget);
     expect(approxTokens(packetText(packet.messages))).toBeLessThanOrEqual(budget);
   }
+});
+
+function insertFrontierAtoms(
+  vault: ReturnType<typeof tempVault>["vault"],
+  threadId: string,
+  input: {
+    count: number;
+    value: string;
+    text: string;
+    kind: string;
+    sourceSeq: number;
+    sourceSpan: string;
+    validFromStart?: number;
+    pinned?: boolean;
+  },
+  idPrefix: string,
+): void {
+  const insert = vault.db.query(
+    "INSERT INTO atom (id, thread_id, kind, key, value, text, source_seq, source_span, valid_from_seq, " +
+      "valid_to_seq, superseded_by, phase, authority, scope, pinned, confidence, created_by, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'SUPPORTED', 'user', 'global', ?, 1, 'compile-bound-oracle', ?)",
+  );
+  vault.tx(() => {
+    for (let index = 0; index < input.count; index += 1) {
+      insert.run(
+        `${idPrefix}-${index}`,
+        threadId,
+        input.kind,
+        `compile.bound.${idPrefix}.${index}`,
+        input.value,
+        input.text,
+        input.sourceSeq,
+        input.sourceSpan,
+        input.validFromStart ?? input.sourceSeq,
+        input.pinned === true ? 1 : 0,
+        index,
+      );
+    }
+  });
+}
+
+test("frontier candidate prefetch is SQL-projected and aggregate-byte bounded", () => {
+  const { vault, thread } = tempVault({ budget: 8_192 });
+  const source = vault.episodes.append(thread.id, { role: "user", content: "source" });
+  const giant = "x".repeat(32 * 1024);
+  insertFrontierAtoms(
+    vault,
+    thread.id,
+    { count: 600, value: giant, text: giant, kind: "preference", sourceSeq: source.seq, sourceSpan: "[0,1]" },
+    "obligation",
+  );
+  insertFrontierAtoms(
+    vault,
+    thread.id,
+    { count: 1_200, value: giant, text: giant, kind: "fact", sourceSeq: source.seq, sourceSpan: "[0,1]" },
+    "recent",
+  );
+
+  const atoms = vault.atoms as unknown as {
+    list: (
+      threadId: string,
+      opts?: { phase?: string; limit?: number; kinds?: string[] },
+    ) => Array<{ key: string; value: string; text: string }>;
+  };
+  const originalList = atoms.list;
+  let rows = 0;
+  let hydratedBytes = 0;
+  atoms.list = ((threadId, opts) => {
+    const selected = originalList.call(vault.atoms, threadId, opts);
+    rows += selected.length;
+    hydratedBytes += selected.reduce(
+      (total, atom) =>
+        total +
+        Buffer.byteLength(atom.key, "utf8") +
+        Buffer.byteLength(atom.value, "utf8") +
+        Buffer.byteLength(atom.text, "utf8"),
+      0,
+    );
+    return selected;
+  }) as typeof atoms.list;
+  try {
+    const packet = compile(vault, thread.id, { query: "", turnSeq: source.seq + 1, budget: 8_192 });
+    expect(packet.tokens).toBeLessThanOrEqual(8_192);
+    expect(packetText(packet.messages)).toMatch(/frontier (?:continued|truncated)/iu);
+  } finally {
+    atoms.list = originalList;
+  }
+  // The old SELECT * path hydrates both 600 + 1,200 rows, each carrying two
+  // 32 KiB legal strings. The SQL-first candidate path must not cross that
+  // material into the JS heap or silently stop without a continuation notice.
+  expect(rows).toBe(0);
+  expect(hydratedBytes).toBeLessThanOrEqual(512 * 1024);
+});
+
+test("frontier candidates preserve an old pinned atom behind a dense recent tail", () => {
+  const { vault, thread } = tempVault({ budget: 8_192 });
+  const source = vault.episodes.append(thread.id, { role: "user", content: "pinned source" });
+  insertFrontierAtoms(
+    vault,
+    thread.id,
+    {
+      count: 1,
+      value: "Pinned value",
+      text: "Pinned value",
+      kind: "fact",
+      sourceSeq: source.seq,
+      sourceSpan: "[0,1]",
+      pinned: true,
+    },
+    "old-pinned",
+  );
+  insertFrontierAtoms(
+    vault,
+    thread.id,
+    {
+      count: 4_500,
+      value: "new tail",
+      text: "new tail",
+      kind: "fact",
+      sourceSeq: source.seq,
+      sourceSpan: "[0,1]",
+      validFromStart: 2,
+    },
+    "dense-tail",
+  );
+
+  const packet = compile(vault, thread.id, { query: "", turnSeq: source.seq + 1, budget: 8_192 });
+  const text = packetText(packet.messages);
+  expect(text).toContain("compile.bound.old-pinned.0 = Pinned value");
+  expect(text).toMatch(/frontier (?:continued|truncated)/iu);
+  expect(packet.tokens).toBeLessThanOrEqual(8_192);
+});
+
+test("frontier eviction receipts do not truncate after the first 32 atoms", () => {
+  const { vault, thread } = tempVault({ budget: 8_192 });
+  const source = vault.episodes.append(thread.id, { role: "user", content: "loss source" });
+  insertFrontierAtoms(
+    vault,
+    thread.id,
+    {
+      count: 128,
+      value: "v".repeat(2_048),
+      text: "t".repeat(2_048),
+      kind: "fact",
+      sourceSeq: source.seq,
+      sourceSpan: "[0,1]",
+    },
+    "loss-overflow",
+  );
+
+  compile(vault, thread.id, {
+    query: "",
+    turnSeq: source.seq + 1,
+    budget: 8_192,
+    record: true,
+  });
+  const rows = vault.db
+    .query("SELECT name, seq FROM loss WHERE thread_id = ? AND capsule_id = 'frontier' ORDER BY rowid ASC")
+    .all(thread.id) as Array<{ name: string; seq: number }>;
+  expect(rows.length).toBeGreaterThan(32);
+  expect(new Set(rows.map((row) => row.name)).size).toBe(rows.length);
+  expect(rows.every((row) => row.seq === source.seq)).toBe(true);
+});
+
+test(
+  "frontier candidates use the stable lane tie-break for dense same-sequence atoms",
+  () => {
+    const { vault, thread } = tempVault({ budget: 8_192 });
+    const source = vault.episodes.append(thread.id, { role: "user", content: "dense lane source" });
+    insertFrontierAtoms(
+      vault,
+      thread.id,
+      {
+        count: 100_000,
+        value: "v",
+        text: "v",
+        kind: "fact",
+        sourceSeq: source.seq,
+        sourceSpan: "[0,1]",
+      },
+      "dense-same-seq",
+    );
+
+    const plan = vault.db
+      .query(
+        "EXPLAIN QUERY PLAN SELECT id, rowid AS reader_rowid, valid_from_seq FROM atom " +
+          "WHERE thread_id = ? AND phase = ? AND kind = ? AND pinned = ? " +
+          "AND (valid_from_seq < ? OR (valid_from_seq = ? AND id < ?)) " +
+          "ORDER BY valid_from_seq DESC, id DESC LIMIT ?",
+      )
+      .all(
+        thread.id,
+        "SUPPORTED",
+        "fact",
+        0,
+        Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+        "\uffff",
+        129,
+      ) as Array<{ detail?: unknown }>;
+    const details = plan.map((row) => String(row.detail));
+    expect(details.some((detail) => detail.includes("atom_frontier_lane"))).toBe(true);
+    expect(details.some((detail) => /TEMP B-TREE/iu.test(detail))).toBe(false);
+
+    const candidates = vault.atoms.frontierCandidates(thread.id, {
+      phase: "SUPPORTED",
+      kinds: ["fact"],
+      pinned: false,
+      limit: 64,
+      byteBudget: 512 * 1024,
+    }) as typeof vault.atoms.frontierCandidates extends (...args: never[]) => infer Result
+      ? Result & { scanned?: number }
+      : never;
+    expect(candidates.atoms).toHaveLength(64);
+    expect(candidates.hasMore).toBe(true);
+    expect(candidates.scanned).toBeLessThanOrEqual(128);
+  },
+  { timeout: 30_000 },
+);
+
+test("A4 lane probes use the pinned/kind index before LIMIT", () => {
+  const { vault, thread } = tempVault({ budget: 8_192 });
+  const plan = vault.db
+    .query("EXPLAIN QUERY PLAN SELECT 1 FROM atom WHERE thread_id = ? AND phase = ? AND pinned = 1 LIMIT 1")
+    .all(thread.id, "SUPPORTED") as Array<{ detail?: unknown }>;
+  const kindsPlan = vault.db
+    .query(
+      "EXPLAIN QUERY PLAN SELECT kind FROM atom WHERE thread_id = ? AND phase = ? AND pinned = ? " +
+        "GROUP BY kind ORDER BY kind ASC",
+    )
+    .all(thread.id, "SUPPORTED", 0) as Array<{ detail?: unknown }>;
+  expect(plan.some((row) => String(row.detail).includes("atom_frontier_lane"))).toBe(true);
+  expect(kindsPlan.some((row) => String(row.detail).includes("atom_frontier_lane"))).toBe(true);
+});
+
+test("frontier locators read a giant source once through a strict bounded prefix", () => {
+  const { vault, thread } = tempVault({ budget: 32_768 });
+  const giantSource = vault.episodes.append(thread.id, {
+    role: "user",
+    content: "a".repeat(128 * 1024),
+  });
+  insertFrontierAtoms(
+    vault,
+    thread.id,
+    {
+      count: 256,
+      value: "v",
+      text: "v",
+      kind: "fact",
+      sourceSeq: giantSource.seq,
+      sourceSpan: "[0,1]",
+    },
+    "locator",
+  );
+
+  const episodes = vault.episodes as unknown as {
+    get: (threadId: string, seq: number) => { content: string } | null;
+    getBounded: (...args: unknown[]) => { content: string } | null;
+  };
+  const originalGet = episodes.get;
+  const originalGetBounded = episodes.getBounded;
+  let fullBytes = 0;
+  let boundedCalls = 0;
+  let boundedBytes = 0;
+  episodes.get = ((threadId, seq) => {
+    const episode = originalGet.call(vault.episodes, threadId, seq);
+    if (episode !== null) fullBytes += Buffer.byteLength(episode.content, "utf8");
+    return episode;
+  }) as typeof episodes.get;
+  episodes.getBounded = ((...args: unknown[]) => {
+    const episode = originalGetBounded.apply(vault.episodes, args);
+    if (episode !== null) {
+      boundedCalls += 1;
+      boundedBytes = Math.max(boundedBytes, Buffer.byteLength(episode.content, "utf8"));
+    }
+    return episode;
+  }) as typeof episodes.getBounded;
+  try {
+    compile(vault, thread.id, { query: "", turnSeq: giantSource.seq + 1, budget: 32_768 });
+  } finally {
+    episodes.get = originalGet;
+    episodes.getBounded = originalGetBounded;
+  }
+  expect(fullBytes).toBe(0);
+  expect(boundedCalls).toBeLessThanOrEqual(1);
+  expect(boundedBytes).toBeLessThanOrEqual(64 * 1024);
 });

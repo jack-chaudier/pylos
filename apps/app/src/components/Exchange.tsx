@@ -1,5 +1,6 @@
 import type { Episode, PageRecord } from "@pylos/protocol";
-import { CheckLine, RecoveryLine } from "./EvidenceLines.tsx";
+import { splitReceipts } from "../receipts.ts";
+import { CheckLine, GateLine, RecoveryLine } from "./EvidenceLines.tsx";
 import type { StreamingTurn } from "./Transcript.tsx";
 
 export interface ExchangeProps {
@@ -32,6 +33,16 @@ export function Exchange(props: ExchangeProps): React.JSX.Element {
       : streaming.check === undefined
         ? undefined
         : { names: streaming.check.names, status: "revised" };
+  // The gate's qualifications are receipts appended to the answer's bytes; the
+  // archive keeps them there, the presence sets them in the engraved register.
+  const { body, receipts } = splitReceipts(streaming?.text ?? answer?.content ?? "");
+  const receiptLines = receipts.map((line, index) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: the last line grows as it streams
+    <p key={index} className="receipt-line">
+      {line}
+      {streaming !== undefined && index === receipts.length - 1 ? <span className="cursor" /> : null}
+    </p>
+  ));
 
   return (
     <div className="exchange">
@@ -45,16 +56,23 @@ export function Exchange(props: ExchangeProps): React.JSX.Element {
 
       {pages.length > 0 ? <RecoveryLine threadId={props.threadId} pages={pages} /> : null}
       <CheckLine meta={check} />
+      {streaming !== undefined ? <GateLine receipt={streaming.gate} /> : null}
 
       {streaming !== undefined ? (
-        <p className="answer">
-          {streaming.text}
-          <span className="cursor" />
-        </p>
+        <>
+          <p className="answer">
+            {body}
+            {receipts.length === 0 ? <span className="cursor" /> : null}
+          </p>
+          {receiptLines}
+        </>
       ) : answer !== undefined ? (
-        <p className="answer" data-removed={answer.meta.removed === true}>
-          {answer.content}
-        </p>
+        <>
+          <p className="answer" data-removed={answer.meta.removed === true}>
+            {body}
+          </p>
+          {receiptLines}
+        </>
       ) : null}
 
       {props.awaitingReply ? <div className="no-reply">no reply · send again to retry this turn</div> : null}

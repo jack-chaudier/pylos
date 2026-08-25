@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { Episode, ModelInfo, Packet, ThreadStats, TurnEvent } from "@pylos/protocol";
+import {
+  type ChatMessage,
+  type Episode,
+  MAX_THREAD_BUDGET,
+  MAX_THREAD_MODEL_BYTES,
+  type ModelInfo,
+  type Packet,
+  type ThreadStats,
+  type TurnEvent,
+} from "@pylos/protocol";
+import { fetchProvider } from "../src/providers/fetch.ts";
+import { providerHttpError } from "../src/providers/openai-chat.ts";
+import { readSse } from "../src/providers/sse.ts";
+import type { ProviderEvent, StreamOptions } from "../src/providers/types.ts";
 import { FakeProvider } from "./fake-provider.ts";
 import { collectSse, type Harness, harness, jsonPost } from "./harness.ts";
 
@@ -49,7 +62,290 @@ class HeldCatalogue extends FakeProvider {
   }
 }
 
+class StalledSseProvider extends FakeProvider {
+  private invocation = 0;
+
+  override async *stream(messages: ChatMessage[], opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+    this.calls.push({ messages: structuredClone(messages), opts });
+    this.invocation += 1;
+    if (this.invocation === 1) {
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"partial":'));
+          return new Promise<void>(() => {});
+        },
+        cancel() {
+          return new Promise<void>(() => {});
+        },
+      });
+      for await (const _frame of readSse(body, { inactivityTimeoutMs: 25 })) {
+        // A complete frame would be translated here; this oracle deliberately
+        // never supplies one.
+      }
+      return;
+    }
+    yield { type: "delta", text: "the lane recovered" };
+    yield { type: "done", finishReason: "stop" };
+  }
+}
+
+class StalledHeaderProvider extends FakeProvider {
+  private invocation = 0;
+
+  override async *stream(messages: ChatMessage[], opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+    this.calls.push({ messages: structuredClone(messages), opts });
+    this.invocation += 1;
+    if (this.invocation === 1) {
+      await fetchProvider(
+        () => new Promise<Response>(() => {}),
+        "https://provider.test/chat",
+        {},
+        { label: "Test provider", signal: opts.signal, timeoutMs: 25 },
+      );
+      return;
+    }
+    yield { type: "delta", text: "headers recovered" };
+    yield { type: "done", finishReason: "stop" };
+  }
+}
+
+class PostHeaderAbortProvider extends FakeProvider {
+  private invocation = 0;
+  private markStalled = (): void => {};
+  readonly stalled = new Promise<void>((resolve) => {
+    this.markStalled = resolve;
+  });
+
+  override async *stream(messages: ChatMessage[], opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+    this.calls.push({ messages: structuredClone(messages), opts });
+    this.invocation += 1;
+    if (this.invocation === 1) {
+      const markStalled = this.markStalled;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"partial":'));
+          markStalled();
+          return new Promise<void>(() => {});
+        },
+        cancel() {
+          return new Promise<void>(() => {});
+        },
+      });
+      for await (const _frame of readSse(body, {
+        inactivityTimeoutMs: 30_000,
+        signal: opts.signal,
+      })) {
+        // The post-header caller abort must settle this read first.
+      }
+      return;
+    }
+    yield { type: "delta", text: "post-header abort released the lane" };
+    yield { type: "done", finishReason: "stop" };
+  }
+}
+
+class CommentHeartbeatProvider extends FakeProvider {
+  private invocation = 0;
+
+  override async *stream(messages: ChatMessage[], opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+    this.calls.push({ messages: structuredClone(messages), opts });
+    this.invocation += 1;
+    if (this.invocation === 1) {
+      const heartbeat = new TextEncoder().encode(": keep-alive\n\n");
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          return new Promise<void>((resolve) => {
+            setTimeout(() => {
+              try {
+                controller.enqueue(heartbeat);
+              } catch {
+                // The hard deadline may have cancelled first.
+              }
+              resolve();
+            }, 5);
+          });
+        },
+        cancel() {
+          return new Promise<void>(() => {});
+        },
+      });
+      for await (const _frame of readSse(body, {
+        inactivityTimeoutMs: 100,
+        totalTimeoutMs: 40,
+        maxStreamBytes: 1024,
+        signal: opts.signal,
+      })) {
+        // Comments produce no frames; the overall deadline remains binding.
+      }
+      return;
+    }
+    yield { type: "delta", text: "heartbeat deadline released the lane" };
+    yield { type: "done", finishReason: "stop" };
+  }
+}
+
+class SlowErrorBodyProvider extends FakeProvider {
+  private invocation = 0;
+
+  override async *stream(messages: ChatMessage[], opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+    this.calls.push({ messages: structuredClone(messages), opts });
+    this.invocation += 1;
+    if (this.invocation === 1) {
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          return new Promise<void>((resolve) => {
+            setTimeout(() => {
+              try {
+                controller.enqueue(new Uint8Array([120]));
+              } catch {
+                // The absolute body deadline may have cancelled first.
+              }
+              resolve();
+            }, 5);
+          });
+        },
+        cancel() {
+          return new Promise<void>(() => {});
+        },
+      });
+      throw await providerHttpError("Test provider", new Response(body, { status: 500 }), {
+        inactivityTimeoutMs: 100,
+        totalTimeoutMs: 40,
+      });
+    }
+    yield { type: "delta", text: "error body deadline released the lane" };
+    yield { type: "done", finishReason: "stop" };
+  }
+}
+
+/** A first stream that ends without an answer, then an ordinary reply. */
+class SilentProvider extends FakeProvider {
+  private invocation = 0;
+  private readonly silence: string | undefined;
+
+  constructor(silence?: string) {
+    super();
+    this.silence = silence;
+  }
+
+  override async *stream(messages: ChatMessage[], opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+    this.calls.push({ messages: structuredClone(messages), opts });
+    this.invocation += 1;
+    if (this.invocation === 1) {
+      if (this.silence !== undefined) yield { type: "delta", text: this.silence };
+      yield { type: "done", finishReason: "stop" };
+      return;
+    }
+    yield { type: "delta", text: "the retry was recorded" };
+    yield { type: "done", finishReason: "stop" };
+  }
+}
+
 describe("turns on one thread are serialized", () => {
+  test("a stalled provider frame fails and releases the thread lane", async () => {
+    const provider = new StalledSseProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "first question" });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({ code: "provider_timeout" }),
+    ]);
+    expect(
+      failed.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+    ).toBe(false);
+
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "second question" });
+    expect(recovered.at(-1)).toMatchObject({
+      type: "done",
+      episode: { content: "the lane recovered" },
+    });
+    const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    expect(episodes.map((episode) => episode.role)).toEqual(["user", "user", "assistant"]);
+  });
+
+  test("a stalled provider header fetch fails and releases the thread lane", async () => {
+    const provider = new StalledHeaderProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "first question" });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({ code: "provider_timeout" }),
+    ]);
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "second question" });
+    expect(recovered.at(-1)).toMatchObject({ type: "done", episode: { content: "headers recovered" } });
+  });
+
+  test("a client abort after provider headers cancels the stalled body and releases the thread lane", async () => {
+    const provider = new PostHeaderAbortProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+    const abandoned = new AbortController();
+    const first = h
+      .fetch(`/api/threads/${thread}/turn`, {
+        ...jsonPost({ text: "first question" }),
+        signal: abandoned.signal,
+      })
+      .then(collectSse);
+
+    await provider.stalled;
+    abandoned.abort(new Error("client left after provider headers"));
+    await first.catch(() => undefined);
+
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "second question" });
+    expect(recovered.at(-1)).toMatchObject({
+      type: "done",
+      episode: { content: "post-header abort released the lane" },
+    });
+    const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    expect(episodes.map((episode) => episode.role)).toEqual(["user", "user", "assistant"]);
+  }, 2_000);
+
+  test("comment heartbeats hit the hard deadline and release the thread lane", async () => {
+    const provider = new CommentHeartbeatProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "first question" });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({
+        code: "provider_timeout",
+        message: "Provider stream exceeded the 40 ms overall deadline.",
+      }),
+    ]);
+    expect(
+      failed.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+    ).toBe(false);
+
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "second question" });
+    expect(recovered.at(-1)).toMatchObject({
+      type: "done",
+      episode: { content: "heartbeat deadline released the lane" },
+    });
+  });
+
+  test("a slow-drip provider error body hits its deadline and releases the thread lane", async () => {
+    const provider = new SlowErrorBodyProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "first question" });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({ code: "provider_error" }),
+    ]);
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "second question" });
+    expect(recovered.at(-1)).toMatchObject({
+      type: "done",
+      episode: { content: "error body deadline released the lane" },
+    });
+  });
+
   test("the slower turn still commits first: user A, assistant A, user B, assistant B", async () => {
     const { h, provider } = await fixture();
     const thread = await newThread(h);
@@ -216,6 +512,7 @@ async function threadWithLostValue(h: Harness, provider: FakeProvider): Promise<
 
 const DRAFT = "The amount was 48250 usd.";
 const REISSUED = "The amount was 48250 usd — the Valletta contract.";
+const QUALIFIED_REISSUED = `${REISSUED}\n\n⟨pylos UNKNOWN · no turn in the archive backs this recollection⟩`;
 const ATTACHED = "The kiln at Sagres fired unevenly because the flue was blocked.";
 
 describe("the full turn path", () => {
@@ -233,8 +530,8 @@ describe("the full turn path", () => {
       "episode",
       "packet",
       "page",
-      "delta",
       "check",
+      "gate",
       "delta",
       "done",
     ]);
@@ -242,9 +539,11 @@ describe("the full turn path", () => {
     const check = events.find((event) => event.type === "check");
     expect(check?.type === "check" && check.names).toEqual(["48250 usd"]);
     expect(check?.type === "check" && check.pages.some((page) => page.seqs.includes(1))).toBe(true);
+    const gate = events.find((event) => event.type === "gate");
+    expect(gate?.type === "gate" && gate.receipt.digest).toMatch(/^[0-9a-f]{64}$/);
 
     const done = events.at(-1) as Extract<TurnEvent, { type: "done" }>;
-    expect(done.episode.content).toBe(REISSUED);
+    expect(done.episode.content).toBe(QUALIFIED_REISSUED);
     expect(done.episode.meta.check?.status).toBe("revised");
     expect(done.episode.meta.check?.names).toEqual(["48250 usd"]);
     expect(done.episode.meta.roundsDigest).toMatch(/^[0-9a-f]{64}$/);
@@ -261,6 +560,25 @@ describe("the full turn path", () => {
     expect(packet.rounds?.[1]?.pages.some((page) => page.trigger === "model")).toBe(true);
     expect(packet.rounds?.[2]?.pages.some((page) => page.trigger === "check")).toBe(true);
   }, 20_000);
+
+  test("a provider answer quoting a recovery marker still verifies on the next turn", async () => {
+    const { h, provider } = await fixture();
+    const thread = await newThread(h);
+    provider.reply("You showed me ⟦recovered #1 · user⟧ and I am quoting it back.");
+    await h.sse(`/api/threads/${thread}/turn`, { text: "what were you shown?" });
+    provider.reply("Nothing new since then.");
+    await h.sse(`/api/threads/${thread}/turn`, { text: "and now?" });
+
+    // The quoted marker is archive text in the second turn's recent window; it
+    // is not a page this packet admitted, and verification must not read it as one.
+    const sent = (provider.calls.at(-1)?.messages ?? []).map((message) => message.content).join("\n");
+    expect(sent).toContain("⟦recovered #1 · user⟧");
+    const verified = await h.json<{ ok: boolean; reason?: string }>(
+      `/api/threads/${thread}/verify`,
+      jsonPost({}),
+    );
+    expect(verified.ok, verified.reason).toBe(true);
+  });
 
   test("an attachment uploaded before the turn is in the view the model is sent", async () => {
     const { h, provider } = await fixture();
@@ -284,6 +602,91 @@ describe("the full turn path", () => {
     const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
     expect(episodes.map((episode) => episode.role)).toEqual(["attachment", "user", "assistant"]);
     expect(episodes[0]?.meta.name).toBe("kiln.txt");
+  });
+});
+
+describe("a stream that carries no answer", () => {
+  test("zero deltas fail the turn: nothing is appended and the resend succeeds", async () => {
+    const provider = new SilentProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "who signed it?" });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({
+        code: "empty_answer",
+        message: "The model returned no reply — the turn was not recorded; send again to retry.",
+      }),
+    ]);
+    expect(
+      failed.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+    ).toBe(false);
+
+    // The question was said, so it stays; nothing else was written for it.
+    const said = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    expect(said.map((episode) => episode.role)).toEqual(["user"]);
+    // The attempt's receipt is queryable exactly as a provider failure leaves it.
+    const packet = await h.json<Packet>(`/api/threads/${thread}/packets/1`);
+    expect(packet.status).toBe("pending");
+    expect(packet.answerReceipt).toBeUndefined();
+
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "who signed it?" });
+    const done = recovered.at(-1);
+    expect(done?.type).toBe("done");
+    expect(done?.type === "done" && done.episode.content).toContain("the retry was recorded");
+    const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    expect(episodes.map((episode) => episode.role)).toEqual(["user", "user", "assistant"]);
+    const verified = await h.json<{ ok: boolean; reason?: string }>(
+      `/api/threads/${thread}/verify`,
+      jsonPost({}),
+    );
+    expect(verified.ok, verified.reason).toBe(true);
+  });
+
+  test("a whitespace-only answer is refused the same way", async () => {
+    const provider = new SilentProvider("  \n\t ");
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "say something" });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({ code: "empty_answer" }),
+    ]);
+    expect(
+      failed.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+    ).toBe(false);
+    const said = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    expect(said.map((episode) => episode.role)).toEqual(["user"]);
+
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, { text: "say something" });
+    const done = recovered.at(-1);
+    expect(done?.type).toBe("done");
+    expect(done?.type === "done" && done.episode.content).toContain("the retry was recorded");
+  });
+
+  test("the gateway reports the same failure instead of an empty completion", async () => {
+    const provider = new SilentProvider();
+    const h = await harness({ provider });
+    open.push(h);
+    const thread = await newThread(h);
+
+    const response = await h.fetch("/v1/chat/completions", {
+      ...jsonPost({
+        model: "grok-4.6",
+        stream: false,
+        messages: [{ role: "user", content: "who signed it?" }],
+      }),
+      headers: { "Content-Type": "application/json", "X-Pylos-Thread": thread },
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: "The model returned no reply — the turn was not recorded; send again to retry.",
+      code: "empty_answer",
+    });
+    const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    expect(episodes.map((episode) => episode.role)).toEqual(["user"]);
   });
 });
 
@@ -360,6 +763,147 @@ describe("the model divider", () => {
     const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
     expect(episodes.map((episode) => episode.role)).toEqual(["user", "assistant", "user", "assistant"]);
   });
+
+  test("speaker lookup crosses a 512-episode gap for handoff and the next turn", async () => {
+    const appendGap = (thread: string, h: Harness): void => {
+      const kernel = h.context.kernel as unknown as {
+        vault: {
+          episodes: {
+            appendMany(threadId: string, inputs: Array<Record<string, unknown>>): Episode[];
+          };
+        };
+      };
+      kernel.vault.episodes.appendMany(
+        thread,
+        Array.from({ length: 513 }, (_, index) => ({
+          role: "system",
+          content: `gap ${index}`,
+        })),
+      );
+    };
+
+    const { h, provider } = await fixture();
+    const direct = await newThread(h);
+    provider.reply("first direct");
+    await h.sse(`/api/threads/${direct}/turn`, { text: "one", model: "grok-4.6" });
+    appendGap(direct, h);
+    const handoff = await h.fetch(`/api/threads/${direct}/handoff`, jsonPost({ model: "grok-toolless" }));
+    expect(handoff.status).toBe(200);
+    expect(((await handoff.json()) as Episode).role).toBe("handoff");
+
+    const automatic = await newThread(h);
+    provider.reply("first automatic");
+    await h.sse(`/api/threads/${automatic}/turn`, { text: "one", model: "grok-4.6" });
+    appendGap(automatic, h);
+    provider.reply("second automatic");
+    const events = await h.sse(`/api/threads/${automatic}/turn`, {
+      text: "two",
+      model: "grok-toolless",
+    });
+    expect(events.filter((event) => event.type === "episode").map((event) => event.episode.role)).toEqual([
+      "handoff",
+      "user",
+    ]);
+  });
+});
+
+describe("request field bounds", () => {
+  test("native turn rejects invalid budget and model before claiming the lane or writing rows", async () => {
+    const { h } = await fixture();
+    const thread = await newThread(h);
+    const originalEnter = h.context.kernel.enterTurn;
+    let entered = 0;
+    h.context.kernel.enterTurn = (threadId) => {
+      entered += 1;
+      return originalEnter.call(h.context.kernel, threadId);
+    };
+    try {
+      const cases = [
+        { body: { text: "too much", budget: MAX_THREAD_BUDGET + 1 }, status: 413, code: "budget_too_large" },
+        { body: { text: "not positive", budget: 0 }, status: 400, code: "invalid_budget" },
+        { body: { text: "not text", model: 42 }, status: 400, code: "invalid_model" },
+        {
+          body: { text: "too long", model: "m".repeat(MAX_THREAD_MODEL_BYTES + 1) },
+          status: 413,
+          code: "model_too_large",
+        },
+      ] as const;
+      for (const testCase of cases) {
+        const response = await h.fetch(`/api/threads/${thread}/turn`, jsonPost(testCase.body));
+        expect(response.status).toBe(testCase.status);
+        expect(await response.json()).toMatchObject({ code: testCase.code });
+      }
+      expect(entered).toBe(0);
+      expect(await h.json<Episode[]>(`/api/threads/${thread}/episodes`)).toEqual([]);
+    } finally {
+      h.context.kernel.enterTurn = originalEnter;
+    }
+  });
+
+  test("a turn larger than its own budget streams turn_too_large and writes nothing (A12.2)", async () => {
+    const { h, provider } = await fixture();
+    const thread = await newThread(h);
+    provider.reply("the lane is free");
+
+    const failed = await h.sse(`/api/threads/${thread}/turn`, { text: "x".repeat(20_000), budget: 64 });
+    expect(failed.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({ code: "turn_too_large" }),
+    ]);
+    expect(
+      failed.some((event) => event.type === "gate" || event.type === "delta" || event.type === "done"),
+    ).toBe(false);
+    expect(provider.calls).toHaveLength(0);
+    expect(await h.json<Episode[]>(`/api/threads/${thread}/episodes`)).toEqual([]);
+
+    // The refused turn recorded its budget on the thread, so the recovery turn
+    // states an ordinary one; the lane itself must be free.
+    const recovered = await h.sse(`/api/threads/${thread}/turn`, {
+      text: "a question that fits",
+      budget: 8_192,
+    });
+    expect(recovered.at(-1)).toMatchObject({ type: "done", episode: { content: "the lane is free" } });
+  });
+
+  test("gateway and handoff reject untyped or oversized models before side effects", async () => {
+    const { h } = await fixture();
+    const thread = await newThread(h);
+    const cases = [
+      { model: 42, status: 400, code: "invalid_model" },
+      { model: "m".repeat(MAX_THREAD_MODEL_BYTES + 1), status: 413, code: "model_too_large" },
+    ] as const;
+    let created = 0;
+    const originalCreate = h.context.kernel.createThread;
+    h.context.kernel.createThread = async (...args) => {
+      created += 1;
+      return originalCreate.apply(h.context.kernel, args);
+    };
+    try {
+      for (const testCase of cases) {
+        const response = await h.fetch("/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: testCase.model, messages: [{ role: "user", content: "hello" }] }),
+        });
+        expect(response.status).toBe(testCase.status);
+        expect(await response.json()).toMatchObject({ code: testCase.code });
+      }
+      expect(created).toBe(0);
+    } finally {
+      h.context.kernel.createThread = originalCreate;
+    }
+
+    const before = await h.json<Episode[]>(`/api/threads/${thread}/episodes`);
+    for (const testCase of cases) {
+      const response = await h.fetch(`/api/threads/${thread}/handoff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: testCase.model }),
+      });
+      expect(response.status).toBe(testCase.status);
+      expect(await response.json()).toMatchObject({ code: testCase.code });
+    }
+    expect(await h.json<Episode[]>(`/api/threads/${thread}/episodes`)).toEqual(before);
+  });
 });
 
 describe("the gateway and the check round", () => {
@@ -378,7 +922,7 @@ describe("the gateway and the check round", () => {
     expect(body.choices[0]?.message.content).toBe(REISSUED);
   }, 20_000);
 
-  test("a stream retracts the draft before the replacement deltas", async () => {
+  test("a stream gates the committed answer without draft or retract chunks", async () => {
     const { h, provider } = await fixture();
     const thread = await threadWithLostValue(h, provider);
     provider.reply(DRAFT);
@@ -400,17 +944,18 @@ describe("the gateway and the check round", () => {
       .map((payload) => JSON.parse(payload) as GatewayChunk);
 
     const draftAt = frames.findIndex((frame) => frame.choices?.[0]?.delta.content === DRAFT);
-    const retractAt = frames.findIndex((frame) => frame.x_pylos !== undefined);
+    const gateAt = frames.findIndex((frame) => frame.x_pylos?.event === "gate");
     const finalAt = frames.findIndex((frame) => frame.choices?.[0]?.delta.content === REISSUED);
-    expect(draftAt).toBeGreaterThanOrEqual(0);
-    expect(retractAt).toBeGreaterThan(draftAt);
-    expect(finalAt).toBeGreaterThan(retractAt);
-    expect(frames[retractAt]?.x_pylos).toEqual({ event: "check", names: ["48250 usd"], retract: true });
-    expect(frames[retractAt]?.choices?.[0]?.delta).toEqual({});
+    expect(draftAt).toBe(-1);
+    expect(gateAt).toBeGreaterThanOrEqual(0);
+    expect(frames[gateAt]?.x_pylos?.receipt).toBeDefined();
+    expect(frames.some((frame) => frame.x_pylos?.event === "check")).toBe(false);
+    expect(frames.some((frame) => frame.x_pylos?.retract === true)).toBe(false);
+    expect(finalAt).toBeGreaterThan(gateAt);
     expect(frames.at(-1)?.choices?.[0]?.finish_reason).toBe("stop");
   }, 20_000);
 
-  test("a check that could not be run still streams the kept draft", async () => {
+  test("a check that could not be run still streams the qualified kept draft", async () => {
     const { h, provider } = await fixture();
     const thread = await threadWithLostValue(h, provider);
     provider.reply(DRAFT);
@@ -426,9 +971,21 @@ describe("the gateway and the check round", () => {
         messages: [{ role: "user", content: "The number?" }],
       }),
     });
-    const text = await response.text();
-    expect(text).toContain('"retract":true');
-    expect(text).toContain("could not be re-read");
+    const frames = (await response.text())
+      .split("\n\n")
+      .flatMap((frame) => (frame.startsWith("data: ") ? [frame.slice(6)] : []))
+      .filter((payload) => payload !== "[DONE]")
+      .map((payload) => JSON.parse(payload) as GatewayChunk);
+    const gateAt = frames.findIndex((frame) => frame.x_pylos?.event === "gate");
+    const answerAt = frames.findIndex((frame) => frame.choices?.[0]?.delta.content?.includes(DRAFT));
+    const answer = frames.map((frame) => frame.choices?.[0]?.delta.content ?? "").join("");
+    expect(gateAt).toBeGreaterThanOrEqual(0);
+    expect(frames[gateAt]?.x_pylos?.receipt).toBeDefined();
+    expect(answerAt).toBeGreaterThan(gateAt);
+    expect(answer).toContain(DRAFT);
+    expect(answer).not.toContain("could not be re-read");
+    expect(frames.some((frame) => frame.x_pylos?.event === "check")).toBe(false);
+    expect(frames.some((frame) => frame.x_pylos?.retract === true)).toBe(false);
 
     const episodes = await h.json<Episode[]>(`/api/threads/${thread}/episodes?limit=1`);
     expect(episodes[0]?.meta.check?.status).toBe("check-failed");
@@ -437,5 +994,5 @@ describe("the gateway and the check round", () => {
 
 interface GatewayChunk {
   choices?: Array<{ delta: { content?: string }; finish_reason: string | null }>;
-  x_pylos?: { event: string; names: string[]; retract: boolean };
+  x_pylos?: { event?: string; receipt?: Record<string, unknown>; names?: string[]; retract?: boolean };
 }
