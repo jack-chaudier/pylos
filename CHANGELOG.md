@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 — 2026-08-25
 
 * **Kernel** (`@pylos/core`): a provider stream that returns no reply no longer commits an empty assistant turn — the lane fails the turn with "the model returned no reply — the turn was not recorded; send again to retry", leaves the user's question as the newest turn, and a resend retries cleanly. The OpenAI-compatible gateway reports the same failure instead of an empty completion.
 * **App, kernel** (`@pylos/core`, `apps/app`): a passing chain verification is now recorded in the vault (migration `029-chain-verified`), so the chain figure lights after you verify and honestly returns to `—` when new turns arrive; thread stats carry `verifiedTo` once a verify has passed. A checkpoint the writer left on append is not, and never was, a claim that anything was verified.
