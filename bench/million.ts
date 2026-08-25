@@ -23,15 +23,17 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   atomize,
   COUNTERS,
   capsuleTokensFor,
   compact,
+  compactionPending,
   compile,
   type EpisodeInput,
+  MAX_CAPSULE_WORK_PER_COMPACT,
   openVault,
   packetText,
   residentLeafCount,
@@ -60,6 +62,17 @@ import corePackage from "../packages/core/package.json";
 // corpus cannot contain, and that is a statement about this list.
 import { vocab } from "../packages/core/src/pure/corpus/vocab.ts";
 import { bm25Packet, RollingSummary } from "./baseline.ts";
+
+/** Fixed epoch for every bench episode: the seed, not the clock, fixes the archive. */
+const BENCH_TS_BASE = 1_760_000_000_000;
+
+/**
+ * The thread id seeds the hash chain and prints inside packet headers, so a
+ * reproducible run has to name it from the seed instead of minting one.
+ */
+function benchThreadId(seed: string): string {
+  return `th_bench_million_${seed.replace(/[^A-Za-z0-9_-]/gu, "-").slice(0, 64)}`;
+}
 
 export interface MillionOptions {
   turns: number;
@@ -202,11 +215,22 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
 
   const resultsDir = join(import.meta.dir, "results");
   mkdirSync(resultsDir, { recursive: true });
+  const outPath = options.out ?? join(resultsDir, `million-${options.seed}.json`);
+  const markdownPath = outPath.replace(/\.json$/u, ".md");
+  for (const retainedPath of [outPath, markdownPath]) {
+    if (existsSync(retainedPath)) {
+      throw new Error(`million run output already exists: ${retainedPath}; choose a unique run output`);
+    }
+  }
   const home = options.home ?? join(resultsDir, "tmp", `vault-${options.seed}`);
   rmSync(home, { recursive: true, force: true });
 
   const vault = openVault({ home, fast: true });
-  const thread = vault.threads.create(`bench-${options.seed}`, { budget: options.budget });
+  const thread = vault.threads.create(
+    `bench-${options.seed}`,
+    { budget: options.budget },
+    { id: benchThreadId(options.seed), createdAt: BENCH_TS_BASE },
+  );
   const corpus = createCorpus(options.seed, options.turns);
   const manifest = corpus.manifest;
   const corpusStems = stemIndex(manifest);
@@ -239,7 +263,7 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
       inputs.push({
         role: episode.role,
         content: episode.content,
-        ts: 1_760_000_000_000 + seq * 60_000,
+        ts: BENCH_TS_BASE + seq * 60_000,
         ...(episode.model === undefined ? {} : { model: episode.model, provider: "bench" }),
       });
     }
@@ -251,7 +275,18 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
         thread.id,
         written.map((e) => e.seq),
       );
-      compact(vault, thread.id, { budget: options.budget });
+      const maxPasses = Math.ceil(inputs.length / 16) + 8;
+      let passes = 0;
+      while (compactionPending(vault, thread.id, 8, options.budget)) {
+        if (passes >= maxPasses) {
+          throw new Error(`bounded compaction made insufficient progress through episode ${end}`);
+        }
+        const sealed = compact(vault, thread.id, { budget: options.budget });
+        if (sealed.length === 0 || sealed.length > MAX_CAPSULE_WORK_PER_COMPACT) {
+          throw new Error(`bounded compaction returned ${sealed.length} work items through episode ${end}`);
+        }
+        passes += 1;
+      }
       return written;
     });
     const elapsed = performance.now() - t0;
@@ -371,9 +406,8 @@ export async function runMillion(options: MillionOptions): Promise<MillionResult
   };
   output.digest = createHash("sha256").update(JSON.stringify(output)).digest("hex");
 
-  const outPath = options.out ?? join(resultsDir, `million-${options.seed}.json`);
   await Bun.write(outPath, `${JSON.stringify(output, null, 2)}\n`);
-  await Bun.write(outPath.replace(/\.json$/, ".md"), renderReport(output));
+  await Bun.write(markdownPath, renderReport(output));
   log(
     `\n${output.final.ok ? "PASS" : `FAIL (${output.final.firstFailure})`} · ` +
       `${output.final.wall.totalSec}s · ${output.final.wall.turnsPerSec.toLocaleString()} turns/s · ` +
@@ -389,7 +423,7 @@ interface CheckpointInput {
   threadId: string;
   corpus: Corpus;
   manifest: CorpusManifest;
-  /** First five letters of every word the corpus can write — the fault probe avoids all of them. */
+  /** Independent coarse corpus vocabulary used before the exact FTS-negative check. */
   corpusStems: ReadonlySet<string>;
   seq: number;
   budget: number;
@@ -589,13 +623,16 @@ function runCheckpoint(input: CheckpointInput): { checkpoint: CheckpointResult; 
   // returns nothing. What is left is the miss itself, and the kernel must say so.
   const faultRng = stream(manifest.seed, "fault", seq);
   for (let i = 0; i < FAULT_PROBES; i += 1) {
-    const first = inventedWord(faultRng, input.corpusStems);
-    const second = inventedWord(faultRng, input.corpusStems);
+    const first = inventedAbsentWord(vault, threadId, faultRng, input.corpusStems);
+    let second = inventedAbsentWord(vault, threadId, faultRng, input.corpusStems);
+    while (second === first) second = inventedAbsentWord(vault, threadId, faultRng, input.corpusStems);
     const question = faultQuestion(i, first, second);
     // By construction, and asserted rather than assumed: the only searchable
     // words in the question are the two the corpus cannot contain.
     const terms = ftsTerms(question);
     if (terms.length !== 2 || terms[0] !== first || terms[1] !== second) fail(`fault-terms@${seq}:${i}`);
+    if (terms.some((term) => vault.episodes.search(threadId, term, 1, { mode: "strict" }).length !== 0))
+      fail(`fault-negative-control@${seq}:${i}`);
     const packet = packetFor(question);
     tokens.push(packet.tokens);
     if (packet.tokens > budget) budgetOk = false;
@@ -896,6 +933,27 @@ function inventedWord(rng: Rng, corpusStems: ReadonlySet<string>): string {
     word = word.slice(0, length);
     if (!corpusStems.has(word.slice(0, 5))) return word;
   }
+}
+
+/**
+ * FTS5's Porter tokenizer can reduce a longer invented token to a shorter
+ * corpus word (for example, an invented extension of "name") even when their
+ * first five characters differ. The negative control is therefore accepted
+ * only after the real lexical index independently returns no row for the exact
+ * token. This selects the fixture; it does not decide whether the subsequent
+ * natural question faults.
+ */
+function inventedAbsentWord(
+  vault: Vault,
+  threadId: string,
+  rng: Rng,
+  corpusStems: ReadonlySet<string>,
+): string {
+  for (let attempt = 0; attempt < 10_000; attempt += 1) {
+    const word = inventedWord(rng, corpusStems);
+    if (vault.episodes.search(threadId, word, 1, { mode: "strict" }).length === 0) return word;
+  }
+  throw new Error("could not construct an FTS-negative fault control after 10,000 attempts");
 }
 
 /**
@@ -1230,5 +1288,6 @@ if (import.meta.main) {
     seed: flag("seed", "1"),
     budget: Number(flag("budget", "8192")),
     ...(args.includes("--out") ? { out: flag("out", "") } : {}),
+    ...(args.includes("--home") ? { home: flag("home", "") } : {}),
   });
 }

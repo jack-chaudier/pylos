@@ -1,15 +1,27 @@
+import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { CAPSULE_SOURCE_NAMES_PER_EPISODE } from "@pylos/protocol";
 import {
   atomize,
   compact,
+  compactionPending,
+  exportBundleStream,
+  importBundleStream,
   levelSpan,
+  MAX_CAPSULE_WORK_PER_COMPACT,
   nameSet,
+  openVault,
   ROOT_LEVEL,
   residentCapsules,
   residentLeafCount,
+  runTurn,
   sourceNamesForRange,
+  stats,
 } from "../src/index.ts";
 import { resolves } from "../src/page.ts";
+import { canonicalJson } from "../src/pure/canonical.ts";
+import { names } from "../src/pure/names.ts";
 import { cleanup, rng, syntheticTurn, tempVault } from "./helpers.ts";
 
 afterAll(cleanup);
@@ -205,3 +217,328 @@ test("the model writer's output is hard-truncated by the kernel", () => {
   expect(leaf?.tokens).toBeLessThanOrEqual(205);
   expect(leaf?.createdBy).toBe("model");
 });
+
+test("capsule text with more than 4096 visible names is mechanically truncated before sealing", () => {
+  const { vault, thread } = tempVault({ budget: 1_000_000 });
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 32 }, (_, index) => ({ role: "user" as const, content: `source ${index}` })),
+  );
+  const proposed = Array.from(
+    { length: 4_097 },
+    (_, index) => `"visible-${index.toString().padStart(4, "0")}"`,
+  ).join(" ");
+  expect(() => compact(vault, thread.id, { budget: 1_000_000, writer: () => proposed })).not.toThrow();
+  const capsule = vault.capsules.at(thread.id, 0, 1);
+  expect(capsule).not.toBeNull();
+  expect(names(capsule?.text ?? "", { max: 4097 }).length).toBeLessThanOrEqual(4096);
+  expect(capsule?.ledgerReceipt).toBeDefined();
+});
+
+test("source-name admission accepts the exact cap and rejects max plus one without wedging the leaf", () => {
+  const { vault, thread } = tempVault({ budget: 1_000_000 });
+  const dense = (count: number): string =>
+    Array.from({ length: count }, (_, index) => `\`source_${index.toString().padStart(4, "0")}\``).join(" ");
+  vault.episodes.append(thread.id, {
+    role: "user",
+    content: dense(CAPSULE_SOURCE_NAMES_PER_EPISODE),
+  });
+  const head = vault.threads.get(thread.id)?.headSeq;
+  expect(() =>
+    vault.episodes.append(thread.id, {
+      role: "user",
+      content: dense(CAPSULE_SOURCE_NAMES_PER_EPISODE + 1),
+    }),
+  ).toThrow(/capsule source-name capacity/);
+  expect(vault.threads.get(thread.id)?.headSeq).toBe(head);
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 31 }, (_, index) => ({ role: "assistant" as const, content: `pad ${index}` })),
+  );
+  expect(() => compact(vault, thread.id, { budget: 1_000_000 })).not.toThrow();
+  expect(vault.capsules.at(thread.id, 0, 1)?.ledgerReceipt).toBeDefined();
+});
+
+test("a reopened pre-cap tail is durably reported read-only before another episode commits", () => {
+  const { vault, thread } = tempVault({ budget: 1_000_000 });
+  vault.episodes.append(thread.id, { role: "user", content: "legacy source" });
+  const oversized = "x".repeat(1024 * 1024 + 1);
+  vault.db.query("UPDATE episode SET content = ? WHERE thread_id = ? AND seq = 1").run(oversized, thread.id);
+  vault.db.query("DELETE FROM capsule_source_readiness WHERE thread_id = ?").run(thread.id);
+  const home = vault.home;
+  vault.close();
+  const reopened = openVault({ home, fast: true });
+  expect(stats(reopened, thread.id).sourceReadiness).toBeUndefined();
+  expect(() => reopened.episodes.append(thread.id, { role: "user", content: "must not commit" })).toThrow(
+    /legacy noncompactable tail/,
+  );
+  expect(stats(reopened, thread.id).sourceReadiness).toMatchObject({
+    status: "noncompactable",
+    readOnly: true,
+    seq: 1,
+  });
+  expect(reopened.threads.get(thread.id)?.headSeq).toBe(1);
+  expect(reopened.episodes.get(thread.id, 1)?.content).toBe(oversized);
+});
+
+test("thread readiness statistics stay scalar across 64 persisted quarantines", () => {
+  const { vault, thread } = tempVault();
+  const threads = [thread];
+  for (let index = 1; index < 64; index += 1) threads.push(vault.threads.create(`legacy ${index}`));
+  const insert = vault.db.query(
+    "INSERT OR REPLACE INTO capsule_source_readiness " +
+      "(thread_id, status, checked_through, seq, reason, checked_at) " +
+      "VALUES (?, 'noncompactable', 0, 1, 'legacy oversized source', 1)",
+  );
+  for (const candidate of threads) insert.run(candidate.id);
+  const db = vault.db as unknown as { query: (sql: string, ...args: unknown[]) => unknown };
+  const originalQuery = db.query;
+  db.query = ((sql: string, ...args: unknown[]) => {
+    if (/SELECT[\s\S]*content[\s\S]*FROM episode/iu.test(sql)) {
+      throw new Error("readiness statistics hydrated episode content");
+    }
+    return originalQuery.call(vault.db, sql, ...args);
+  }) as typeof db.query;
+  try {
+    for (const candidate of threads) {
+      expect(stats(vault, candidate.id).sourceReadiness?.status).toBe("noncompactable");
+    }
+  } finally {
+    db.query = originalQuery;
+  }
+});
+
+test("validated multi-batch appends advance readiness without rescanning prior episode content", () => {
+  const { vault, thread } = tempVault();
+  const db = vault.db as unknown as { query: (sql: string, ...args: unknown[]) => unknown };
+  const originalQuery = db.query;
+  db.query = ((sql: string, ...args: unknown[]) => {
+    if (/SELECT[\s\S]*content[\s\S]*FROM episode/iu.test(sql)) {
+      throw new Error("validated append rescanned prior episode content");
+    }
+    return originalQuery.call(vault.db, sql, ...args);
+  }) as typeof db.query;
+  try {
+    for (let batch = 0; batch < 4; batch += 1) {
+      vault.episodes.appendMany(
+        thread.id,
+        Array.from({ length: 512 }, (_, index) => ({
+          role: "user" as const,
+          content: `validated batch ${batch} episode ${index}`,
+        })),
+      );
+      const row = vault.db
+        .query("SELECT status, checked_through FROM capsule_source_readiness WHERE thread_id = ?")
+        .get(thread.id) as { status: string; checked_through: number };
+      expect(row).toEqual({ status: "ready", checked_through: (batch + 1) * 512 });
+    }
+  } finally {
+    db.query = originalQuery;
+  }
+});
+
+test("capsule-free backlog advances in bounded passes before any provider call", async () => {
+  const { vault, thread } = tempVault({ budget: 8_192 });
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 8_192 }, (_, index) => ({
+      role: "user" as const,
+      content: `backlog episode ${index + 32}`,
+    })),
+  );
+  expect(vault.capsules.count(thread.id)).toBe(0);
+  const passphrase = "bounded zero-capsule backlog";
+  const target = tempVault({ budget: 8_192 }).vault;
+  const imported = await importBundleStream(
+    target,
+    await exportBundleStream(vault, thread.id, { passphrase }),
+    {
+      passphrase,
+    },
+  );
+  expect(target.capsules.count(imported.threadId)).toBe(0);
+  expect(target.capsuleSourceReadiness(imported.threadId)).toBeNull();
+  expect(compactionPending(target, imported.threadId)).toBe(true);
+  let providerCalled = false;
+  await expect(
+    runTurn(target, imported.threadId, {
+      text: "must wait for bounded catch-up",
+      model: "test-model",
+      provider: async function* () {
+        providerCalled = true;
+        yield { type: "done" as const };
+      },
+    }),
+  ).rejects.toThrow(/bounded compaction backfill is pending/);
+  expect(providerCalled).toBe(false);
+  expect(target.threads.get(imported.threadId)?.headSeq).toBe(8_192);
+  expect(target.capsules.count(imported.threadId)).toBeLessThanOrEqual(MAX_CAPSULE_WORK_PER_COMPACT * 4);
+});
+
+test("a dense legal leaf compacts without the online atom-range cap", () => {
+  const { vault, thread } = tempVault({ budget: 8_192 });
+  const dense = vault.episodes.append(thread.id, {
+    role: "user",
+    content: Array.from({ length: 512 }, (_, index) => `Remember dense fact ${index}: value ${index}.`).join(
+      " ",
+    ),
+  });
+  atomize(vault, thread.id, [dense.seq]);
+  expect(vault.atoms.list(thread.id, { phase: "SUPPORTED", limit: 2_000 }).length).toBe(512);
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 31 }, (_, index) => ({ role: "user" as const, content: `filler ${index}` })),
+  );
+  expect(() => compact(vault, thread.id, { budget: 8_192 })).not.toThrow();
+  expect(vault.capsules.at(thread.id, 0, 1)?.toSeq).toBe(32);
+});
+
+test(
+  "100k concentrated names stay externally derived, exactly pageable, and v2 portable",
+  async () => {
+    const { vault, thread } = tempVault({ budget: 8_192 });
+    vault.episodes.append(thread.id, { role: "user", content: "dense external ledger source" });
+    vault.episodes.appendMany(
+      thread.id,
+      Array.from({ length: 31 }, (_, index) => ({ role: "user" as const, content: `pad ${index}` })),
+    );
+    const insert = vault.db.query(
+      "INSERT INTO atom (id, thread_id, kind, key, value, text, source_seq, source_span, " +
+        "valid_from_seq, valid_to_seq, superseded_by, phase, authority, scope, pinned, confidence, " +
+        "created_by, created_at) VALUES (?, ?, 'fact', ?, ?, '', 1, '[0,3]', 1, NULL, NULL, " +
+        "'PROPOSED', 'model', 'global', 0, 1, 'model:oracle', 1)",
+    );
+    vault.db.transaction(() => {
+      for (let index = 0; index < 100_000; index += 1) {
+        const name = `dense-${index.toString().padStart(6, "0")}`;
+        insert.run(`dense-atom-${index}`, thread.id, name, name);
+      }
+    })();
+
+    const stats = { atomPage: 0, lossBatch: 0, sqlRows: 0, rawRowBytes: 0 };
+    const atoms = vault.atoms as typeof vault.atoms & {
+      inRangeForMigration: typeof vault.atoms.inRangeForMigration;
+    };
+    const originalAtomPage = atoms.inRangeForMigration;
+    atoms.inRangeForMigration = ((...args: Parameters<typeof originalAtomPage>) => {
+      const page = originalAtomPage(...args);
+      stats.atomPage = Math.max(stats.atomPage, page.atoms.length);
+      return page;
+    }) as typeof originalAtomPage;
+    const losses = vault.losses as typeof vault.losses & { add: typeof vault.losses.add };
+    const originalLossAdd = losses.add;
+    losses.add = ((...args: Parameters<typeof originalLossAdd>) => {
+      stats.lossBatch = Math.max(stats.lossBatch, args[3].length);
+      return originalLossAdd(...args);
+    }) as typeof originalLossAdd;
+    const originalQuery = Database.prototype.query;
+    const rawQuery = originalQuery as unknown as (this: Database, sql: string, ...args: unknown[]) => unknown;
+    Database.prototype.query = function (this: Database, sql: string, ...args: unknown[]) {
+      const statement = rawQuery.call(this, sql, ...args) as Record<string, unknown>;
+      return new Proxy(statement, {
+        get(target, property, receiver) {
+          if (property === "all") {
+            return (...parameters: unknown[]) => {
+              const method = Reflect.get(target, property, target) as (...values: unknown[]) => unknown;
+              const result = method.apply(target, parameters);
+              if (Array.isArray(result)) {
+                stats.sqlRows = Math.max(stats.sqlRows, result.length);
+                for (const row of result) {
+                  stats.rawRowBytes = Math.max(
+                    stats.rawRowBytes,
+                    Buffer.byteLength(JSON.stringify(row), "utf8"),
+                  );
+                }
+              }
+              return result;
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    } as unknown as typeof originalQuery;
+
+    try {
+      compact(vault, thread.id, { budget: 8_192, writer: () => "" });
+      const leaf = vault.capsules.at(thread.id, 0, 1);
+      expect(leaf).not.toBeNull();
+      const sealed = leaf as NonNullable<typeof leaf>;
+      const receipt = sealed.ledgerReceipt;
+      if (receipt === undefined) throw new Error("dense capsule receipt missing");
+      expect(receipt.dropped.count).toBe(100_000);
+      expect(receipt.dropped.complete).toBe(false);
+      expect(receipt.dropped.embeddedCount).toBe(sealed.dropped.length);
+      expect(Buffer.byteLength(canonicalJson(sealed.dropped), "utf8")).toBeLessThanOrEqual(64 * 1024);
+      expect(Buffer.byteLength(canonicalJson(sealed.ledgerReceipt), "utf8")).toBeLessThan(2 * 1024);
+      expect(
+        (vault.db.query("SELECT COUNT(*) AS n FROM loss WHERE thread_id = ?").get(thread.id) as { n: number })
+          .n,
+      ).toBe(100_000);
+
+      const digest = createHash("sha256");
+      let exact = 0;
+      for (const entry of sealed.dropped) {
+        digest.update(`${canonicalJson(entry)}\n`, "utf8");
+        exact += 1;
+      }
+      let cursor = receipt.dropped.cursor;
+      while (cursor !== undefined) {
+        const page = vault.capsules.ledgerPage(sealed.id, "dropped", { after: cursor, limit: 256 });
+        expect(page.entries.length).toBeLessThanOrEqual(256);
+        for (const entry of page.entries) {
+          digest.update(`${canonicalJson(entry)}\n`, "utf8");
+          exact += 1;
+        }
+        cursor = page.nextCursor;
+      }
+      expect(exact).toBe(100_000);
+      expect(digest.digest("hex")).toBe(receipt.dropped.digest);
+
+      vault.episodes.appendMany(
+        thread.id,
+        Array.from({ length: 224 }, (_, index) => ({
+          role: "user" as const,
+          content: `later sibling ${index}`,
+        })),
+      );
+      compact(vault, thread.id, { budget: 8_192, writer: () => "" });
+      expect(vault.capsules.at(thread.id, 1, 1)?.carriedCount).toBeGreaterThanOrEqual(100_000);
+
+      const passphrase = "dense-ledger-v2-oracle";
+      const stream = await exportBundleStream(vault, thread.id, { passphrase });
+      const target = tempVault().vault;
+      const imported = await importBundleStream(target, stream, {
+        passphrase,
+      });
+      expect(imported.verified).toBe(true);
+      const restored = target.capsules.get(sealed.id);
+      expect(restored?.ledgerReceipt).toEqual(sealed.ledgerReceipt);
+      expect(
+        (
+          target.db
+            .query("SELECT COUNT(*) AS n FROM capsule_ledger_entry WHERE capsule_id = ? AND part = 'dropped'")
+            .get(sealed.id) as { n: number }
+        ).n,
+      ).toBe(100_000);
+      target.episodes.appendMany(
+        imported.threadId,
+        Array.from({ length: 32 }, (_, index) => ({
+          role: "user" as const,
+          content: `post-import continuation ${index}`,
+        })),
+      );
+      expect(() => compact(target, imported.threadId, { budget: 8_192, writer: () => "" })).not.toThrow();
+      expect(target.capsules.at(imported.threadId, 1, 1)?.carriedCount).toBeGreaterThanOrEqual(100_000);
+    } finally {
+      atoms.inRangeForMigration = originalAtomPage;
+      losses.add = originalLossAdd;
+      Database.prototype.query = originalQuery;
+    }
+    expect(stats.atomPage).toBeLessThanOrEqual(128);
+    expect(stats.lossBatch).toBeLessThanOrEqual(128);
+    expect(stats.sqlRows).toBeLessThanOrEqual(256);
+    expect(stats.rawRowBytes).toBeLessThanOrEqual(128 * 1024);
+  },
+  { timeout: 240_000 },
+);

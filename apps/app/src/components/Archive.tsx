@@ -1,14 +1,15 @@
-import type { Capsule, Episode } from "@pylos/protocol";
+import type { CapsuleView, Episode } from "@pylos/protocol";
 import { useEffect } from "react";
 import { groupedNumber } from "../format.ts";
 import { TimelineRail } from "./TimelineRail.tsx";
 import { type StreamingTurn, Transcript } from "./Transcript.tsx";
 
 export interface ArchiveProps {
+  readOnly?: boolean;
   threadId: string;
   turns: number;
   episodes: Episode[];
-  capsules: Capsule[];
+  capsules: CapsuleView[];
   handoffs: Episode[];
   hasOlder: boolean;
   hasNewer: boolean;
@@ -66,6 +67,7 @@ export function Archive(props: ArchiveProps): React.JSX.Element {
             onViewportChange={(next) =>
               props.onViewportChange({ firstSeq: next.firstSeq, lastSeq: next.lastSeq })
             }
+            readOnly={props.readOnly}
             onForget={props.onForget}
           />
           <TimelineRail

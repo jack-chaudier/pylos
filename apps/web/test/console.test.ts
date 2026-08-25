@@ -41,7 +41,9 @@ describe("the sequence route", () => {
     const card = answer(`What did I say on turn ${SEQUENCE_PROBE}?`);
     expect(card.seq).toBe(SEQUENCE_PROBE);
     expect(card.headline).toContain(`#${SEQUENCE_PROBE}`);
-    expect(card.headline).toContain("sequence");
+    // the header speaks plainly; the route's own name stays in the receipt
+    expect(card.headline).toContain("by its number");
+    expect(card.meta).toContain("trigger sequence");
     expect(text(card.question)).toContain(corpus.episodeAt(SEQUENCE_PROBE).content);
   });
 
@@ -56,6 +58,9 @@ describe("the trap", () => {
   test("answers from the resident certificate and shows both versions of the rule", () => {
     const card = answer(TRAP_QUESTION);
     expect(card.seq).toBe(REVISION_SEQ);
+    expect(card.headline).toBe(
+      `● already in the view · turn #${REVISION_SEQ.toLocaleString("en-US")} · nothing had to be fetched`,
+    );
     expect(card.trap).toBe(true);
     const kinds = card.lines.map((line) => line.kind);
     expect(kinds).toContain("cert");
@@ -87,7 +92,8 @@ describe("the lexical route", () => {
   test("finds a memory with no name in it, by its stemmed terms", () => {
     const card = answer(MEMORY_PROBE.query);
     expect(card.seq).toBe(MEMORY_PROBE.seq);
-    expect(card.headline).toContain("lexical");
+    expect(card.headline).toContain("by its own words");
+    expect(card.meta.join(" ")).toContain("trigger lexical");
     expect(text(MEMORY_PROBE.query)).toContain(MEMORY_PROBE.text);
     expect(corpus.episodeAt(MEMORY_PROBE.seq).content).toBe(MEMORY_PROBE.text);
   });
@@ -106,7 +112,8 @@ describe("the ledger route", () => {
     if (!quote) throw new Error("no planted quotes");
     const card = answer(quote.query);
     expect(card.seq).toBe(quote.seq);
-    expect(card.headline).toContain("ledger");
+    expect(card.headline).toContain("by the name beside it");
+    expect(card.meta.join(" ")).toContain("trigger ledger");
     expect(text(card.question)).toContain(corpus.episodeAt(quote.seq).content);
     expect(card.lines[0]?.mark).toBe(quote.text);
   });
@@ -141,7 +148,8 @@ describe("the name route", () => {
       surname.toLowerCase(),
     ]) {
       const card = answer(query);
-      expect(card.headline).toContain("ambiguous");
+      expect(card.headline).toContain("people in this thread are named");
+      expect(card.meta.join(" ")).toContain("ambiguous");
       expect(card.seq).toBeNull();
       expect(card.lines[0]?.kind).toBe("absent");
       // and every person it offers is one the corpus really planted
@@ -190,7 +198,7 @@ describe("when nothing routes", () => {
     for (const query of ["what is the capital of Bolivia?", "how does a diesel engine start?"]) {
       const card = answer(query);
       expect(card.seq).toBeNull();
-      expect(card.headline).toBe("⟦not a memory⟧");
+      expect(card.headline).toBe("⟦no turn about that · not a memory⟧");
       expect(text(query)).toContain("A model would answer it from the world");
       expect(card.meta.join(" ")).not.toContain("fault");
     }
@@ -200,7 +208,7 @@ describe("when nothing routes", () => {
     const card = answer("what did I say about the glass bridge?");
     expect(card.seq).toBeNull();
     expect(card.headline).toContain("page fault");
-    expect(card.headline).toContain("no route fired");
+    expect(card.headline).toContain("looked back, found no route to a turn");
     expect(card.meta).toContain("trigger fault");
     expect(text(card.question)).toContain("does not guess");
   });
@@ -212,24 +220,24 @@ describe("telling the thread something", () => {
   test("`remember:` appends a turn after the millionth", () => {
     const card = answer(TELL_EXAMPLE);
     expect(card.seq).toBe(TOTAL_TURNS + 1);
-    expect(card.headline).toBe("⟦appended #1,000,001 · user⟧");
+    expect(card.headline).toBe("⟦added to the thread · turn #1,000,001⟧");
     expect(card.lines[0]?.text).toContain("my dog is called Biscuit");
   });
 
   test("and the same routes reach it again: lexical, by name, by number", () => {
     const byWords = answer("what is my dog called?");
     expect(byWords.seq).toBe(TOTAL_TURNS + 1);
-    expect(byWords.headline).toContain("lexical");
+    expect(byWords.headline).toContain("by its own words");
     expect(byWords.lines[0]?.text).toContain("my dog is called Biscuit");
 
     const byName = answer("who is Biscuit?");
     expect(byName.seq).toBe(TOTAL_TURNS + 1);
-    expect(byName.headline).toContain("name");
+    expect(byName.headline).toContain("by a name in it");
 
     expect(turnRef(`turn ${TOTAL_TURNS + 1}`)).toBe(TOTAL_TURNS + 1);
     const byNumber = answer(`What did I say on turn ${TOTAL_TURNS + 1}?`);
     expect(byNumber.seq).toBe(TOTAL_TURNS + 1);
-    expect(byNumber.headline).toContain("sequence");
+    expect(byNumber.headline).toContain("by its number");
   });
 
   test("a second one lands on the next turn, and the first still answers", () => {

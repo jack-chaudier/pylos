@@ -1,11 +1,59 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage } from "@pylos/protocol";
-import { toAnthropicMessages } from "../src/providers/anthropic.ts";
-import { streamOpenAiChat, toOpenAiMessages } from "../src/providers/openai-chat.ts";
-import { inferProvider } from "../src/providers/registry.ts";
+import type { ChatMessage, ModelInfo, ProviderId } from "@pylos/protocol";
+import type { AuthService } from "../src/auth/xai.ts";
+import { AnthropicProvider, toAnthropicMessages } from "../src/providers/anthropic.ts";
+import {
+  MAX_PROVIDER_JSON_BODY_BYTES,
+  providerHttpError,
+  readProviderJson,
+  streamOpenAiChat,
+  toOpenAiMessages,
+} from "../src/providers/openai-chat.ts";
+import { HOSTED_PROVIDER_IDS, inferProvider, ProviderRegistry } from "../src/providers/registry.ts";
 import { readSse } from "../src/providers/sse.ts";
-import type { ProviderEvent } from "../src/providers/types.ts";
+import type { Provider, ProviderEvent } from "../src/providers/types.ts";
 import { redact } from "../src/providers/types.ts";
+
+const RAW_SSE_FRAME_LIMIT = 1024 * 1024;
+
+function countedProvider(id: ProviderId, calls: Map<ProviderId, number>): Provider {
+  return {
+    id,
+    stream(): AsyncIterable<ProviderEvent> {
+      throw new Error(`unexpected ${id} stream`);
+    },
+    async models(): Promise<ModelInfo[]> {
+      calls.set(id, (calls.get(id) ?? 0) + 1);
+      return [{ id: `${id}-model`, provider: id, label: id, available: true, supportsTools: true }];
+    },
+  };
+}
+
+describe("hosted provider policy", () => {
+  test("catalogue and resolution never touch local or user-supplied endpoints", async () => {
+    const calls = new Map<ProviderId, number>();
+    const ids: ProviderId[] = ["xai", "anthropic", "openai", "ollama", "openai-compatible"];
+    const overrides = Object.fromEntries(ids.map((id) => [id, countedProvider(id, calls)])) as Record<
+      ProviderId,
+      Provider
+    >;
+    const registry = new ProviderRegistry({} as AuthService, overrides);
+
+    const models = await registry.models(true, HOSTED_PROVIDER_IDS);
+    expect(models.map((model) => model.provider).sort()).toEqual(["anthropic", "openai", "xai"]);
+    expect(calls.get("ollama") ?? 0).toBe(0);
+    expect(calls.get("openai-compatible") ?? 0).toBe(0);
+    await expect(registry.resolve("ollama/llama3", HOSTED_PROVIDER_IDS)).rejects.toMatchObject({
+      code: "hosted_provider_forbidden",
+      status: 403,
+    });
+    await expect(
+      registry.resolve("openai-compatible/redirecting-model", HOSTED_PROVIDER_IDS),
+    ).rejects.toMatchObject({ code: "hosted_provider_forbidden", status: 403 });
+    expect(calls.get("ollama") ?? 0).toBe(0);
+    expect(calls.get("openai-compatible") ?? 0).toBe(0);
+  });
+});
 
 function sseResponse(frames: string[]): Response {
   const body = new ReadableStream<Uint8Array>({
@@ -38,6 +86,152 @@ describe("the SSE reader", () => {
     const frames: string[] = [];
     for await (const frame of readSse(body)) frames.push(frame.data);
     expect(frames).toEqual(['{"a":1}', "[DONE]"]);
+  });
+
+  test("refuses and cancels an oversized undelimited raw frame", async () => {
+    let chunks = 0;
+    let cancelled = false;
+    const raw = new TextEncoder().encode("€".repeat(Math.ceil((RAW_SSE_FRAME_LIMIT + 128 * 1024) / 3)));
+    let offset = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks += 1;
+        const next = Math.min(raw.byteLength, offset + 64 * 1024 + 1);
+        controller.enqueue(raw.subarray(offset, next));
+        offset = next;
+        if (offset >= raw.byteLength) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+
+    await expect(collectFrames(readSse(body))).rejects.toMatchObject({
+      code: "provider_output_limit",
+      message: `Provider stream frame exceeded the ${RAW_SSE_FRAME_LIMIT}-byte limit.`,
+    });
+    // Web Streams may queue one pull while the current chunk is being
+    // inspected; retained frame memory remains fixed at the reader's cap.
+    expect(chunks).toBeLessThanOrEqual(18);
+    expect(cancelled).toBe(true);
+  });
+
+  test("a provider cancel that never resolves cannot hold the frame refusal open", async () => {
+    let chunks = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks += 1;
+        controller.enqueue(new Uint8Array(64 * 1024).fill(97));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("reader cancellation held the refusal open")), 250);
+    });
+
+    try {
+      await expect(Promise.race([collectFrames(readSse(body)), timeout])).rejects.toMatchObject({
+        code: "provider_output_limit",
+        message: `Provider stream frame exceeded the ${RAW_SSE_FRAME_LIMIT}-byte limit.`,
+      });
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+    // A pending pull may already be queued when cancellation begins.
+    expect(chunks).toBeLessThanOrEqual(18);
+    expect(cancelled).toBe(true);
+  });
+
+  test("a stalled partial SSE frame times out and cancels without awaiting cancel", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) {
+          controller.enqueue(new TextEncoder().encode('data: {"partial":'));
+          return;
+        }
+        return new Promise<void>(() => {});
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+
+    await expect(collectFrames(readSse(body, { inactivityTimeoutMs: 25 }))).rejects.toMatchObject({
+      code: "provider_timeout",
+      status: 504,
+      message: "Provider stream was inactive for 25 ms.",
+    });
+    expect(cancelled).toBe(true);
+  });
+
+  test("comment heartbeats cannot evade the overall stream deadline", async () => {
+    let cancelled = false;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            try {
+              controller.enqueue(encoder.encode(": keep-alive\n\n"));
+            } catch {
+              // The deadline may have cancelled the stream first.
+            }
+            resolve();
+          }, 5);
+        });
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+
+    await expect(
+      collectFrames(
+        readSse(body, {
+          inactivityTimeoutMs: 100,
+          totalTimeoutMs: 35,
+          maxStreamBytes: 1024,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "provider_timeout",
+      status: 504,
+      message: "Provider stream exceeded the 35 ms overall deadline.",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(cancelled).toBe(true);
+  });
+
+  test("SSE comments and framing count toward the total raw byte ceiling", async () => {
+    let cancelled = false;
+    const heartbeat = new TextEncoder().encode(": heartbeat\n\n");
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(heartbeat);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+
+    await expect(
+      collectFrames(readSse(body, { maxStreamBytes: 30, totalTimeoutMs: 1000 })),
+    ).rejects.toMatchObject({
+      code: "provider_output_limit",
+      status: 502,
+      message: "Provider stream exceeded the 30-byte raw limit.",
+    });
+    expect(cancelled).toBe(true);
   });
 });
 
@@ -105,7 +299,406 @@ describe("the OpenAI-shaped stream", () => {
       globalThis.fetch = original;
     }
   });
+
+  test("a fetcher that never returns headers hits the fixed provider deadline", async () => {
+    const original = globalThis.fetch;
+    let aborted = false;
+    globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>(() => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+        });
+      })) as typeof fetch;
+    try {
+      await expect(
+        collect(
+          streamOpenAiChat(
+            { baseUrl: "https://example.test/v1", token: async () => "k", label: "Test" },
+            [{ role: "user", content: "hi" }],
+            { model: "grok-4.6", headerTimeoutMs: 25 },
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "provider_timeout",
+        status: 504,
+        message: "Test did not return response headers within 25 ms.",
+      });
+      expect(aborted).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("caller cancellation wins without being relabeled by the provider wrapper", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+    const controller = new AbortController();
+    const reason = new Error("caller cancelled");
+    const pending = collect(
+      streamOpenAiChat(
+        { baseUrl: "https://example.test/v1", token: async () => "k", label: "Test" },
+        [{ role: "user", content: "hi" }],
+        { model: "grok-4.6", signal: controller.signal, headerTimeoutMs: 1000 },
+      ),
+    );
+    controller.abort(reason);
+    try {
+      await expect(pending).rejects.toBe(reason);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("caller cancellation after headers interrupts a stalled OpenAI body", async () => {
+    const original = globalThis.fetch;
+    let pulls = 0;
+    let forwardedSignal: AbortSignal | undefined;
+    let markPulled = (): void => {};
+    const pulled = new Promise<void>((resolve) => {
+      markPulled = resolve;
+    });
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      forwardedSignal = init?.signal ?? undefined;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls > 1) return new Promise<void>(() => {});
+            markPulled();
+            controller.enqueue(new TextEncoder().encode('data: {"partial":'));
+          },
+          cancel() {},
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    }) as typeof fetch;
+    const controller = new AbortController();
+    const reason = new Error("caller left after headers");
+    const pending = collect(
+      streamOpenAiChat(
+        { baseUrl: "https://example.test/v1", token: async () => "k", label: "Test" },
+        [{ role: "user", content: "hi" }],
+        { model: "grok-4.6", signal: controller.signal },
+      ),
+    );
+    try {
+      await pulled;
+      controller.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+      expect(forwardedSignal?.aborted).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("split tool arguments are bounded while the provider parser assembles them", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, id: "c", function: { name: "recall", arguments: "x".repeat(20) } }],
+              },
+            },
+          ],
+        }),
+        JSON.stringify({
+          choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "x".repeat(20) } }] } }],
+        }),
+        JSON.stringify({
+          choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "x".repeat(20) } }] } }],
+        }),
+      ])) as unknown as typeof fetch;
+    try {
+      await expect(
+        collect(
+          streamOpenAiChat(
+            { baseUrl: "https://example.test/v1", token: async () => "k", label: "Test" },
+            [{ role: "user", content: "hi" }],
+            { model: "grok-4.6", maxOutputBytes: 50 },
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "provider_output_limit", status: 502 });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("a single oversized OpenAI SSE frame is refused before JSON parsing", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      sseResponse([
+        JSON.stringify({ choices: [{ delta: { content: "x".repeat(RAW_SSE_FRAME_LIMIT) } }] }),
+      ])) as unknown as typeof fetch;
+    try {
+      await expect(
+        collect(
+          streamOpenAiChat(
+            { baseUrl: "https://example.test/v1", token: async () => "k", label: "Test" },
+            [{ role: "user", content: "hi" }],
+            { model: "grok-4.6" },
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "provider_output_limit",
+        message: `Provider stream frame exceeded the ${RAW_SSE_FRAME_LIMIT}-byte limit.`,
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("the Anthropic stream preserves the same oversized-frame refusal", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      sseResponse([
+        JSON.stringify({
+          type: "content_block_delta",
+          delta: { type: "text_delta", text: "x".repeat(RAW_SSE_FRAME_LIMIT) },
+        }),
+      ])) as unknown as typeof fetch;
+    const auth = { token: async () => "k" } as unknown as AuthService;
+    try {
+      await expect(
+        collect(new AnthropicProvider(auth).stream([{ role: "user", content: "hi" }], { model: "claude" })),
+      ).rejects.toMatchObject({
+        code: "provider_output_limit",
+        message: `Provider stream frame exceeded the ${RAW_SSE_FRAME_LIMIT}-byte limit.`,
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("the Anthropic stream uses the same response-header deadline", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+    const auth = { token: async () => "k" } as unknown as AuthService;
+    try {
+      await expect(
+        collect(
+          new AnthropicProvider(auth).stream([{ role: "user", content: "hi" }], {
+            model: "claude",
+            headerTimeoutMs: 25,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "provider_timeout",
+        status: 504,
+        message: "Anthropic did not return response headers within 25 ms.",
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("caller cancellation after headers interrupts a stalled Anthropic body", async () => {
+    const original = globalThis.fetch;
+    let pulls = 0;
+    let forwardedSignal: AbortSignal | undefined;
+    let markPulled = (): void => {};
+    const pulled = new Promise<void>((resolve) => {
+      markPulled = resolve;
+    });
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      forwardedSignal = init?.signal ?? undefined;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls > 1) return new Promise<void>(() => {});
+            markPulled();
+            controller.enqueue(new TextEncoder().encode('event: content_block_delta\ndata: {"partial":'));
+          },
+          cancel() {},
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    }) as typeof fetch;
+    const auth = { token: async () => "k" } as unknown as AuthService;
+    const controller = new AbortController();
+    const reason = new Error("caller left after Anthropic headers");
+    const pending = collect(
+      new AnthropicProvider(auth).stream([{ role: "user", content: "hi" }], {
+        model: "claude",
+        signal: controller.signal,
+      }),
+    );
+    try {
+      await pulled;
+      controller.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+      expect(forwardedSignal?.aborted).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("a fragmented oversized error body is capped, cancelled, and redacted", async () => {
+    let chunks = 0;
+    let cancelled = false;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks += 1;
+        if (chunks === 1) controller.enqueue(encoder.encode("bad key xai-"));
+        else if (chunks === 2) controller.enqueue(encoder.encode("abcdefghijklmnop "));
+        else controller.enqueue(new Uint8Array(1024).fill(120));
+        if (chunks >= 12) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+
+    const error = await providerHttpError("Test", new Response(body, { status: 500 }));
+    expect(error).toMatchObject({ code: "provider_error", status: 502 });
+    expect(error.message).toContain("Test returned 500");
+    expect(error.message).not.toContain("abcdefghijklmnop");
+    expect(error.message).toContain("xai-••••");
+    // One additional pull may already be queued by the Web Streams high-water
+    // mark, but the reader retains at most the fixed 4 KiB window.
+    expect(chunks).toBeLessThanOrEqual(7);
+    expect(cancelled).toBe(true);
+  });
+
+  test("a stalled error body cannot hold provider status mapping open", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) {
+          controller.enqueue(new TextEncoder().encode("server caught fire"));
+          return;
+        }
+        return new Promise<void>(() => {});
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("stalled provider body held status mapping open")), 750);
+    });
+    try {
+      const error = await Promise.race([
+        providerHttpError("Test", new Response(body, { status: 500 })),
+        timeout,
+      ]);
+      expect(error).toMatchObject({ code: "provider_error", status: 502 });
+      expect(error.message).toContain("server caught fire");
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+    expect(cancelled).toBe(true);
+  });
+
+  test("a slow-drip error body cannot reset the absolute body deadline", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            try {
+              controller.enqueue(new Uint8Array([120]));
+            } catch {
+              // The absolute deadline may have cancelled first.
+            }
+            resolve();
+          }, 5);
+        });
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+    const error = await providerHttpError("Test", new Response(body, { status: 500 }), {
+      inactivityTimeoutMs: 100,
+      totalTimeoutMs: 35,
+    });
+
+    expect(error).toMatchObject({ code: "provider_error", status: 502 });
+    expect(pulls).toBeLessThan(20);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(cancelled).toBe(true);
+  });
+
+  test("fragmented provider catalogue JSON is refused at its raw byte ceiling", async () => {
+    let chunks = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks += 1;
+        controller.enqueue(new Uint8Array(64 * 1024).fill(120));
+        if (chunks >= 20) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+
+    await expect(readProviderJson(new Response(body))).rejects.toMatchObject({
+      code: "provider_output_limit",
+      message: `Provider JSON body exceeded the ${MAX_PROVIDER_JSON_BODY_BYTES}-byte limit.`,
+    });
+    expect(chunks).toBeLessThanOrEqual(18);
+    expect(cancelled).toBe(true);
+  });
+
+  test("a slow-drip JSON body cannot reset the absolute body deadline", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            try {
+              controller.enqueue(new Uint8Array([32]));
+            } catch {
+              // The absolute deadline may have cancelled first.
+            }
+            resolve();
+          }, 5);
+        });
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => {});
+      },
+    });
+
+    await expect(
+      readProviderJson(new Response(body), {
+        inactivityTimeoutMs: 100,
+        totalTimeoutMs: 35,
+      }),
+    ).rejects.toMatchObject({
+      code: "provider_timeout",
+      status: 504,
+      message: "Provider JSON body exceeded the 35 ms overall deadline.",
+    });
+    expect(pulls).toBeLessThan(20);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(cancelled).toBe(true);
+  });
 });
+
+async function collectFrames(stream: AsyncIterable<{ data: string }>): Promise<string[]> {
+  const out: string[] = [];
+  for await (const frame of stream) out.push(frame.data);
+  return out;
+}
 
 describe("message translation", () => {
   const messages: ChatMessage[] = [

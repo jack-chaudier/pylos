@@ -11,6 +11,7 @@ import type {
   Atom,
   AtomAuthority,
   AtomPhase,
+  CapsuleLedgerReceipt,
   Episode,
   EpisodeMeta,
   LossEntry,
@@ -21,6 +22,7 @@ import type {
   Thread,
   ThreadSettings,
 } from "@pylos/protocol";
+import { budgetSharesFailure } from "./pure/budget.ts";
 import { ftsTerms } from "./pure/terms.ts";
 import type { StoredCapsule, Tombstone } from "./vault.ts";
 
@@ -37,6 +39,17 @@ export interface EpisodeRow {
   prev_hash: string;
   hash: string;
   meta: string;
+}
+
+/** Scalar/projection row used by bounded transcript and search reads. */
+export interface EpisodeViewRow extends Omit<EpisodeRow, "content" | "meta"> {
+  content_prefix: string;
+  content_bytes: number;
+  meta_json: string | null;
+  meta_bytes: number;
+  meta_removed: number | null;
+  meta_name: string | null;
+  meta_size: number | null;
 }
 
 export interface AtomRow {
@@ -60,6 +73,37 @@ export interface AtomRow {
   created_at: number;
 }
 
+/** Scalar/projection row used by bounded ordinary search reads. */
+export interface AtomViewRow extends Omit<AtomRow, "key" | "value" | "text" | "source_span"> {
+  key_prefix: string;
+  key_bytes: number;
+  value_prefix: string;
+  value_bytes: number;
+  text_prefix: string;
+  text_bytes: number;
+  source_span_prefix: string | null;
+}
+
+/** Scalar-only atom row for the ordinary memory/X-ray projection. */
+export interface AtomPageRow {
+  reader_rowid: number;
+  id: string;
+  thread_id: string;
+  kind: string;
+  key_prefix: string | Uint8Array;
+  key_bytes: number;
+  value_prefix: string | Uint8Array;
+  value_bytes: number;
+  text_prefix: string | Uint8Array;
+  text_bytes: number;
+  source_seq: number;
+  valid_from_seq: number;
+  valid_to_seq: number | null;
+  phase: string;
+  authority: string;
+  pinned: number;
+}
+
 export interface CapsuleRow {
   id: string;
   thread_id: string;
@@ -71,9 +115,30 @@ export interface CapsuleRow {
   dropped: string;
   carried_count: number;
   kept: string;
+  ledger_receipt?: string | null;
   hash: string;
   created_by: string;
   created_at: number;
+}
+
+/** Scalar-only capsule row; prose and loss JSON never cross the SQL boundary. */
+export interface CapsuleViewRow {
+  reader_rowid: number;
+  id: string;
+  thread_id: string;
+  level: number;
+  from_seq: number;
+  to_seq: number;
+  tokens: number;
+  carried_count: number;
+  hash: string;
+  created_by: string;
+  created_at: number;
+  text_bytes: number;
+  dropped_bytes: number;
+  kept_bytes: number;
+  dropped_count: number;
+  kept_count: number;
 }
 
 export interface LossRow {
@@ -83,6 +148,19 @@ export interface LossRow {
   span: string | null;
   capsule_id: string;
   resolved_by: string | null;
+}
+
+/** Scalar-only loss row; names and spans are byte-prefix projected in SQLite. */
+export interface LossViewRow {
+  reader_rowid: number;
+  name_prefix: string | Uint8Array;
+  name_bytes: number;
+  kind: string;
+  seq: number;
+  span_prefix: string | Uint8Array | null;
+  span_bytes: number;
+  capsule_id_prefix: string | Uint8Array;
+  resolved_by_prefix: string | Uint8Array | null;
 }
 
 export interface PacketRow {
@@ -99,6 +177,12 @@ export interface PacketRow {
   ledger: string;
   pages: string;
   rounds: string | null;
+  reachability: string | null;
+  reachability_as_of_seq: number | null;
+  coverage: string | null;
+  evidence: string | null;
+  answer_receipt: string | null;
+  semantic: string | null;
   created_at: number;
 }
 
@@ -135,13 +219,27 @@ export function toTombstone(row: TombstoneRow): Tombstone {
 }
 
 export function toThread(row: ThreadRow): Thread {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.settings) as unknown;
+  } catch {
+    throw new Error("thread settings are malformed");
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("thread settings are malformed");
+  }
+  const settings = parsed as ThreadSettings;
+  if (settings.shares !== undefined) {
+    const failure = budgetSharesFailure(settings.shares);
+    if (failure !== null) throw new Error(`thread settings ${failure}`);
+  }
   return {
     id: row.id,
     title: row.title ?? "Untitled thread",
     createdAt: row.created_at,
     headSeq: row.head_seq,
     headHash: row.head_hash,
-    settings: JSON.parse(row.settings) as ThreadSettings,
+    settings,
   };
 }
 
@@ -196,6 +294,9 @@ export function toCapsule(row: CapsuleRow): StoredCapsule {
     dropped: JSON.parse(row.dropped) as LossEntry[],
     carriedCount: row.carried_count,
     kept: JSON.parse(row.kept) as LossEntry[],
+    ...(row.ledger_receipt == null
+      ? {}
+      : { ledgerReceipt: JSON.parse(row.ledger_receipt) as CapsuleLedgerReceipt }),
     hash: row.hash,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -228,6 +329,16 @@ export function toPacket(row: PacketRow): Packet {
     ledger: JSON.parse(row.ledger) as Packet["ledger"],
     pages: JSON.parse(row.pages) as Packet["pages"],
     ...(row.rounds === null ? {} : { rounds: JSON.parse(row.rounds) as Packet["rounds"] }),
+    ...(row.reachability === null
+      ? {}
+      : { reachability: JSON.parse(row.reachability) as Packet["reachability"] }),
+    ...(row.reachability_as_of_seq === null ? {} : { reachabilityAsOfSeq: row.reachability_as_of_seq }),
+    ...(row.coverage === null ? {} : { coverage: JSON.parse(row.coverage) as Packet["coverage"] }),
+    ...(row.evidence === null ? {} : { evidence: JSON.parse(row.evidence) as Packet["evidence"] }),
+    ...(row.answer_receipt === null
+      ? {}
+      : { answerReceipt: JSON.parse(row.answer_receipt) as Packet["answerReceipt"] }),
+    ...(row.semantic === null ? {} : { semantic: JSON.parse(row.semantic) as Packet["semantic"] }),
     createdAt: row.created_at,
   };
 }

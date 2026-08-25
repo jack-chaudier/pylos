@@ -1,0 +1,1637 @@
+{
+  "schema": "pylos.bench.natural.v1",
+  "seed": "natural-questions-2026-08-23",
+  "currentVersion": "2.0.0",
+  "budget": 2048,
+  "startedAt": "2026-08-25T05:46:37.231Z",
+  "finishedAt": "2026-08-25T05:46:46.597Z",
+  "modelEfficacy": {
+    "status": "not-run",
+    "modelCalls": 0,
+    "reason": "This bench measures deterministic kernel routes, receipts, and gates; no provider was called."
+  },
+  "mechanisms": [
+    {
+      "mechanism": "lexical source routing",
+      "claim": "A deterministic lexical route can return an exact source-bound page.",
+      "denominator": 11,
+      "observed": 8,
+      "implemented": true,
+      "tested": true,
+      "bench": "self-hit and polarity probes recorded source sequence routes",
+      "notClaimed": "This does not establish semantic retrieval or model answer quality."
+    },
+    {
+      "mechanism": "retained-byte reachability receipt",
+      "claim": "Compiled packets carry a kernel reachability receipt when present.",
+      "denominator": 13,
+      "observed": 13,
+      "implemented": true,
+      "tested": false,
+      "bench": "natural probes record receipt presence; Phase 1 closure oracles own completeness",
+      "notClaimed": "This bench does not prove four-state closure for every retained byte."
+    },
+    {
+      "mechanism": "collection coverage receipt",
+      "claim": "Collection cues expose located/support counts without inventing cardinality.",
+      "denominator": 2,
+      "observed": 2,
+      "implemented": true,
+      "tested": true,
+      "bench": "known-cardinality incomplete and unknown-cardinality not-established probes",
+      "notClaimed": "Coverage is a route lower bound, not proof that the world contains only those items."
+    },
+    {
+      "mechanism": "remembered-claim gate",
+      "claim": "Kernel scanning and witness-bound capabilities classify remembered assertions.",
+      "denominator": 4,
+      "observed": 4,
+      "implemented": true,
+      "tested": true,
+      "bench": "omitted-map UNKNOWN, exact witnessed SUPPORTED, world, and reasoning controls",
+      "notClaimed": "The gate does not certify unsupported model prose or general reasoning."
+    },
+    {
+      "mechanism": "semantic exact-hit verifier",
+      "claim": "A ready semantic address is counted only when it returns an exact target sequence.",
+      "denominator": 13,
+      "observed": 6,
+      "implemented": true,
+      "tested": true,
+      "bench": "6/13 ready-runtime probes returned exact target sequences; all counted hits were exact, while non-target pages remain in the false-page metric",
+      "notClaimed": "These authored probes do not estimate semantic recall, precision, or ranking quality."
+    },
+    {
+      "mechanism": "sqlite-vec semantic runtime",
+      "claim": "A packaged sqlite-vec and pinned embedding runtime is available to produce semantic addresses.",
+      "denominator": 13,
+      "observed": 13,
+      "implemented": true,
+      "tested": false,
+      "bench": "13/13 probes returned ready receipts bound to the pinned model digest; the runtime is packages/core/src/semantic-runtime.ts, exercised by kernel tests, and this compile-only bench invokes no semantic runtime directly",
+      "notClaimed": "Receipt availability is not proof of semantic efficacy, and this bench exercises no semantic runtime of its own; no semantic efficacy claim is made."
+    },
+    {
+      "mechanism": "persistent question-to-evidence address graph",
+      "claim": "Successful grounded turns can be reused through persisted routes.",
+      "denominator": 0,
+      "observed": 0,
+      "implemented": true,
+      "tested": false,
+      "bench": "not exercised by this compile-only bench; see the external address monotonicity oracle",
+      "notClaimed": "This bench does not establish route reuse, invalidation, or semantic authority."
+    },
+    {
+      "mechanism": "provider/model efficacy",
+      "claim": "A model answers natural questions accurately.",
+      "denominator": 13,
+      "observed": 0,
+      "implemented": false,
+      "tested": false,
+      "bench": "modelCalls=0; deterministic kernel-only measurement",
+      "notClaimed": "No provider was called, so no model efficacy claim is made."
+    }
+  ],
+  "familyCoverage": [
+    {
+      "family": "self-hit",
+      "denominator": 1,
+      "positive": 1,
+      "negative": 0,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "noun-free-paraphrase",
+      "denominator": 1,
+      "positive": 1,
+      "negative": 0,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "negation",
+      "denominator": 1,
+      "positive": 1,
+      "negative": 0,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "pronoun-ambiguity",
+      "denominator": 1,
+      "positive": 0,
+      "negative": 1,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "multilingual-refer-back",
+      "denominator": 1,
+      "positive": 1,
+      "negative": 0,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "deleted-source",
+      "denominator": 1,
+      "positive": 0,
+      "negative": 1,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "superseded-source",
+      "denominator": 1,
+      "positive": 1,
+      "negative": 0,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "partial-collection",
+      "denominator": 2,
+      "positive": 1,
+      "negative": 1,
+      "matchedPairs": 1,
+      "note": "matched positive/negative control pair(s): 1"
+    },
+    {
+      "family": "claim-map-omission",
+      "denominator": 2,
+      "positive": 1,
+      "negative": 1,
+      "matchedPairs": 1,
+      "note": "matched positive/negative control pair(s): 1"
+    },
+    {
+      "family": "world-control",
+      "denominator": 1,
+      "positive": 1,
+      "negative": 0,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    },
+    {
+      "family": "reasoning-control",
+      "denominator": 1,
+      "positive": 0,
+      "negative": 1,
+      "matchedPairs": 0,
+      "note": "single-denominator family; no independent opposite-polarity control is inflated"
+    }
+  ],
+  "infrastructureFailures": [],
+  "metrics": {
+    "attempted": 13,
+    "probes": 13,
+    "routeHits": 8,
+    "routeMisses": 5,
+    "semanticHits": 6,
+    "unresolvedReceipts": {
+      "count": 0,
+      "denominator": 4
+    },
+    "falsePages": {
+      "count": 5,
+      "denominator": 13
+    },
+    "qualificationErrors": {
+      "count": 0,
+      "denominator": 4
+    },
+    "releaseErrors": {
+      "count": 0,
+      "denominator": 3
+    },
+    "infrastructureFailures": {
+      "count": 0,
+      "denominator": 13
+    },
+    "semanticUnavailableReceipts": {
+      "count": 0,
+      "denominator": 13
+    },
+    "coverageReceipts": 2,
+    "gateReceipts": 4,
+    "gateQualifications": 1,
+    "latencyMs": {
+      "denominator": 13,
+      "total": 9358.009,
+      "p50": 685.846,
+      "p95": 1128.591,
+      "p99": 1128.591,
+      "max": 1128.591
+    },
+    "provider": {
+      "modelCalls": 0,
+      "costUsd": 0,
+      "denominator": 13
+    },
+    "oracleViolations": 0
+  },
+  "cases": [
+    {
+      "id": "self-hit",
+      "family": "self-hit",
+      "expectation": "exact source route; asking turn cannot satisfy itself",
+      "askingTurnIndexed": true,
+      "question": "What happened to the kiln when the flue was blocked?",
+      "querySeq": 258,
+      "sources": [
+        {
+          "label": "kiln",
+          "seq": 1,
+          "contentHash": "c78b649f707ed373f2710cbdf258775bd0a313337f868421a19c54cb3cc68d95",
+          "revision": "3f315322fc8b04174f9134baaadfcc105d47ab2d584ee4453e82ad0fc56ab07f",
+          "byteLength": 63,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88slg7c48cc91990f04d3c22",
+        "digest": "31bca2c008d8cb99c5cec28b423d8ddc8ffcabdb7c21faac627428c91e5e832e",
+        "tokens": 1969,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "search"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [],
+        "witnesses": [],
+        "addressOnly": true,
+        "receiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "receipts": {
+        "packetDigest": "31bca2c008d8cb99c5cec28b423d8ddc8ffcabdb7c21faac627428c91e5e832e",
+        "semanticReceiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 1128.591,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "noun-free-paraphrase",
+      "family": "noun-free-paraphrase",
+      "expectation": "semantic address if available; otherwise an explicit unavailable receipt",
+      "askingTurnIndexed": true,
+      "question": "What flavor followed the storm?",
+      "querySeq": 258,
+      "sources": [
+        {
+          "label": "tea",
+          "seq": 1,
+          "contentHash": "4c318a1202634539a85fd32fee842589db67631e0dbc6f38778462e725d8ca34",
+          "revision": "a0b0a5bdc3c73a96d9d5c8e4ccde2f029347da808ef90caab2ce6552f58cebc6",
+          "byteLength": 36,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88sm2n42dbbd86241f928d45",
+        "digest": "ef5d1e723f01c30350aa496ef357e43ada0e096d2f4d2050262e650b1539f3a2",
+        "tokens": 1966,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": true,
+        "resolvedSeqs": [
+          1
+        ],
+        "witnesses": [
+          {
+            "seq": 1,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "receipts": {
+        "packetDigest": "ef5d1e723f01c30350aa496ef357e43ada0e096d2f4d2050262e650b1539f3a2",
+        "semanticReceiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 806.175,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "negation",
+      "family": "negation",
+      "expectation": "a positive route must preserve the source polarity",
+      "askingTurnIndexed": true,
+      "question": "Should the launch proceed before Cedar Review?",
+      "querySeq": 258,
+      "sources": [
+        {
+          "label": "launch-rule",
+          "seq": 1,
+          "contentHash": "695371f84563b86e3dd82a75a78f334f71cc57d1358050fffa429eb4769ab117",
+          "revision": "bf0d6a18622f69d1000d797ef1b64b2371febac6be5e344145961e5ebfc9c067",
+          "byteLength": 48,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88smjrec762a2d7d5349fce2",
+        "digest": "6e48cedc7df9b2e3e0f6f0551e7b88970b782d5d5f15a5c130cc442d4983d21c",
+        "tokens": 1960,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "search"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [],
+        "witnesses": [],
+        "addressOnly": true,
+        "receiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "receipts": {
+        "packetDigest": "6e48cedc7df9b2e3e0f6f0551e7b88970b782d5d5f15a5c130cc442d4983d21c",
+        "semanticReceiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 615.384,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "pronoun-ambiguity",
+      "family": "pronoun-ambiguity",
+      "expectation": "a bounded exact candidate receipt without claiming that the pronoun ambiguity was resolved",
+      "askingTurnIndexed": true,
+      "question": "What did she say about it?",
+      "querySeq": 259,
+      "sources": [
+        {
+          "label": "mira-nova",
+          "seq": 1,
+          "contentHash": "eede756b115382500454549446195c81e009588eedadd598707a0c2c8ea4946a",
+          "revision": "aa0198b3dabfa7fd721332bf7b6ddd28c8478bba4ecb18843165e52c7ef6fbe9",
+          "byteLength": 40,
+          "removed": false
+        },
+        {
+          "label": "she-gate",
+          "seq": 2,
+          "contentHash": "2862e13f12b1114878a9c66e4a87a71d48dff09d1d725839832b2d723453b872",
+          "revision": "a23ff1636e6481998651dff908fc3071cde03d8d1784eb611e88e4d8f2956348",
+          "byteLength": 32,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88sn1n2716f4f6f44225f86a",
+        "digest": "3e61a510212d9a1e17030bc15db2f36fde22c842ac15a443cfa8618b999ceeb3",
+        "tokens": 1915,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          2
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": true,
+        "resolvedSeqs": [
+          2
+        ],
+        "witnesses": [
+          {
+            "seq": 2,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "receipts": {
+        "packetDigest": "3e61a510212d9a1e17030bc15db2f36fde22c842ac15a443cfa8618b999ceeb3",
+        "semanticReceiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 2,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 644.213,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "multilingual-refer-back",
+      "family": "multilingual-refer-back",
+      "expectation": "an exact semantic address if found; a miss or false page remains receipted and address-only",
+      "askingTurnIndexed": true,
+      "question": "What stayed closed after the storm?",
+      "querySeq": 258,
+      "sources": [
+        {
+          "label": "compuerta",
+          "seq": 1,
+          "contentHash": "04b72dc5711a4d9238324a39f0784a2ca2f03b3b53c6f223d2b5512da459b4b3",
+          "revision": "db493d4c0851fc654a4984fae7f0a66ced7e32cddc8871d29697d346259f36a1",
+          "byteLength": 52,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88sni82278a6b1b4e002cfec",
+        "digest": "508be731687a11a538250ad62dcc59797121bad37d33c008a76bbf58b21c62c9",
+        "tokens": 1968,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          138
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [
+          138
+        ],
+        "witnesses": [
+          {
+            "seq": 138,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "receipts": {
+        "packetDigest": "508be731687a11a538250ad62dcc59797121bad37d33c008a76bbf58b21c62c9",
+        "semanticReceiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "metrics": {
+        "sourceRoutes": 0,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 1,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 596.079,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "deleted-source",
+      "family": "deleted-source",
+      "expectation": "removed bytes are not routable; any fallback stays exact, bounded, and address-only",
+      "askingTurnIndexed": true,
+      "question": "What is the retired deployment token?",
+      "querySeq": 259,
+      "sources": [
+        {
+          "label": "retired-token",
+          "seq": 1,
+          "contentHash": "dfe1046ad314c40313740e1b273b74bb535d187fbc2191ed9c9ee135be1489a0",
+          "revision": "6799b2ea8cceb3a96ca89ff03756f2fd9ad196ca728349a6d81cd6df8a92fb64",
+          "byteLength": 49,
+          "removed": true
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88so1l09e406285b34a7ad7b",
+        "digest": "fd9cbf9caa6f0bd98c9626d3be8f866e750a74d0ddcc370b60663562a1df05d9",
+        "tokens": 1938,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          231
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [
+          231
+        ],
+        "witnesses": [
+          {
+            "seq": 231,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "receipts": {
+        "packetDigest": "fd9cbf9caa6f0bd98c9626d3be8f866e750a74d0ddcc370b60663562a1df05d9",
+        "semanticReceiptDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "metrics": {
+        "sourceRoutes": 0,
+        "sourceResident": 0,
+        "resolvedPages": 1,
+        "falsePages": 1,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 697.144,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "supersession",
+      "family": "superseded-source",
+      "expectation": "an old semantic address is historical or absent; current resolution is not assumed",
+      "askingTurnIndexed": true,
+      "question": "Where do I live now?",
+      "querySeq": 259,
+      "sources": [
+        {
+          "label": "old-location",
+          "seq": 1,
+          "contentHash": "c10ed9bd9fedbe58999092f41272e90a5453206fe8871b3249ba6ce336e05133",
+          "revision": "e90f82d478f3a9e064bb92a9aac15fe1b35b2f2dd1333ac16f7dbb96ed7d0795",
+          "byteLength": 17,
+          "removed": false
+        },
+        {
+          "label": "current-location",
+          "seq": 2,
+          "contentHash": "4a8a357f7f16ae9a2aa9b5c89d3cfd86abcd914ef26628209321a0f1ee34f0b6",
+          "revision": "53ee5a3d57e722aff59798dc146483fc6b14fb4eb9202eac312338492168f472",
+          "byteLength": 29,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88soisda069e62f90ab03fb2",
+        "digest": "8f85d5889d2a5440ae0143659ecc48ffc8161e2f59d75dbee147a11cc02373eb",
+        "tokens": 1939,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [
+          1
+        ],
+        "witnesses": [
+          {
+            "seq": 1,
+            "epistemic": "HISTORICAL"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "receipts": {
+        "packetDigest": "8f85d5889d2a5440ae0143659ecc48ffc8161e2f59d75dbee147a11cc02373eb",
+        "semanticReceiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "metrics": {
+        "sourceRoutes": 0,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 1,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 618.717,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "partial-known-cardinality",
+      "family": "partial-collection",
+      "expectation": "known cardinality is a lower bound, never an inferred total",
+      "askingTurnIndexed": true,
+      "question": "List every 3 rollout owners.",
+      "querySeq": 259,
+      "sources": [
+        {
+          "label": "owner-alpha",
+          "seq": 1,
+          "contentHash": "8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+          "revision": "50496426052f129ce0cdf6ca9249b38bb6d437a00f69ceef89c917128ab8c607",
+          "byteLength": 45,
+          "removed": false
+        },
+        {
+          "label": "owner-beta",
+          "seq": 2,
+          "contentHash": "b3933c511c7ae950321637744ce0266d5156e4ca876b55568db0dff4010a850c",
+          "revision": "6555c560bd32b720bd25a64655f149e5c347b2b641bc0820a034516578db9f0f",
+          "byteLength": 44,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88sp0c20804e300579467b9d",
+        "digest": "ff55c8e8e8185173daa954a5fa4a0a1b44c99fbf18121e11c82854250e2050e9",
+        "tokens": 1978,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "coverageDigest": "71af5e12f80f18830843bb707dc7b82f4ddf1548c0f38a27d0dd4648528eefd4",
+        "semanticDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "coverage": {
+        "cue": "list",
+        "querySeq": 259,
+        "asOfSeq": 259,
+        "routerVersion": "2",
+        "routesRun": [
+          {
+            "route": "names",
+            "returned": 0,
+            "status": "not-run"
+          },
+          {
+            "route": "pages",
+            "returned": 1,
+            "status": "complete"
+          },
+          {
+            "route": "search",
+            "returned": 2,
+            "status": "complete"
+          }
+        ],
+        "required": 3,
+        "located": 2,
+        "supported": 2,
+        "historical": 0,
+        "unresolved": 1,
+        "completeness": "incomplete",
+        "routes": [
+          {
+            "route": "semantic",
+            "source": "episode:1",
+            "byteRange": [
+              0,
+              45
+            ],
+            "revision": "episode:1:8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+            "authority": "user",
+            "status": "supported",
+            "digest": "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a"
+          },
+          {
+            "route": "search",
+            "source": "episode:2",
+            "byteRange": [
+              0,
+              44
+            ],
+            "revision": "episode:2:b3933c511c7ae950321637744ce0266d5156e4ca876b55568db0dff4010a850c",
+            "authority": "user",
+            "status": "supported",
+            "digest": "f5beca1016380aa75cc465cc30a68cd07042cebdc39c04bcf2c0015d8c6bea3f"
+          }
+        ],
+        "basis": {
+          "version": 1,
+          "queryContentHash": "62ae04a530752eec5d71f68173d10586ba1ac6e933d446e4128ed63e38390c16",
+          "initialPagesDigest": "77cf4fdecc7a2d07709a7d8005dc5bcb82bd4fe38421791e8a4fe461c0942854",
+          "locatorDigests": [
+            "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a",
+            "f5beca1016380aa75cc465cc30a68cd07042cebdc39c04bcf2c0015d8c6bea3f"
+          ],
+          "routeMembers": {
+            "names": {
+              "members": [],
+              "memberCount": 0,
+              "overflow": false,
+              "outcome": {
+                "route": "names",
+                "returned": 0,
+                "status": "not-run"
+              },
+              "membersDigest": "fa2d69ceae2fa91c58dd76a10fefc9584cb8a455b951d06a0c4b4104a65920a1"
+            },
+            "pages": {
+              "members": [
+                {
+                  "kind": "candidate",
+                  "sourceSeq": 1,
+                  "contentHash": "8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+                  "outcome": "supported",
+                  "locatorDigests": [
+                    "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a"
+                  ],
+                  "key": "semantic",
+                  "ordinal": 0
+                }
+              ],
+              "memberCount": 1,
+              "overflow": false,
+              "outcome": {
+                "route": "pages",
+                "returned": 1,
+                "status": "complete"
+              },
+              "membersDigest": "eba2320d44a77b6cc3977b79e2e486fa8b1b75912cc03b114126496df69aa98b"
+            },
+            "search": {
+              "members": [
+                {
+                  "kind": "candidate",
+                  "sourceSeq": 2,
+                  "contentHash": "b3933c511c7ae950321637744ce0266d5156e4ca876b55568db0dff4010a850c",
+                  "outcome": "supported",
+                  "locatorDigests": [
+                    "f5beca1016380aa75cc465cc30a68cd07042cebdc39c04bcf2c0015d8c6bea3f"
+                  ],
+                  "key": "11cfed60c21191883f9433c1a1a1b625559eca657c673d903ca366d9957e3bd7",
+                  "ordinal": 0
+                },
+                {
+                  "kind": "candidate",
+                  "sourceSeq": 1,
+                  "contentHash": "8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+                  "outcome": "supported",
+                  "locatorDigests": [
+                    "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a"
+                  ],
+                  "key": "11cfed60c21191883f9433c1a1a1b625559eca657c673d903ca366d9957e3bd7",
+                  "ordinal": 1
+                }
+              ],
+              "memberCount": 2,
+              "overflow": false,
+              "outcome": {
+                "route": "search",
+                "returned": 2,
+                "status": "complete"
+              },
+              "membersDigest": "ba4c0998f7d8556b379a1620b43218ffa6c1f757c7b84e2cbc007525028ec404"
+            }
+          },
+          "digest": "f16243a4c5f133fdc1d8b723abf253f324b904f80d85e17e27d8eb5d27a5bd00"
+        },
+        "digest": "71af5e12f80f18830843bb707dc7b82f4ddf1548c0f38a27d0dd4648528eefd4"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": true,
+        "resolvedSeqs": [
+          1
+        ],
+        "witnesses": [
+          {
+            "seq": 1,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "receipts": {
+        "packetDigest": "ff55c8e8e8185173daa954a5fa4a0a1b44c99fbf18121e11c82854250e2050e9",
+        "coverageDigest": "71af5e12f80f18830843bb707dc7b82f4ddf1548c0f38a27d0dd4648528eefd4",
+        "semanticReceiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 2,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 632.77,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "partial-unknown-cardinality",
+      "family": "partial-collection",
+      "expectation": "unknown cardinality says completeness is not established",
+      "askingTurnIndexed": true,
+      "question": "List every rollout owner.",
+      "querySeq": 259,
+      "sources": [
+        {
+          "label": "owner-alpha",
+          "seq": 1,
+          "contentHash": "8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+          "revision": "90366c3b66c973906988f54075751bb4fbcdab34816c8f2adf0523a660bfd89c",
+          "byteLength": 45,
+          "removed": false
+        },
+        {
+          "label": "owner-beta",
+          "seq": 2,
+          "contentHash": "b3933c511c7ae950321637744ce0266d5156e4ca876b55568db0dff4010a850c",
+          "revision": "c1e437d399c9e9fe43ca3712ab9e79cae0e6d4ec51a589c1db1aee34a350cdeb",
+          "byteLength": 44,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88spgi965de9cac28b10720c",
+        "digest": "5870a421443198ae07043a2802b7ac510d29f711b4bc6496d17963f201f6f545",
+        "tokens": 1979,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "coverageDigest": "bc632716e3a4306347417c64d65cf8c742e0d34bb461e008e8b8c3a259081d13",
+        "semanticDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "coverage": {
+        "cue": "list",
+        "querySeq": 259,
+        "asOfSeq": 259,
+        "routerVersion": "2",
+        "routesRun": [
+          {
+            "route": "names",
+            "returned": 0,
+            "status": "not-run"
+          },
+          {
+            "route": "pages",
+            "returned": 1,
+            "status": "complete"
+          },
+          {
+            "route": "search",
+            "returned": 2,
+            "status": "complete"
+          }
+        ],
+        "located": 2,
+        "supported": 2,
+        "historical": 0,
+        "unresolved": 0,
+        "completeness": "not-established",
+        "routes": [
+          {
+            "route": "semantic",
+            "source": "episode:1",
+            "byteRange": [
+              0,
+              45
+            ],
+            "revision": "episode:1:8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+            "authority": "user",
+            "status": "supported",
+            "digest": "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a"
+          },
+          {
+            "route": "search",
+            "source": "episode:2",
+            "byteRange": [
+              0,
+              44
+            ],
+            "revision": "episode:2:b3933c511c7ae950321637744ce0266d5156e4ca876b55568db0dff4010a850c",
+            "authority": "user",
+            "status": "supported",
+            "digest": "f5beca1016380aa75cc465cc30a68cd07042cebdc39c04bcf2c0015d8c6bea3f"
+          }
+        ],
+        "basis": {
+          "version": 1,
+          "queryContentHash": "000e6215f82b46ded4433d0eb96846c0d51db9a61ff75aae2d3a54cfa3f0bac7",
+          "initialPagesDigest": "055ac9c8ee0aed56f85bf4df4606bd6a651700fe36628c0a68984b3d98772fb9",
+          "locatorDigests": [
+            "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a",
+            "f5beca1016380aa75cc465cc30a68cd07042cebdc39c04bcf2c0015d8c6bea3f"
+          ],
+          "routeMembers": {
+            "names": {
+              "members": [],
+              "memberCount": 0,
+              "overflow": false,
+              "outcome": {
+                "route": "names",
+                "returned": 0,
+                "status": "not-run"
+              },
+              "membersDigest": "fa2d69ceae2fa91c58dd76a10fefc9584cb8a455b951d06a0c4b4104a65920a1"
+            },
+            "pages": {
+              "members": [
+                {
+                  "kind": "candidate",
+                  "sourceSeq": 1,
+                  "contentHash": "8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+                  "outcome": "supported",
+                  "locatorDigests": [
+                    "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a"
+                  ],
+                  "key": "semantic",
+                  "ordinal": 0
+                }
+              ],
+              "memberCount": 1,
+              "overflow": false,
+              "outcome": {
+                "route": "pages",
+                "returned": 1,
+                "status": "complete"
+              },
+              "membersDigest": "eba2320d44a77b6cc3977b79e2e486fa8b1b75912cc03b114126496df69aa98b"
+            },
+            "search": {
+              "members": [
+                {
+                  "kind": "candidate",
+                  "sourceSeq": 2,
+                  "contentHash": "b3933c511c7ae950321637744ce0266d5156e4ca876b55568db0dff4010a850c",
+                  "outcome": "supported",
+                  "locatorDigests": [
+                    "f5beca1016380aa75cc465cc30a68cd07042cebdc39c04bcf2c0015d8c6bea3f"
+                  ],
+                  "key": "4ed0c7f85938112416ae7d8968d4cbd935f85ce13f8231bc22fc6e572dc03341",
+                  "ordinal": 0
+                },
+                {
+                  "kind": "candidate",
+                  "sourceSeq": 1,
+                  "contentHash": "8163613c032e18ededf0e5d97b81f981889b0141bc35a639b35a32b6bec5fa1a",
+                  "outcome": "supported",
+                  "locatorDigests": [
+                    "9af454af635b1091017ef8760751d5b807a4ea49c5a1c3431e94edf4ed435c1a"
+                  ],
+                  "key": "4ed0c7f85938112416ae7d8968d4cbd935f85ce13f8231bc22fc6e572dc03341",
+                  "ordinal": 1
+                }
+              ],
+              "memberCount": 2,
+              "overflow": false,
+              "outcome": {
+                "route": "search",
+                "returned": 2,
+                "status": "complete"
+              },
+              "membersDigest": "4aaa43b88effd8df3284e78fcc15dfb584326dcc298014b630d56d0e8b70f37c"
+            }
+          },
+          "digest": "3e0f73bebe96dca92a74f7f0081816347717d1b2fb597fbff6c0a68bb0a8286b"
+        },
+        "digest": "bc632716e3a4306347417c64d65cf8c742e0d34bb461e008e8b8c3a259081d13"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": true,
+        "resolvedSeqs": [
+          1
+        ],
+        "witnesses": [
+          {
+            "seq": 1,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "receipts": {
+        "packetDigest": "5870a421443198ae07043a2802b7ac510d29f711b4bc6496d17963f201f6f545",
+        "coverageDigest": "bc632716e3a4306347417c64d65cf8c742e0d34bb461e008e8b8c3a259081d13",
+        "semanticReceiptDigest": "c2f472c1fc5932e0b7a3ece36ad22362664e3076421f9022a44b9cefeccae205"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 2,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 583.821,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "claim-map-omission",
+      "family": "claim-map-omission",
+      "expectation": "an omitted capability map cannot release a remembered number",
+      "askingTurnIndexed": true,
+      "question": "What is the vault pin?",
+      "querySeq": 258,
+      "sources": [
+        {
+          "label": "vault-pin",
+          "seq": 1,
+          "contentHash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+          "revision": "505e45ab96766f3cf482e3cddf6b5c1ae2d343e64c88fbd9b838d758f82d2d3b",
+          "byteLength": 24,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88sq5m536b68b423cbec6d83",
+        "digest": "3cfa7fdace6b8c14d952dad4f7aacf7c07fefcaad93861cb6d284fd747a3c129",
+        "tokens": 1951,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": true,
+        "resolvedSeqs": [
+          1
+        ],
+        "witnesses": [
+          {
+            "seq": 1,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "gate": {
+        "status": "qualified",
+        "digest": "d93f8e77fee0c514f14cf524410c0d5c8a5c495d3d536ab0f479e8ed7b71134f",
+        "receiptDigest": "d93f8e77fee0c514f14cf524410c0d5c8a5c495d3d536ab0f479e8ed7b71134f",
+        "answerDigest": "72da7836c8b741d78b3195b7bd1dc514e1851eba028a6a5ffe8a8b9858f4b6fc",
+        "scanDigest": "4f59bd22e2511315027c3309cf912a73d1f5248c0c1e8b6263838c243e91f83c",
+        "packetDigest": "3cfa7fdace6b8c14d952dad4f7aacf7c07fefcaad93861cb6d284fd747a3c129",
+        "roundsDigest": "f0a8bb921fc6e2980b6a80ee09a997250d61fa31f1dbe127e98e503b313aa939",
+        "grammarVersion": "a14-grammar-v1",
+        "classifications": [
+          {
+            "span": [
+              0,
+              24
+            ],
+            "kind": "fact",
+            "classification": "UNKNOWN",
+            "capabilityDigests": []
+          },
+          {
+            "span": [
+              17,
+              24
+            ],
+            "kind": "number",
+            "classification": "UNKNOWN",
+            "capabilityDigests": []
+          }
+        ],
+        "qualifications": [
+          "⟨pylos UNKNOWN · no turn in the archive backs this recollection⟩"
+        ],
+        "candidates": [
+          {
+            "span": [
+              0,
+              24
+            ],
+            "kind": "fact",
+            "text": "The vault pin is 271828."
+          },
+          {
+            "span": [
+              17,
+              24
+            ],
+            "kind": "number",
+            "text": "271828."
+          }
+        ],
+        "candidateCount": 2
+      },
+      "receipts": {
+        "packetDigest": "3cfa7fdace6b8c14d952dad4f7aacf7c07fefcaad93861cb6d284fd747a3c129",
+        "semanticReceiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40",
+        "answerReceiptDigest": "d93f8e77fee0c514f14cf524410c0d5c8a5c495d3d536ab0f479e8ed7b71134f",
+        "answerPacketDigest": "3cfa7fdace6b8c14d952dad4f7aacf7c07fefcaad93861cb6d284fd747a3c129",
+        "answerDigest": "72da7836c8b741d78b3195b7bd1dc514e1851eba028a6a5ffe8a8b9858f4b6fc",
+        "answerScanDigest": "4f59bd22e2511315027c3309cf912a73d1f5248c0c1e8b6263838c243e91f83c",
+        "answerRoundsDigest": "f0a8bb921fc6e2980b6a80ee09a997250d61fa31f1dbe127e98e503b313aa939"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 906.701,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "claim-map-supported",
+      "family": "claim-map-omission",
+      "expectation": "the same number releases only with a current exact capability",
+      "askingTurnIndexed": true,
+      "question": "What is the vault pin?",
+      "querySeq": 258,
+      "sources": [
+        {
+          "label": "vault-pin",
+          "seq": 1,
+          "contentHash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+          "revision": "405ea50f673a3a1102662fdda920ddd3a0f4e88b924e19b98c3800b27e07bf1e",
+          "byteLength": 24,
+          "removed": false
+        }
+      ],
+      "packet": {
+        "id": "pk_mt88sqqe17cfcf215f58b97edc",
+        "digest": "f14798ada56399ffcd22c2e45b9aba7a2fb808dcbaf3e54592e2488e95105b2d",
+        "tokens": 1952,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          1
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": true,
+        "resolvedSeqs": [
+          1
+        ],
+        "witnesses": [
+          {
+            "seq": 1,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40"
+      },
+      "gate": {
+        "status": "released",
+        "digest": "62dcaf383829e20f5eaae93c6f7d5b44d254849de3fe8b326f9c2afb35f32615",
+        "receiptDigest": "62dcaf383829e20f5eaae93c6f7d5b44d254849de3fe8b326f9c2afb35f32615",
+        "answerDigest": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+        "scanDigest": "df4ae64a5e57db6a8978d3fe4e9b48eb324c396b52cd1fad1a2a4c2f2215a128",
+        "packetDigest": "f14798ada56399ffcd22c2e45b9aba7a2fb808dcbaf3e54592e2488e95105b2d",
+        "roundsDigest": "f725dc67107969892f85d66ca95c5769c03af103d48098c1c0668158b7c8d009",
+        "grammarVersion": "a14-grammar-v1",
+        "classifications": [
+          {
+            "span": [
+              0,
+              24
+            ],
+            "kind": "fact",
+            "classification": "SUPPORTED",
+            "witness": {
+              "source": "episode:1",
+              "from": 0,
+              "to": 24,
+              "hash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "seq": 1,
+              "revision": "405ea50f673a3a1102662fdda920ddd3a0f4e88b924e19b98c3800b27e07bf1e",
+              "spanHash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "authority": "user"
+            },
+            "evidenceWitness": {
+              "source": "episode:1",
+              "from": 0,
+              "to": 24,
+              "hash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "seq": 1,
+              "revision": "405ea50f673a3a1102662fdda920ddd3a0f4e88b924e19b98c3800b27e07bf1e",
+              "spanHash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "authority": "user"
+            },
+            "capabilityDigests": [
+              "e6e9a03f767ff8598258aaed2d8d46f23e26dec1df62e9ce40206e438e7a6bf4"
+            ]
+          },
+          {
+            "span": [
+              17,
+              24
+            ],
+            "kind": "number",
+            "classification": "SUPPORTED",
+            "witness": {
+              "source": "episode:1",
+              "from": 0,
+              "to": 24,
+              "hash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "seq": 1,
+              "revision": "405ea50f673a3a1102662fdda920ddd3a0f4e88b924e19b98c3800b27e07bf1e",
+              "spanHash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "authority": "user"
+            },
+            "evidenceWitness": {
+              "source": "episode:1",
+              "from": 0,
+              "to": 24,
+              "hash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "seq": 1,
+              "revision": "405ea50f673a3a1102662fdda920ddd3a0f4e88b924e19b98c3800b27e07bf1e",
+              "spanHash": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+              "authority": "user"
+            },
+            "capabilityDigests": [
+              "e6e9a03f767ff8598258aaed2d8d46f23e26dec1df62e9ce40206e438e7a6bf4"
+            ]
+          }
+        ],
+        "qualifications": [],
+        "candidates": [
+          {
+            "span": [
+              0,
+              24
+            ],
+            "kind": "fact",
+            "text": "The vault pin is 314159."
+          },
+          {
+            "span": [
+              17,
+              24
+            ],
+            "kind": "number",
+            "text": "314159."
+          }
+        ],
+        "candidateCount": 2
+      },
+      "receipts": {
+        "packetDigest": "f14798ada56399ffcd22c2e45b9aba7a2fb808dcbaf3e54592e2488e95105b2d",
+        "semanticReceiptDigest": "163b478939f1a5190a2361a83b80787b37fff7946f8d07bdadf9045940af4d40",
+        "answerReceiptDigest": "62dcaf383829e20f5eaae93c6f7d5b44d254849de3fe8b326f9c2afb35f32615",
+        "answerPacketDigest": "f14798ada56399ffcd22c2e45b9aba7a2fb808dcbaf3e54592e2488e95105b2d",
+        "answerDigest": "8ab3442563d1b3019a4d8b7d3b9794e12fca2b6a50c211457df851dd7d2f78aa",
+        "answerScanDigest": "df4ae64a5e57db6a8978d3fe4e9b48eb324c396b52cd1fad1a2a4c2f2215a128",
+        "answerRoundsDigest": "f725dc67107969892f85d66ca95c5769c03af103d48098c1c0668158b7c8d009"
+      },
+      "metrics": {
+        "sourceRoutes": 1,
+        "sourceResident": 1,
+        "resolvedPages": 1,
+        "falsePages": 0,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 742.935,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "world-control",
+      "family": "world-control",
+      "expectation": "world knowledge is classified separately from archive UNKNOWN",
+      "askingTurnIndexed": true,
+      "question": "What is the capital of France?",
+      "querySeq": 257,
+      "sources": [],
+      "packet": {
+        "id": "pk_mt88sr9h422027883c796f3c33",
+        "digest": "bafbc5db2064585f5964386f12c8366134adf9776e52c7c362f93ca6fb7fe34d",
+        "tokens": 1903,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          164
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [
+          164
+        ],
+        "witnesses": [
+          {
+            "seq": 164,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "gate": {
+        "status": "released",
+        "digest": "ad055bf464d99cc2090d94d20378865f78b7d7554134c3ea25ce2d80206f647d",
+        "receiptDigest": "ad055bf464d99cc2090d94d20378865f78b7d7554134c3ea25ce2d80206f647d",
+        "answerDigest": "bdff8c417ab50e95e95cce16035a3799c7e00104de4a7b3453f06728c620faf7",
+        "scanDigest": "731a93580af15cb4fc1e84e0db944e9a1a980f3691f3e6b258a912640fecbd28",
+        "packetDigest": "bafbc5db2064585f5964386f12c8366134adf9776e52c7c362f93ca6fb7fe34d",
+        "roundsDigest": "aff1e64812d4dbe13e1255cfd43977ca787d82f1852371a02a275c6ee5891d64",
+        "grammarVersion": "a14-grammar-v1",
+        "classifications": [
+          {
+            "span": [
+              0,
+              6
+            ],
+            "kind": "fact",
+            "classification": "WORLD_KNOWLEDGE",
+            "capabilityDigests": []
+          }
+        ],
+        "qualifications": [],
+        "candidates": [
+          {
+            "span": [
+              0,
+              6
+            ],
+            "kind": "fact",
+            "text": "Paris."
+          }
+        ],
+        "candidateCount": 1
+      },
+      "receipts": {
+        "packetDigest": "bafbc5db2064585f5964386f12c8366134adf9776e52c7c362f93ca6fb7fe34d",
+        "semanticReceiptDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f",
+        "answerReceiptDigest": "ad055bf464d99cc2090d94d20378865f78b7d7554134c3ea25ce2d80206f647d",
+        "answerPacketDigest": "bafbc5db2064585f5964386f12c8366134adf9776e52c7c362f93ca6fb7fe34d",
+        "answerDigest": "bdff8c417ab50e95e95cce16035a3799c7e00104de4a7b3453f06728c620faf7",
+        "answerScanDigest": "731a93580af15cb4fc1e84e0db944e9a1a980f3691f3e6b258a912640fecbd28",
+        "answerRoundsDigest": "aff1e64812d4dbe13e1255cfd43977ca787d82f1852371a02a275c6ee5891d64"
+      },
+      "metrics": {
+        "sourceRoutes": 0,
+        "sourceResident": 0,
+        "resolvedPages": 1,
+        "falsePages": 1,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 685.846,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "reasoning-control",
+      "family": "reasoning-control",
+      "expectation": "reasoning and creative prose remain outside the remembered-fact gate",
+      "askingTurnIndexed": true,
+      "question": "Explain why a bounded context needs a receipt.",
+      "querySeq": 257,
+      "sources": [],
+      "packet": {
+        "id": "pk_mt88srsx9a24294219dc2a41f0",
+        "digest": "a981aa194b7ea54dd8c2a56589cc6b8106fd247ce0f36d09f42d30750da0ea95",
+        "tokens": 1909,
+        "budget": 2048,
+        "pageCount": 1,
+        "resolvedPageCount": 1,
+        "pageTriggers": [
+          "semantic"
+        ],
+        "pageSeqs": [
+          112
+        ],
+        "reachabilityPresent": true,
+        "semanticDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "semantic": {
+        "status": "ready",
+        "hit": false,
+        "resolvedSeqs": [
+          112
+        ],
+        "witnesses": [
+          {
+            "seq": 112,
+            "epistemic": "SUPPORTED"
+          }
+        ],
+        "addressOnly": true,
+        "receiptDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f"
+      },
+      "gate": {
+        "status": "released",
+        "digest": "26df5d4a07578b13ade631324eb9ab754e0374665cd6ab79a64fda4e09e457c3",
+        "receiptDigest": "26df5d4a07578b13ade631324eb9ab754e0374665cd6ab79a64fda4e09e457c3",
+        "answerDigest": "aecddaa8348a6e88e6c2f14084bae75b20960dbc9e5447281201a341dcdf36da",
+        "scanDigest": "fe187ae42bb0f8dd9807162024d0fa9ef95ff88ac94f9ee74033a9b84cc59add",
+        "packetDigest": "a981aa194b7ea54dd8c2a56589cc6b8106fd247ce0f36d09f42d30750da0ea95",
+        "roundsDigest": "cea373033f2bf1aa264eab4fc65efda3a94ed11fa69e96a7f155fa585a725b3c",
+        "grammarVersion": "a14-grammar-v1",
+        "classifications": [],
+        "qualifications": [],
+        "candidates": [],
+        "candidateCount": 0
+      },
+      "receipts": {
+        "packetDigest": "a981aa194b7ea54dd8c2a56589cc6b8106fd247ce0f36d09f42d30750da0ea95",
+        "semanticReceiptDigest": "d8872e43b5e4ca8e3a7f0bdd67f51e12a5ab9a53dcaf8dcced8f9a7db744481f",
+        "answerReceiptDigest": "26df5d4a07578b13ade631324eb9ab754e0374665cd6ab79a64fda4e09e457c3",
+        "answerPacketDigest": "a981aa194b7ea54dd8c2a56589cc6b8106fd247ce0f36d09f42d30750da0ea95",
+        "answerDigest": "aecddaa8348a6e88e6c2f14084bae75b20960dbc9e5447281201a341dcdf36da",
+        "answerScanDigest": "fe187ae42bb0f8dd9807162024d0fa9ef95ff88ac94f9ee74033a9b84cc59add",
+        "answerRoundsDigest": "cea373033f2bf1aa264eab4fc65efda3a94ed11fa69e96a7f155fa585a725b3c"
+      },
+      "metrics": {
+        "sourceRoutes": 0,
+        "sourceResident": 0,
+        "resolvedPages": 1,
+        "falsePages": 1,
+        "unresolvedReceipt": false,
+        "qualificationError": false,
+        "releaseError": false,
+        "latencyMs": 699.633,
+        "selfHitExcluded": true,
+        "modelCalls": 0,
+        "providerCostUsd": 0
+      },
+      "oracle": {
+        "ok": true,
+        "violations": []
+      }
+    }
+  ],
+  "ok": true,
+  "violations": [],
+  "digest": "cd86341177409aaebe090757920cf4d9866aa5ea266e058e69b331a324589202"
+}

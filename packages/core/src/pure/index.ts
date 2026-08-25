@@ -14,7 +14,18 @@ export {
   type ApertureResult,
   aperture,
 } from "./aperture.ts";
-export { type Allocation, allocate, type BudgetShares, DEFAULT_SHARES, spare } from "./budget.ts";
+export {
+  type Allocation,
+  allocate,
+  type BudgetShares,
+  budgetSharesFailure,
+  checkedBudgetShares,
+  checkedPacketTokens,
+  DEFAULT_SHARES,
+  packetRoundsFailure,
+  packetTokensFailure,
+  spare,
+} from "./budget.ts";
 export { CanonicalJsonError, canonicalJson, compareUtf8 } from "./canonical.ts";
 export {
   atomLine,
@@ -97,6 +108,8 @@ export {
 export {
   type AtomDraft,
   applyRules,
+  applyRulesBounded,
+  type BoundedRuleResult,
   isSalient,
   SALIENT_CUE,
   type Sentence,

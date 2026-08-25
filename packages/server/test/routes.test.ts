@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   AuthStatus,
-  Capsule,
+  CapsulePage,
   Episode,
+  EpisodeView,
+  LedgerPage,
   Me,
   ModelInfo,
   Packet,
@@ -13,6 +16,14 @@ import type {
   TurnEvent,
 } from "@pylos/protocol";
 import type { ForgetOutcome } from "../src/kernel.ts";
+import { MAX_UPLOAD_BYTES } from "../src/limits.ts";
+import {
+  checkAttachmentAggregate,
+  checkAttachmentMetadata,
+  createFetch,
+  MAX_ATTACHMENT_FILES,
+  RAW_IMPORT_PASSPHRASE_HEADER,
+} from "../src/serve.ts";
 import { FakeProvider } from "./fake-provider.ts";
 import { type Fetcher, type Harness, harness, jsonPost } from "./harness.ts";
 
@@ -32,6 +43,44 @@ async function newThread(): Promise<ThreadStats> {
   return h.json<ThreadStats>("/api/threads", jsonPost({ title: "Test" }));
 }
 
+async function withTransferDeadline<T>(
+  key: "PYLOS_TEST_JSON_TRANSFER_DEADLINE_MS" | "PYLOS_TEST_UPLOAD_TRANSFER_DEADLINE_MS",
+  milliseconds: number,
+  run: () => Promise<T>,
+): Promise<T> {
+  const priorNodeEnv = process.env.NODE_ENV;
+  const prior = process.env[key];
+  process.env.NODE_ENV = "test";
+  process.env[key] = String(milliseconds);
+  try {
+    return await run();
+  } finally {
+    if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = priorNodeEnv;
+    if (prior === undefined) delete process.env[key];
+    else process.env[key] = prior;
+  }
+}
+
+function heartbeatBody(byte = 0x20): ReadableStream<Uint8Array> {
+  let interval: ReturnType<typeof setInterval> | undefined;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Uint8Array.of(byte));
+      interval = setInterval(() => {
+        try {
+          controller.enqueue(Uint8Array.of(byte));
+        } catch {
+          clearInterval(interval);
+        }
+      }, 10);
+    },
+    cancel() {
+      clearInterval(interval);
+    },
+  });
+}
+
 describe("guards", () => {
   test("health reports the backend", async () => {
     const body = await h.json<{ ok: boolean; version: string; home: string; backend: string }>("/api/health");
@@ -49,14 +98,254 @@ describe("guards", () => {
     expect(await response.json()).toMatchObject({ code: "origin_denied" });
   });
 
-  test("a foreign origin can still read", async () => {
+  test("a foreign origin is rejected before read-only route or static work", async () => {
+    let routeWork = 0;
+    const kernel = h.context.kernel;
+    const listThreads = kernel.listThreads;
+    kernel.listThreads = async () => {
+      routeWork += 1;
+      return listThreads.call(kernel);
+    };
+    let staticWork = 0;
+    const guarded = createFetch(h.context, {
+      site: {
+        async handle(): Promise<Response | undefined> {
+          staticWork += 1;
+          return undefined;
+        },
+      },
+    });
+    try {
+      const headers = { Origin: "https://evil.example" };
+      const route = await guarded(new Request("http://127.0.0.1:7334/api/threads", { headers }));
+      const asset = await guarded(new Request("http://127.0.0.1:7334/app/", { headers }));
+      expect(route.status).toBe(403);
+      expect(asset.status).toBe(403);
+    } finally {
+      kernel.listThreads = listThreads;
+    }
+    expect(routeWork).toBe(0);
+    expect(staticWork).toBe(0);
+  });
+
+  test("literal null Origin is rejected before route or static work", async () => {
+    let routeWork = 0;
+    const kernel = h.context.kernel;
+    const listThreads = kernel.listThreads;
+    kernel.listThreads = async () => {
+      routeWork += 1;
+      return listThreads.call(kernel);
+    };
+    let staticWork = 0;
+    const guarded = createFetch(h.context, {
+      site: {
+        async handle(): Promise<Response | undefined> {
+          staticWork += 1;
+          return undefined;
+        },
+      },
+    });
+    try {
+      const nullHeaders = { Origin: "null" };
+      const get = await guarded(new Request("http://127.0.0.1:7334/api/threads", { headers: nullHeaders }));
+      const post = await guarded(
+        new Request("http://127.0.0.1:7334/api/threads", {
+          method: "POST",
+          headers: { ...nullHeaders, "Content-Type": "application/json" },
+          body: "{}",
+        }),
+      );
+      const asset = await guarded(new Request("http://127.0.0.1:7334/app/", { headers: nullHeaders }));
+      const preflight = await guarded(
+        new Request("http://127.0.0.1:7334/app/", { method: "OPTIONS", headers: nullHeaders }),
+      );
+      expect(get.status).toBe(403);
+      expect(post.status).toBe(403);
+      expect(asset.status).toBe(403);
+      expect(preflight.status).toBe(204);
+      for (const response of [get, post, asset, preflight]) {
+        expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      }
+    } finally {
+      kernel.listThreads = listThreads;
+    }
+    expect(routeWork).toBe(0);
+    expect(staticWork).toBe(0);
+  });
+
+  test("a foreign origin cannot read", async () => {
     const response = await h.fetch("/api/health", { headers: { origin: "https://evil.example" } });
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "origin_denied" });
+  });
+
+  test("missing Origin and the explicit loopback/Tauri origins stay allowed", async () => {
+    const handler = createFetch(h.context);
+    const absent = await handler(new Request("http://127.0.0.1:7334/api/health"));
+    expect(absent.status).toBe(200);
+    const opaque = await handler(
+      new Request("http://127.0.0.1:7334/api/health", { headers: { Origin: "null" } }),
+    );
+    expect(opaque.status).toBe(403);
+    for (const origin of [
+      "tauri://localhost",
+      "http://localhost:5173",
+      "http://127.0.0.1:7334",
+      "http://[::1]:7334",
+    ]) {
+      const response = await handler(
+        new Request("http://127.0.0.1:7334/api/health", { headers: { Origin: origin } }),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    }
+  });
+
+  test("raw import passphrase header is allowed by local CORS preflight", async () => {
+    const response = await h.fetch("/api/import", {
+      method: "OPTIONS",
+      headers: {
+        origin: "tauri://localhost",
+        "access-control-request-headers": "X-Pylos-Passphrase",
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-headers")).toContain("X-Pylos-Passphrase");
+  });
+
+  test("a foreign preflight keeps its 204 response but receives no CORS grant", async () => {
+    const response = await h.fetch("/api/threads", {
+      method: "OPTIONS",
+      headers: { origin: "https://evil.example" },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  test("chunked JSON is bounded while it is being read", async () => {
+    const chunk = new Uint8Array(64 * 1024);
+    const totalChunks = 32;
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulls === totalChunks) {
+          controller.close();
+          return;
+        }
+        pulls += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    const response = await h.fetch("/api/threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ code: "payload_too_large" });
+    expect(pulls).toBeLessThan(totalChunks);
+  });
+
+  test("a JSON body cancel that never resolves cannot hold the 413 open", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("body cancellation held the 413 open")), 250);
+    });
+    const response = await Promise.race([
+      h.fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }),
+      timeout,
+    ]).finally(() => clearTimeout(timer));
+    expect(response.status).toBe(413);
+    expect(cancelled).toBe(true);
+  });
+
+  test("a JSON body that stalls after a partial chunk is cancelled with 408", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"title":'));
+      },
+      pull() {
+        return new Promise<void>(() => undefined);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const response = await h.fetch("/api/threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    expect(response.status).toBe(408);
+    expect(await response.json()).toMatchObject({ code: "request_timeout" });
+    expect(cancelled).toBe(true);
+  });
+
+  test("a slow-drip upload hits its absolute transfer deadline", async () => {
+    const response = await withTransferDeadline("PYLOS_TEST_UPLOAD_TRANSFER_DEADLINE_MS", 100, () =>
+      h.fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "multipart/form-data; boundary=slow-drip" },
+        body: heartbeatBody(0x2d),
+      }),
+    );
+    expect(response.status).toBe(408);
+    expect(await response.json()).toMatchObject({ code: "request_timeout" });
   });
 
   test("a non-loopback Host is refused", async () => {
     const response = await h.fetch("/api/health", { headers: { host: "pylos.example.com" } });
     expect(response.status).toBe(403);
+  });
+
+  test("a remote peer cannot spoof a loopback Host on the local server", async () => {
+    let staticWork = 0;
+    const guarded = createFetch(h.context, {
+      site: {
+        async handle(): Promise<Response | undefined> {
+          staticWork += 1;
+          return undefined;
+        },
+      },
+    });
+    const remote = await guarded(
+      new Request("http://127.0.0.1:7334/api/health", { headers: { Host: "localhost" } }),
+      { requestIP: () => ({ address: "192.0.2.1" }) },
+    );
+    expect(remote.status).toBe(403);
+    expect(await remote.json()).toMatchObject({ code: "not_loopback" });
+    const remoteAsset = await guarded(
+      new Request("http://127.0.0.1:7334/app/", { headers: { Host: "localhost" } }),
+      { requestIP: () => ({ address: "192.0.2.1" }) },
+    );
+    expect(remoteAsset.status).toBe(403);
+    expect(staticWork).toBe(0);
+
+    const local = await createFetch(h.context)(
+      new Request("http://127.0.0.1:7334/api/health", { headers: { Host: "localhost" } }),
+      { requestIP: () => ({ address: "127.0.0.1" }) },
+    );
+    expect(local.status).toBe(200);
+    const ipv6 = await createFetch(h.context)(
+      new Request("http://[::1]:7334/api/health", { headers: { Host: "[::1]" } }),
+      { requestIP: () => ({ address: "::1" }) },
+    );
+    expect(ipv6.status).toBe(200);
   });
 
   test("unknown routes are JSON 404s", async () => {
@@ -145,9 +434,81 @@ describe("threads and episodes", () => {
     expect(verified.ok).toBe(true);
     expect(verified.checkedTo).toBe(2);
   });
+
+  test("thread stats carry the verified frontier only once a verify has passed", async () => {
+    const thread = await newThread();
+    provider.reply("hello");
+    await h.sse(`/api/threads/${thread.threadId}/turn`, { text: "hi" });
+    expect((await h.json<ThreadStats>(`/api/threads/${thread.threadId}`)).verifiedTo).toBeUndefined();
+
+    const verified = await h.json<{ ok: boolean; checkedTo: number }>(
+      `/api/threads/${thread.threadId}/verify`,
+      jsonPost({}),
+    );
+    expect(verified.ok).toBe(true);
+    const after = await h.json<ThreadStats>(`/api/threads/${thread.threadId}`);
+    expect(after.verifiedTo).toBe(verified.checkedTo);
+    expect(after.verifiedTo).toBe(after.turns);
+    const listed = (await h.json<ThreadStats[]>("/api/threads")).find(
+      (entry) => entry.threadId === thread.threadId,
+    );
+    expect(listed?.verifiedTo).toBe(verified.checkedTo);
+
+    // The next turn is not covered by that pass, and the frontier stays honest.
+    provider.reply("again");
+    await h.sse(`/api/threads/${thread.threadId}/turn`, { text: "more" });
+    const later = await h.json<ThreadStats>(`/api/threads/${thread.threadId}`);
+    expect(later.verifiedTo).toBe(verified.checkedTo);
+    expect(later.turns).toBeGreaterThan(verified.checkedTo);
+  });
 });
 
 describe("the turn", () => {
+  test("a never-producing turn body times out and releases the thread lane", async () => {
+    const thread = await newThread();
+    const stalledBody = new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const stalled = h.fetch(`/api/threads/${thread.threadId}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: stalledBody,
+    });
+    provider.reply("The next turn entered after the stalled ticket was released.");
+    const next = h.fetch(
+      `/api/threads/${thread.threadId}/turn`,
+      jsonPost({ text: "Does the lane still work?" }),
+    );
+    const [timedOut, proceeded] = await Promise.all([stalled, next]);
+    expect(timedOut.status).toBe(408);
+    expect(await timedOut.json()).toMatchObject({ code: "request_timeout" });
+    expect(proceeded.status).toBe(200);
+    expect(await proceeded.text()).toContain('"type":"done"');
+  });
+
+  test("a heartbeat turn body hits the absolute deadline and releases the lane", async () => {
+    const thread = await newThread();
+    provider.reply("The lane advanced after the heartbeat deadline.");
+    await withTransferDeadline("PYLOS_TEST_JSON_TRANSFER_DEADLINE_MS", 120, async () => {
+      const stalled = h.fetch(`/api/threads/${thread.threadId}/turn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: heartbeatBody(),
+      });
+      const next = h.fetch(
+        `/api/threads/${thread.threadId}/turn`,
+        jsonPost({ text: "Did the heartbeat release its ticket?" }),
+      );
+      const [timedOut, proceeded] = await Promise.all([stalled, next]);
+      expect(timedOut.status).toBe(408);
+      expect(await timedOut.json()).toMatchObject({ code: "request_timeout" });
+      expect(proceeded.status).toBe(200);
+      expect(await proceeded.text()).toContain('"type":"done"');
+    });
+  });
+
   test("streams episode, packet, deltas and done", async () => {
     const thread = await newThread();
     provider.reply("The dry-run must be verified first.");
@@ -334,6 +695,211 @@ describe("attachments, handoff, forget", () => {
     expect(episodes[0]?.meta.blob).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  test("chunked attachment bodies are rejected at the upload boundary", async () => {
+    const thread = await newThread();
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent * chunk.byteLength > MAX_UPLOAD_BYTES) {
+          controller.close();
+          return;
+        }
+        sent += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    const response = await h.fetch(`/api/threads/${thread.threadId}/attach`, {
+      method: "POST",
+      headers: { "Content-Type": "multipart/form-data; boundary=chunked" },
+      body,
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ code: "payload_too_large" });
+  });
+
+  test("attachment aggregate size is checked before reading any file bytes", async () => {
+    let arrayBufferCalls = 0;
+    const files = [
+      {
+        size: MAX_UPLOAD_BYTES,
+        arrayBuffer: () => {
+          arrayBufferCalls += 1;
+          throw new Error("arrayBuffer must not run before aggregate validation");
+        },
+      },
+      {
+        size: 1,
+        arrayBuffer: () => {
+          arrayBufferCalls += 1;
+          throw new Error("arrayBuffer must not run before aggregate validation");
+        },
+      },
+    ];
+    let failure: unknown;
+    try {
+      checkAttachmentAggregate(files);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ status: 413, code: "payload_too_large" });
+    expect(arrayBufferCalls).toBe(0);
+  });
+
+  test("attachment file count is checked before reading any file bytes", () => {
+    let arrayBufferCalls = 0;
+    const files = Array.from({ length: MAX_ATTACHMENT_FILES + 1 }, () => ({
+      size: 0,
+      arrayBuffer: () => {
+        arrayBufferCalls += 1;
+        throw new Error("arrayBuffer must not run before count validation");
+      },
+    }));
+    let failure: unknown;
+    try {
+      checkAttachmentAggregate(files);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ status: 413, code: "too_many_files" });
+    expect(arrayBufferCalls).toBe(0);
+  });
+
+  test("multipart attachment file count is bounded atomically before append", async () => {
+    const thread = await newThread();
+    const form = new FormData();
+    for (let index = 0; index < MAX_ATTACHMENT_FILES + 1; index += 1) {
+      form.append("file", new File(["x"], `tiny-${index}.txt`, { type: "text/plain" }));
+    }
+
+    const response = await h.fetch(`/api/threads/${thread.threadId}/attach`, {
+      method: "POST",
+      body: form,
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ code: "too_many_files" });
+
+    const stats = await h.json<ThreadStats>(`/api/threads/${thread.threadId}`);
+    expect(stats.turns).toBe(0);
+  });
+
+  test("oversized UTF-8 attachment metadata is typed 413 before append", async () => {
+    const giant = "x".repeat(1_100_000);
+    for (const file of [
+      { name: giant, type: "text/plain" },
+      { name: "small.txt", type: giant },
+    ]) {
+      let failure: unknown;
+      try {
+        checkAttachmentMetadata(file);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toMatchObject({ status: 413, code: "attachment_metadata_too_large" });
+    }
+  });
+
+  test("real uploads persist chunk manifests and the next tail question pages the exact final span", async () => {
+    const thread = await newThread();
+    const text = `${"record café — keep this indexed\n".repeat(3_000)}FINAL-UPLOAD-TAIL-7f3c\n`;
+    const bytes = new TextEncoder().encode(text);
+    expect(bytes.byteLength).toBeGreaterThan(64 * 1024);
+    const form = new FormData();
+    form.append("file", new File([bytes], "upload-tail.txt", { type: "text/plain" }));
+    const episodes = await h.json<EpisodeView[]>(`/api/threads/${thread.threadId}/attach`, {
+      method: "POST",
+      body: form,
+    });
+    const attachment = episodes[0];
+    const manifest = attachment?.meta.manifest;
+    expect(attachment?.role).toBe("attachment");
+    expect(attachment?.contentTruncated).toBe(true);
+    expect(attachment?.contentBytes).toBe(bytes.byteLength);
+    expect(attachment?.content.length).toBeLessThanOrEqual(8 * 1024);
+    expect(manifest).toBeDefined();
+    expect(manifest?.spans.length).toBeGreaterThan(1);
+    expect(manifest?.spans.every((span) => span.state === "indexed")).toBe(true);
+    expect(manifest?.hash).toMatch(/^[0-9a-f]{64}$/);
+    const final = manifest?.spans.at(-1);
+    expect(final).toBeDefined();
+    expect(final?.to).toBe(bytes.byteLength);
+    expect(final?.hash).toBe(
+      createHash("sha256")
+        .update(bytes.subarray(final?.from ?? 0, final?.to ?? 0))
+        .digest("hex"),
+    );
+
+    provider.reply("I found the final upload marker.");
+    const events = await h.sse(`/api/threads/${thread.threadId}/turn`, {
+      text: "What is in the final tail of this attachment?",
+    });
+    const packet = events.find((event) => event.type === "packet");
+    const tail =
+      packet?.type === "packet" ? packet.pages.find((page) => page.trigger === "attachment-tail") : undefined;
+    expect(tail?.resolved).toBe(true);
+    expect(tail?.byteRange?.[0]).toBeGreaterThanOrEqual(final?.from ?? 0);
+    expect(tail?.byteRange?.[1]).toBe(final?.to);
+    expect(tail?.spanHash).toBe(
+      createHash("sha256")
+        .update(bytes.subarray(tail?.byteRange?.[0] ?? 0, tail?.byteRange?.[1] ?? 0))
+        .digest("hex"),
+    );
+    expect(tail?.manifest).toBe(manifest?.id);
+    expect(tail?.encoding).toBe("utf-8");
+    expect(
+      packet?.type === "packet" &&
+        packet.reachability?.some(
+          (span) => span.kind === "attachment-range" && span.locatorTemplate === "attachment:{seq}",
+        ),
+    ).toBe(true);
+    expect(
+      provider.calls.at(-1)?.messages.some((message) => message.content.includes("FINAL-UPLOAD-TAIL-7f3c")),
+    ).toBe(true);
+    const gate = events.find((event) => event.type === "gate");
+    expect(gate?.type === "gate" && gate.receipt.digest).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("invalid UTF-8 uploads stay opaque and cannot leak trailing marker bytes", async () => {
+    const thread = await newThread();
+    const marker = "SAFE_FF_SECRET_MARKER";
+    const suffix = new TextEncoder().encode(marker);
+    const bytes = new Uint8Array(4 + suffix.byteLength);
+    bytes.set([0xff, 0xfe, 0xc3, 0x28]);
+    bytes.set(suffix, 4);
+    const form = new FormData();
+    form.append("file", new File([bytes], "unsafe.txt", { type: "text/plain" }));
+    const episodes = await h.json<Episode[]>(`/api/threads/${thread.threadId}/attach`, {
+      method: "POST",
+      body: form,
+    });
+    const attachment = episodes[0];
+    expect(attachment?.content).toMatch(/opaque attachment/i);
+    expect(attachment?.content).not.toContain(marker);
+    expect(attachment?.meta.manifest?.spans.every((span) => span.state === "opaque")).toBe(true);
+
+    const search = await h.json<{ episodes: Episode[] }>(
+      `/api/threads/${thread.threadId}/search?q=${encodeURIComponent(marker)}`,
+    );
+    expect(search.episodes.some((episode) => episode.content.includes(marker))).toBe(false);
+
+    provider.reply("The upload is opaque binary custody; no text was indexed.");
+    const events = await h.sse(`/api/threads/${thread.threadId}/turn`, {
+      text: "What is in the final tail of unsafe.txt?",
+    });
+    const packet = events.find((event) => event.type === "packet");
+    expect(JSON.stringify(packet ?? {})).not.toContain(marker);
+    const tail =
+      packet?.type === "packet" ? packet.pages.find((page) => page.trigger === "attachment-tail") : undefined;
+    expect(tail?.resolved).toBe(true);
+    expect(tail?.opaque).toBe(true);
+    expect(
+      provider.calls
+        .at(-1)
+        ?.messages.map((message) => message.content)
+        .join("\n"),
+    ).not.toContain(marker);
+  });
+
   test("handoff writes the divider episode", async () => {
     const thread = await newThread();
     provider.reply("first");
@@ -424,6 +990,182 @@ describe("export and import", () => {
     await fresh.dispose();
   });
 
+  test("raw octet-stream import passes the request body directly to the streaming kernel", async () => {
+    const thread = await newThread();
+    provider.reply("archived");
+    await h.sse(`/api/threads/${thread.threadId}/turn`, { text: "remember Pylos" });
+    const exported = await h.fetch(
+      `/api/threads/${thread.threadId}/export`,
+      jsonPost({ passphrase: "correct horse battery" }),
+    );
+    const bytes = new Uint8Array(await exported.arrayBuffer());
+
+    const fresh = await harness();
+    try {
+      const originalImport = fresh.context.kernel.importBundleStream.bind(fresh.context.kernel);
+      let calls = 0;
+      let requestBody: ReadableStream<Uint8Array> | null = null;
+      fresh.context.kernel.importBundleStream = async (stream, passphrase) => {
+        calls += 1;
+        expect(stream === requestBody).toBe(true);
+        expect(passphrase).toBe("correct horse battery");
+        return originalImport(stream, passphrase);
+      };
+
+      const request = new Request("http://127.0.0.1:7334/api/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          [RAW_IMPORT_PASSPHRASE_HEADER]: Buffer.from("correct horse battery", "utf8").toString("base64url"),
+          Origin: "tauri://localhost",
+        },
+        body: bytes,
+      });
+      requestBody = request.body;
+      if (requestBody === null) throw new Error("test request has no body");
+      Object.defineProperty(request, "formData", {
+        value: () => {
+          throw new Error("raw import must not call formData()");
+        },
+      });
+      Object.defineProperty(request, "arrayBuffer", {
+        value: () => {
+          throw new Error("raw import must not call arrayBuffer()");
+        },
+      });
+
+      const response = await createFetch(fresh.context)(request);
+      expect(response.status).toBe(200);
+      const imported = (await response.json()) as ThreadStats;
+      expect(imported.threadId).toBe(thread.threadId);
+      expect(imported.turns).toBe(2);
+      expect(calls).toBe(1);
+    } finally {
+      await fresh.dispose();
+    }
+  });
+
+  test("quarantines an imported partial fragment before turn, gateway, forget, or handoff", async () => {
+    const source = await newThread();
+    provider.reply("fragment source");
+    await h.sse(`/api/threads/${source.threadId}/turn`, { text: "fragment source" });
+    const exported = await h.fetch(
+      `/api/threads/${source.threadId}/export`,
+      jsonPost({ passphrase: "correct horse battery", range: [2, 2] }),
+    );
+    expect(exported.status).toBe(200);
+    const bytes = new Uint8Array(await exported.arrayBuffer());
+
+    const fresh = await harness();
+    try {
+      const form = new FormData();
+      form.append("file", new File([bytes as BlobPart], "fragment.pylos"));
+      form.append("passphrase", "correct horse battery");
+      const importedResponse = await fresh.fetch("/api/import", { method: "POST", body: form });
+      expect(importedResponse.status).toBe(200);
+      const imported = (await importedResponse.json()) as ThreadStats;
+      expect(imported.fragment).toMatchObject({
+        readOnly: true,
+        originalThreadId: source.threadId,
+        fromSeq: 2,
+        toSeq: 2,
+      });
+
+      // Fragment rows remain useful to readers, but their authenticated range
+      // is never presented as a new mutable genesis chain.
+      const before = await fresh.json<ThreadStats>(`/api/threads/${imported.threadId}`);
+      expect(before.turns).toBe(2);
+      expect((await fresh.fetch(`/api/threads/${imported.threadId}/episodes`)).status).toBe(200);
+      expect((await fresh.fetch(`/api/threads/${imported.threadId}/search?q=fragment`)).status).toBe(200);
+
+      const originalEnter = fresh.context.kernel.enterTurn;
+      const originalForget = fresh.context.kernel.forget;
+      const originalHandoff = fresh.context.kernel.handoff;
+      let enters = 0;
+      let forgets = 0;
+      let handoffs = 0;
+      fresh.context.kernel.enterTurn = (threadId) => {
+        enters += 1;
+        return originalEnter.call(fresh.context.kernel, threadId);
+      };
+      fresh.context.kernel.forget = async (...args) => {
+        forgets += 1;
+        return originalForget.apply(fresh.context.kernel, args);
+      };
+      fresh.context.kernel.handoff = async (...args) => {
+        handoffs += 1;
+        return originalHandoff.apply(fresh.context.kernel, args);
+      };
+      try {
+        const attempts = [
+          fresh.fetch(`/api/threads/${imported.threadId}/turn`, jsonPost({ text: "must not append" })),
+          fresh.fetch("/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Pylos-Thread": imported.threadId },
+            body: JSON.stringify({
+              model: "grok-4.6",
+              messages: [{ role: "user", content: "must not append" }],
+            }),
+          }),
+          fresh.fetch(`/api/threads/${imported.threadId}/forget`, jsonPost({ seqs: [2] })),
+          fresh.fetch(`/api/threads/${imported.threadId}/handoff`, jsonPost({ model: "grok-4.6" })),
+        ];
+        for (const response of await Promise.all(attempts)) {
+          expect(response.status).toBe(409);
+          expect(await response.json()).toMatchObject({ code: "fragment_read_only" });
+        }
+      } finally {
+        fresh.context.kernel.enterTurn = originalEnter;
+        fresh.context.kernel.forget = originalForget;
+        fresh.context.kernel.handoff = originalHandoff;
+      }
+      expect(enters).toBe(0);
+      expect(forgets).toBe(0);
+      expect(handoffs).toBe(0);
+      expect(fresh.provider.calls).toHaveLength(0);
+      const after = await fresh.json<ThreadStats>(`/api/threads/${imported.threadId}`);
+      expect(after.turns).toBe(before.turns);
+      expect(after.headHash).toBe(before.headHash);
+    } finally {
+      await fresh.dispose();
+    }
+  });
+
+  test("export rejects malformed or out-of-bounds ranges before staging", async () => {
+    const thread = await newThread();
+    provider.reply("range fixture");
+    await h.sse(`/api/threads/${thread.threadId}/turn`, { text: "range fixture" });
+    const before = await h.json<ThreadStats>(`/api/threads/${thread.threadId}`);
+    const originalExport = h.context.kernel.exportBundleStream;
+    let calls = 0;
+    h.context.kernel.exportBundleStream = async (...args) => {
+      calls += 1;
+      return originalExport.apply(h.context.kernel, args);
+    };
+    try {
+      const cases = [
+        { body: { range: [1] }, status: 400, code: "invalid_range" },
+        { body: { range: ["1", 2] }, status: 400, code: "invalid_range" },
+        { body: { range: [0, 1] }, status: 416, code: "range_out_of_bounds" },
+        { body: { range: [2, 1] }, status: 416, code: "range_out_of_bounds" },
+        { body: { range: [1, before.turns + 1] }, status: 416, code: "range_out_of_bounds" },
+      ] as const;
+      for (const { body, status, code } of cases) {
+        const response = await h.fetch(
+          `/api/threads/${thread.threadId}/export`,
+          jsonPost({ passphrase: "correct horse battery", ...body }),
+        );
+        expect(response.status).toBe(status);
+        expect(await response.json()).toMatchObject({ code });
+      }
+      expect(calls).toBe(0);
+      const after = await h.json<ThreadStats>(`/api/threads/${thread.threadId}`);
+      expect(after.turns).toBe(before.turns);
+    } finally {
+      h.context.kernel.exportBundleStream = originalExport;
+    }
+  });
+
   test("the same thread cannot be imported twice into one vault", async () => {
     const thread = await newThread();
     provider.reply("archived");
@@ -476,17 +1218,28 @@ describe("compaction surfaces", () => {
           `The tablet inventory at Ano Englianos counted ${4000 + i} fragments.`,
       });
     }
-    const capsules = await h.json<Capsule[]>(`/api/threads/${thread.threadId}/capsules`);
+    const capsulePayload = await h.json<CapsulePage["capsules"] | CapsulePage>(
+      `/api/threads/${thread.threadId}/capsules`,
+    );
+    const capsules = Array.isArray(capsulePayload) ? capsulePayload : capsulePayload.capsules;
     expect(capsules.length).toBeGreaterThan(0);
-    const leaf = capsules.find((capsule) => capsule.level === 0);
-    expect(leaf?.fromSeq).toBe(1);
+    // Bounded derived readers are keyset-addressed and may return newest-first;
+    // the conservation claim is coverage, not incidental row order.
+    const leaf = capsules.find((capsule) => capsule.level === 0 && capsule.fromSeq === 1);
+    expect(leaf).toBeDefined();
     expect(leaf?.hash).toMatch(/^[0-9a-f]{64}$/);
 
-    const ledger = await h.json<Array<{ name: string; seq: number }>>(
+    const ledgerPayload = await h.json<LedgerPage["entries"] | LedgerPage>(
       `/api/threads/${thread.threadId}/ledger?limit=10`,
     );
+    const ledger = Array.isArray(ledgerPayload) ? ledgerPayload : ledgerPayload.entries;
     expect(ledger.length).toBeGreaterThan(0);
     expect(ledger[0]?.seq).toBeGreaterThan(0);
+    if (!Array.isArray(ledgerPayload)) {
+      expect(ledgerPayload.byteLength).toBeLessThanOrEqual(256 * 1024);
+      expect(ledgerPayload.hasMore).toBe(true);
+      expect(ledgerPayload.continuation?.cursor).toEqual(expect.any(String));
+    }
 
     const stats = await h.json<ThreadStats>(`/api/threads/${thread.threadId}`);
     expect(stats.capsules).toBeGreaterThan(0);
@@ -520,6 +1273,20 @@ describe("models and auth", () => {
   test("an obviously invalid xAI key is refused", async () => {
     const response = await h.fetch("/api/auth/xai/api-key", jsonPost({ apiKey: "nope" }));
     expect(response.status).toBe(400);
+  });
+
+  test("local API configuration preserves a loopback-compatible gateway", async () => {
+    const local = await harness();
+    try {
+      const response = await local.fetch(
+        "/api/auth/openai-compatible/api-key",
+        jsonPost({ apiKey: "key-123456", baseUrl: "http://127.0.0.1:8080/v1/" }),
+      );
+      expect(response.status).toBe(200);
+      expect(await local.context.auth.baseUrl("openai-compatible")).toBe("http://127.0.0.1:8080/v1");
+    } finally {
+      await local.dispose();
+    }
   });
 
   test("logout clears the provider", async () => {

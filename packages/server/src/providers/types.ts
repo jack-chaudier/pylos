@@ -18,6 +18,12 @@ export interface StreamOptions {
   tools?: ToolDef[];
   signal?: AbortSignal;
   maxTokens?: number;
+  /** Parser-side defense for fragmented tool JSON; core independently meters the emitted stream. */
+  maxOutputBytes?: number;
+  maxOutputScope?: "round" | "turn";
+  maxOutputReportedBytes?: number;
+  /** Testable override; production uses the shared provider-header deadline. */
+  headerTimeoutMs?: number;
   temperature?: number;
 }
 
@@ -40,6 +46,34 @@ export class ProviderError extends Error {
   ) {
     super(message);
     this.name = "ProviderError";
+  }
+}
+
+/**
+ * Bounds strings while an HTTP provider is still assembling its wire format.
+ * This is defense in depth only; the kernel re-counts every emitted UTF-8 byte.
+ */
+export class ProviderOutputMeter {
+  private bytes = 0;
+
+  constructor(
+    private readonly limit: number | undefined,
+    private readonly scope: "round" | "turn" = "round",
+    private readonly reportedLimit: number | undefined = limit,
+  ) {}
+
+  add(...parts: string[]): void {
+    if (this.limit === undefined) return;
+    let next = this.bytes;
+    for (const part of parts) next += Buffer.byteLength(part, "utf8");
+    if (next > this.limit) {
+      throw new ProviderError(
+        "provider_output_limit",
+        `Provider output exceeded the ${this.reportedLimit}-byte ${this.scope} limit.`,
+        502,
+      );
+    }
+    this.bytes = next;
   }
 }
 

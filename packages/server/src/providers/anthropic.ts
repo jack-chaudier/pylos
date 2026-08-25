@@ -1,8 +1,16 @@
 import type { ChatMessage, ModelInfo } from "@pylos/protocol";
 import type { AuthService } from "../auth/xai.ts";
-import { isRecord, numberOr, providerHttpError } from "./openai-chat.ts";
+import { fetchProvider } from "./fetch.ts";
+import { isRecord, numberOr, providerHttpError, readProviderJson } from "./openai-chat.ts";
 import { parseJson, readSse } from "./sse.ts";
-import { type Provider, ProviderError, type ProviderEvent, redact, type StreamOptions } from "./types.ts";
+import {
+  type Provider,
+  ProviderError,
+  type ProviderEvent,
+  ProviderOutputMeter,
+  redact,
+  type StreamOptions,
+} from "./types.ts";
 
 const API_BASE = "https://api.anthropic.com/v1";
 const VERSION = "2023-06-01";
@@ -44,18 +52,28 @@ export class AnthropicProvider implements Provider {
 
     let response: Response;
     try {
-      response = await fetch(`${API_BASE}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          "anthropic-version": VERSION,
-          ...(key === undefined ? {} : { "x-api-key": key }),
+      response = await fetchProvider(
+        fetch,
+        `${API_BASE}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            "anthropic-version": VERSION,
+            ...(key === undefined ? {} : { "x-api-key": key }),
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-        ...(opts.signal === undefined ? {} : { signal: opts.signal }),
-      });
+        {
+          label: "Anthropic",
+          ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+          ...(opts.headerTimeoutMs === undefined ? {} : { timeoutMs: opts.headerTimeoutMs }),
+        },
+      );
     } catch (error) {
+      if (opts.signal?.aborted === true) throw error;
+      if (error instanceof ProviderError) throw error;
       throw new ProviderError(
         "provider_unreachable",
         `Anthropic is unreachable: ${redact(String(error))}`,
@@ -65,11 +83,16 @@ export class AnthropicProvider implements Provider {
     if (!response.ok || response.body === null) throw await providerHttpError("Anthropic", response);
 
     const toolDrafts = new Map<number, { id: string; name: string; args: string }>();
+    const output = new ProviderOutputMeter(
+      opts.maxOutputBytes,
+      opts.maxOutputScope,
+      opts.maxOutputReportedBytes,
+    );
     let inputTokens = 0;
     let outputTokens = 0;
     let cachedTokens = 0;
 
-    for await (const frame of readSse(response.body)) {
+    for await (const frame of readSse(response.body, { signal: opts.signal })) {
       const event = parseJson(frame.data);
       if (event === undefined) continue;
       const type = typeof event.type === "string" ? event.type : frame.event;
@@ -86,9 +109,12 @@ export class AnthropicProvider implements Provider {
       } else if (type === "content_block_start") {
         const block = event.content_block;
         if (isRecord(block) && block.type === "tool_use") {
+          const id = typeof block.id === "string" ? block.id : `call_${toolDrafts.size}`;
+          const name = typeof block.name === "string" ? block.name : "";
+          output.add(id, name);
           toolDrafts.set(numberOr(event.index, 0), {
-            id: typeof block.id === "string" ? block.id : `call_${toolDrafts.size}`,
-            name: typeof block.name === "string" ? block.name : "",
+            id,
+            name,
             args: "",
           });
         }
@@ -96,10 +122,14 @@ export class AnthropicProvider implements Provider {
         const delta = event.delta;
         if (!isRecord(delta)) continue;
         if (delta.type === "text_delta" && typeof delta.text === "string") {
+          output.add(delta.text);
           yield { type: "delta", text: delta.text };
         } else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string") {
           const draft = toolDrafts.get(numberOr(event.index, 0));
-          if (draft !== undefined) draft.args += delta.partial_json;
+          if (draft !== undefined) {
+            output.add(delta.partial_json);
+            draft.args += delta.partial_json;
+          }
         }
       } else if (type === "message_delta") {
         const usage = event.usage;
@@ -142,14 +172,19 @@ export class AnthropicProvider implements Provider {
     if (!available) return fallback;
     try {
       const key = await this.auth.token("anthropic");
-      const response = await fetch(`${API_BASE}/models?limit=100`, {
-        headers: {
-          "anthropic-version": VERSION,
-          ...(key === undefined ? {} : { "x-api-key": key }),
+      const response = await fetchProvider(
+        fetch,
+        `${API_BASE}/models?limit=100`,
+        {
+          headers: {
+            "anthropic-version": VERSION,
+            ...(key === undefined ? {} : { "x-api-key": key }),
+          },
         },
-      });
+        { label: "Anthropic" },
+      );
       if (!response.ok) return fallback;
-      const value: unknown = await response.json();
+      const value = await readProviderJson(response);
       const rows = isRecord(value) && Array.isArray(value.data) ? value.data : [];
       const models = rows.flatMap((row): ModelInfo[] => {
         if (!isRecord(row) || typeof row.id !== "string") return [];

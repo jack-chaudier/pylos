@@ -23,10 +23,11 @@ packages/protocol   shared types + local API contract (no deps)
 packages/core       the kernel (bun:sqlite) — vault, atomizer, compaction + ledger, compiler, pager, bundle, forget, verify, CLI `pylos`
 packages/core/src/pure   browser-safe subset; powers the landing page aperture — must stay free of Node/Bun APIs
 packages/server     loopback HTTP + SSE API, providers (xAI, Anthropic, OpenAI, Ollama, OpenAI-compatible), auth custody, OpenAI-compatible gateway
+apps/app            the React one-composer UI — the desktop shell's frontend, also served at /app/
 apps/desktop        Tauri 2 + React — the one-composer app; ships the server as a sidecar binary
 apps/web            landing page (Vite, static) → pylos.vercel.app; also serves install.sh
 bench/              million-turn bench, live variant, corpus; results/ holds the proofs
-scripts/            repo-wide scripts (scan-secrets)
+scripts/            repo-wide scripts (scan-secrets, prepare-semantic-assets)
 .github/workflows   ci.yml (push/PR), release.yml (tags v*)
 ```
 
@@ -37,8 +38,9 @@ Bun `1.3.10` (pinned in `package.json` and both workflows — keep them in sync)
 ```bash
 bun install --frozen-lockfile
 bun run typecheck                                  # every workspace
-bun run test                                       # core + server (bun test)
-bun run lint                                       # biome check packages apps bench
+bun run test                                       # core, server, app, web (bun test)
+bun run test:release-contract                      # semantic-asset and bench artifact contracts
+bun run lint                                       # biome check packages apps bench scripts
 bun run format                                     # biome format --write
 bun run scripts/scan-secrets.ts                    # must stay clean; CI runs it
 bun run --cwd packages/server build:sidecar        # kernel + server → apps/desktop/src-tauri/binaries/

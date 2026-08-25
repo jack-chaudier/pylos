@@ -2,13 +2,13 @@
  * The proof chart's data.
  *
  * `public/bench/series.json` is the only thing the chart reads, and it is
- * derived from `bench/results/million-5.json` at build time. If the reduction
+ * derived from `bench/results/million-6.json` at build time. If the reduction
  * ever disagrees with the artifact — a survival curve that flatters, a receipt
  * figure that is not in the run — the page states a number the bench did not
  * measure. These tests are that boundary.
  */
 import { describe, expect, test } from "bun:test";
-import artifact from "../../../bench/results/million-5.json";
+import artifact from "../../../bench/results/million-6.json";
 import series from "../public/bench/series.json";
 
 const run = artifact as {
@@ -27,7 +27,7 @@ const run = artifact as {
 };
 
 const last = run.checkpoints[run.checkpoints.length - 1];
-if (!last) throw new Error("million-5.json has no checkpoints");
+if (!last) throw new Error("million-6.json has no checkpoints");
 
 describe("the proof series", () => {
   test("has one point per bench checkpoint, in order", () => {

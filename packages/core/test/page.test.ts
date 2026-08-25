@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import type { Episode, PageRecord } from "@pylos/protocol";
 import {
   approxTokens,
+  atomize,
   compact,
   compile,
   FAULT_NOTICE_NO_TOOLS,
@@ -86,6 +87,46 @@ test("a query naming a turn pages that turn exactly, at any archive size", () =>
   expect(packet.tokens).toBeLessThanOrEqual(8192);
 });
 
+test("stop-name routing checks only bounded query and draft names", async () => {
+  const { vault, thread } = tempVault();
+  for (let index = 0; index < 5_000; index += 1) {
+    vault.db
+      .query("INSERT INTO stop_name (thread_id, name, hits) VALUES (?, ?, ?)")
+      .run(thread.id, `stopname-${index}`, 10_000 + index);
+  }
+  vault.db
+    .query("INSERT INTO stop_name (thread_id, name, hits) VALUES (?, ?, ?)")
+    .run(thread.id, "northbridge", 20_000);
+  const expected = compile(vault, thread.id, { query: "Tell me about Northbridge.", budget: 4_096 });
+  const stopNames = vault.stopNames as unknown as {
+    all: (threadId: string) => Set<string>;
+  };
+  const originalAll = stopNames.all;
+  let hydrated = false;
+  stopNames.all = () => {
+    hydrated = true;
+    throw new Error("stop-name table must not be fully hydrated");
+  };
+  try {
+    const actual = compile(vault, thread.id, { query: "Tell me about Northbridge.", budget: 4_096 });
+    expect(actual.pages).toEqual(expected.pages);
+    expect(packetText(actual.messages)).toBe(packetText(expected.messages));
+    const provider: Provider = async function* () {
+      yield { type: "delta", text: "Northbridge is recorded." };
+      yield { type: "done" };
+    };
+    await runTurn(vault, thread.id, {
+      text: "Tell me about Northbridge.",
+      model: "stop-name-oracle",
+      provider,
+      budget: 4_096,
+    });
+    expect(hydrated).toBe(false);
+  } finally {
+    stopNames.all = originalAll;
+  }
+});
+
 test("an address is not a value: turn 345 does not also route the number 345", () => {
   const { vault, thread } = longThread(1024, new Map([[345, "The kiln at Sagres fired unevenly."]]));
   compact(vault, thread.id, { budget: 8192 });
@@ -121,6 +162,94 @@ test("a range pages each turn in it; an impossible turn is UNKNOWN, not a guess"
 
   const bare = page(vault, thread.id, { query: "I have 345 apples", budget: 2000 });
   expect(bare.records.some((r) => r.trigger === "sequence")).toBe(false);
+});
+
+test("a huge model range is SQL-bounded before page rendering", () => {
+  const { vault, thread } = tempVault();
+  vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 128 }, (_, index) => ({
+      role: "user" as const,
+      content: `range witness ${index} ${"x".repeat(4_096)}`,
+    })),
+  );
+  const episodes = vault.episodes as unknown as {
+    range: (threadId: string, from: number, to: number, limit?: number) => Episode[];
+  };
+  const originalRange = episodes.range;
+  let requestedLimit: number | undefined;
+  let returnedRows = 0;
+  let returnedBytes = 0;
+  episodes.range = (threadId, from, to, limit) => {
+    if (from === 1 && to === 1_000_000_000) requestedLimit = limit;
+    const rows = originalRange(threadId, from, to, limit);
+    if (from === 1 && to === 1_000_000_000) {
+      returnedRows += rows.length;
+      returnedBytes += rows.reduce((sum, row) => sum + new TextEncoder().encode(row.content).byteLength, 0);
+    }
+    return rows;
+  };
+  try {
+    const result = page(vault, thread.id, {
+      range: [1, 1_000_000_000],
+      budget: 8_192,
+      search: false,
+    });
+    expect(result.records[0]?.seqs).toHaveLength(12);
+    expect(requestedLimit).toBe(12);
+    expect(returnedRows).toBe(12);
+    expect(returnedBytes).toBeLessThanOrEqual(12 * (4_096 + 32));
+  } finally {
+    episodes.range = originalRange;
+  }
+});
+
+test("historical value routing never materializes a thousand-revision chain", () => {
+  const { vault, thread } = tempVault();
+  const episodes = vault.episodes.appendMany(
+    thread.id,
+    Array.from({ length: 1_000 }, (_, index) => ({
+      role: "user" as const,
+      content: `I live in RevisionCity${index}.`,
+    })),
+  );
+  vault.tx(() =>
+    atomize(
+      vault,
+      thread.id,
+      episodes.map((episode) => episode.seq),
+    ),
+  );
+  expect(vault.atoms.latestByKey(thread.id, "missing.key", "SUPPORTED")).toBeNull();
+  expect(vault.atoms.latestByKey(thread.id, "missing.key", "HISTORICAL", "user")).toBeNull();
+
+  const atoms = vault.atoms as unknown as {
+    historyOf: (...args: never[]) => Episode[];
+    latestByKey: (...args: never[]) => unknown;
+  };
+  const originalHistory = atoms.historyOf;
+  const originalLatest = atoms.latestByKey;
+  let latestCalls = 0;
+  atoms.historyOf = () => {
+    throw new Error("historical lookup must not materialize the revision chain");
+  };
+  atoms.latestByKey = (...args) => {
+    latestCalls += 1;
+    return originalLatest(...args);
+  };
+  try {
+    const result = page(vault, thread.id, {
+      query: "who lived in RevisionCity10?",
+      budget: 4_000,
+      search: false,
+    });
+    expect(result.records.some((record) => record.trigger === "historical")).toBe(true);
+    expect(latestCalls).toBeGreaterThan(0);
+    expect(latestCalls).toBeLessThanOrEqual(6);
+  } finally {
+    atoms.historyOf = originalHistory;
+    atoms.latestByKey = originalLatest;
+  }
 });
 
 test("free-text recall searches the archive even when the query names nothing", () => {

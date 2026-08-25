@@ -1,21 +1,38 @@
-import type { Capsule, Episode, PageRecord } from "@pylos/protocol";
+import type {
+  AnswerReceipt,
+  CapsuleView,
+  CoverageReceipt,
+  Episode,
+  EpisodeView,
+  PageRecord,
+  ReachabilitySpan,
+  SemanticReceipt,
+} from "@pylos/protocol";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { bytesLabel, fullStamp, groupedNumber, shortTime } from "../format.ts";
-import { CheckLine, RecoveryLine } from "./EvidenceLines.tsx";
+import { splitReceipts } from "../receipts.ts";
+import { CheckLine, GateLine, RecoveryLine } from "./EvidenceLines.tsx";
 
 export interface StreamingTurn {
   text: string;
   model: string;
   pages: PageRecord[];
+  /** Kernel packet receipts collected before the committed answer arrives. */
+  coverage?: CoverageReceipt;
+  reachability?: ReachabilitySpan[];
+  semantic?: SemanticReceipt;
+  /** A gate is the release point. Deltas before it are never rendered. */
+  gate?: AnswerReceipt;
   /** KERNEL A9.5: the draft named lost values, so the text so far is provisional. */
   check?: { names: string[] };
   error?: string;
 }
 
 export interface TranscriptProps {
+  readOnly?: boolean;
   threadId: string;
   episodes: Episode[];
-  capsules: Capsule[];
+  capsules: CapsuleView[];
   hasOlder: boolean;
   loadingOlder: boolean;
   streaming: StreamingTurn | undefined;
@@ -48,7 +65,7 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
       map.set(capsule.toSeq, {
         from: capsule.fromSeq,
         to: capsule.toSeq,
-        losses: capsule.dropped.length + capsule.carriedCount,
+        losses: Math.max(0, capsule.droppedCount) + capsule.carriedCount,
       });
     }
     return map;
@@ -164,6 +181,7 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
           sealed={sealedAt.get(episode.seq)}
           threadId={props.threadId}
           measure={measure}
+          readOnly={props.readOnly}
           onForget={props.onForget}
         />
       ))}
@@ -177,11 +195,9 @@ export function Transcript(props: TranscriptProps): React.JSX.Element {
           {streaming.check !== undefined ? (
             <CheckLine meta={{ names: streaming.check.names, status: "revised" }} />
           ) : null}
+          <GateLine receipt={streaming.gate} />
           <div className="row row-assistant">
-            <div className="row-text">
-              {streaming.text}
-              <span className="cursor" />
-            </div>
+            <AnswerText text={streaming.text} cursor />
           </div>
           {streaming.error !== undefined ? <div className="turn-error">{streaming.error}</div> : null}
         </div>
@@ -202,6 +218,7 @@ function binarySearch(offsets: Float64Array, target: number): number {
 }
 
 interface RowProps {
+  readOnly?: boolean;
   episode: Episode;
   sealed: { from: number; to: number; losses: number } | undefined;
   threadId: string;
@@ -209,7 +226,14 @@ interface RowProps {
   onForget: (episode: Episode) => void;
 }
 
-function Row({ episode, sealed, threadId, measure, onForget }: RowProps): React.JSX.Element {
+function Row({
+  episode,
+  sealed,
+  threadId,
+  measure,
+  readOnly = false,
+  onForget,
+}: RowProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     measure(episode.seq, ref.current);
@@ -232,6 +256,7 @@ function Row({ episode, sealed, threadId, measure, onForget }: RowProps): React.
             <b>{String(episode.meta.name ?? "attachment")}</b>
             {typeof episode.meta.size === "number" ? bytesLabel(episode.meta.size) : null}
           </span>
+          <ProjectionReceipt episode={episode} />
         </div>
       ) : (
         <>
@@ -239,8 +264,13 @@ function Row({ episode, sealed, threadId, measure, onForget }: RowProps): React.
           <CheckLine meta={episode.meta.check} />
           <div className={`row row-${episode.role}${removed ? " row-removed" : ""}`}>
             <RowMeta episode={episode} />
-            <div className="row-text">{episode.content}</div>
-            {!removed ? (
+            {episode.role === "assistant" ? (
+              <AnswerText text={episode.content} />
+            ) : (
+              <div className="row-text">{episode.content}</div>
+            )}
+            <ProjectionReceipt episode={episode} />
+            {!readOnly && !removed ? (
               <div className="row-actions">
                 <button type="button" className="row-action" onClick={() => onForget(episode)}>
                   Forget this
@@ -258,6 +288,51 @@ function Row({ episode, sealed, threadId, measure, onForget }: RowProps): React.
           </span>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * An assistant turn as the archive stored it, with the gate's qualification
+ * lines lifted out of the prose into the engraved register. Only the styling
+ * moves; the lines stay in the episode's bytes and in every export.
+ */
+function AnswerText({ text, cursor = false }: { text: string; cursor?: boolean }): React.JSX.Element {
+  const { body, receipts } = splitReceipts(text);
+  return (
+    <>
+      <div className="row-text">
+        {body}
+        {cursor && receipts.length === 0 ? <span className="cursor" /> : null}
+      </div>
+      {receipts.map((line, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: the last line grows as it streams
+        <p key={index} className="receipt-line">
+          {line}
+          {cursor && index === receipts.length - 1 ? <span className="cursor" /> : null}
+        </p>
+      ))}
+    </>
+  );
+}
+
+/** A bounded transcript row stays honest about omitted bytes and its source. */
+function ProjectionReceipt({ episode }: { episode: Episode }): React.JSX.Element | null {
+  const projected = episode as Episode &
+    Partial<
+      Pick<
+        EpisodeView,
+        "contentBytes" | "contentTruncated" | "locator" | "continuation" | "locatorOmittedReason"
+      >
+    >;
+  if (projected.contentTruncated !== true || projected.contentBytes === undefined) return null;
+  const retained = new TextEncoder().encode(episode.content).byteLength;
+  const locator = projected.locator;
+  const source = locator?.source ?? `locator withheld · ${projected.locatorOmittedReason ?? "unknown"}`;
+  return (
+    <div className="row-projection mono" title={locator?.revision}>
+      bounded · {bytesLabel(retained)} of {bytesLabel(projected.contentBytes)} · {source}
+      {projected.continuation === undefined ? "" : ` · continue at byte ${projected.continuation.from}`}
     </div>
   );
 }

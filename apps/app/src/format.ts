@@ -1,12 +1,5 @@
 import type { PageRecord, ProviderId } from "@pylos/protocol";
 
-export function compactNumber(value: number): string {
-  if (value < 1000) return String(value);
-  if (value < 10_000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
-  if (value < 1_000_000) return `${Math.round(value / 1000)}k`;
-  return `${(value / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
-}
-
 export function groupedNumber(value: number): string {
   return value.toLocaleString("en-US");
 }
@@ -111,6 +104,18 @@ export function pageLabel(page: PageRecord): string {
       return page.name === undefined ? "changed" : `changed · ${page.name}`;
     case "search":
       return page.query ?? "search";
+    case "address":
+      return "witnessed route";
+    case "invalidation":
+      return "route invalidated";
+    case "semantic":
+      return "semantic address";
+    case "semantic-unavailable":
+      return "semantic route unavailable";
+    case "attachment-tail":
+      return page.opaque === true ? "opaque attachment tail" : "attachment tail";
+    case "recent-overflow":
+      return "recoverable recent turn";
     case "model":
       return "recall";
     case "explicit":

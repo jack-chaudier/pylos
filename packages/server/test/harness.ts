@@ -7,6 +7,7 @@ import { AuthService } from "../src/auth/xai.ts";
 import { createContext, type ServerContext } from "../src/context.ts";
 import { HostedRegistry } from "../src/hosted.ts";
 import { openKernel } from "../src/kernel.ts";
+import type { HeavyOperationGate, TurnConcurrencyGate } from "../src/limits.ts";
 import { ProviderRegistry } from "../src/providers/registry.ts";
 import { createFetch, createHostedFetch, type Handler } from "../src/serve.ts";
 import { staticSite } from "../src/static.ts";
@@ -91,7 +92,13 @@ export interface HostedHarness {
 }
 
 export async function hostedHarness(
-  options: { provider?: FakeProvider; web?: string; origins?: readonly string[] } = {},
+  options: {
+    provider?: FakeProvider;
+    web?: string;
+    origins?: readonly string[];
+    heavy?: HeavyOperationGate;
+    turns?: TurnConcurrencyGate;
+  } = {},
 ): Promise<HostedHarness> {
   const home = await mkdtemp(join(tmpdir(), "pylos-hosted-"));
   const provider = options.provider ?? new FakeProvider();
@@ -99,6 +106,8 @@ export async function hostedHarness(
 
   const registry = new HostedRegistry({
     home,
+    ...(options.heavy === undefined ? {} : { heavy: options.heavy }),
+    ...(options.turns === undefined ? {} : { turns: options.turns }),
     fetch: xai.fetch,
     context: async (dir) => {
       const auth = new AuthService({ store: new CredentialStore(join(dir, "auth.json")) });

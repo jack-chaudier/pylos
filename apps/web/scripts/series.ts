@@ -1,7 +1,7 @@
 /**
  * The proof chart's data, derived from the bench artifact rather than typed.
  *
- * `bench/results/million-5.json` is 245 kB of checkpoint detail; the chart on
+ * `bench/results/million-6.json` is checkpoint detail; the chart on
  * the landing page needs eight numbers per checkpoint and one receipt. This
  * reduces one to the other, deterministically, so the page cannot state a
  * figure the artifact does not contain. The output is tracked: it is the same
@@ -13,7 +13,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SOURCE = "bench/results/million-5.json";
+const SOURCE = "bench/results/million-6.json";
 const src = resolve(here, "../../../", SOURCE);
 const out = resolve(here, "../public/bench/series.json");
 

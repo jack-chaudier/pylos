@@ -1,6 +1,12 @@
-# KERNEL.md review (partner pass, v1)
+# KERNEL.md review (partner pass, v1 legacy)
 
 Ordered by severity. "Fix:" is proposed replacement text.
+
+This is the historical partner review that shaped the v1 amendments. The
+v2.0.0 contract keeps its soundness fixes but changes the default bundle
+container: v2 is a framed stream, while v1 ZIP bundles remain readable through
+the compatibility path. The current release boundary and A12–A15 oracles live
+in `docs/KERNEL.md`.
 
 ## Soundness holes
 
@@ -107,14 +113,19 @@ Ordered by severity. "Fix:" is proposed replacement text.
 
 ## Export format
 
-- AES-256-GCM over one zip: use a 1 MiB chunked stream (per-chunk nonce =
-  base‖counter, AAD = cleartext header `{v, kdf, salt, N, r, p | iters,
-  threadId, headSeq, headHash, partial?:{from,to,prevHash}}`) so import can
-  stream-verify a million-episode bundle; scrypt `N=2^17, r=8, p=1` preferred,
-  PBKDF2-SHA256 ≥ 600k fallback. Partial exports must include the `prev_hash`
-  at `from` so the chain verifies from the manifest.
-- `manifest.json` carries per-file sha256 and the `loss` row count; import
-  refuses if recomputed `dropped()` on any sampled capsule disagrees.
+- **Legacy v1:** AES-256-GCM over one ZIP and still readable by the current
+  importer. The explicit legacy writer refuses exported address routes or
+  aliases because historical readers could silently ignore that continuity
+  state. Its compatibility limits are intentionally smaller than the v2 stream
+  limits.
+- **Current v2:** AES-256-GCM over a framed archive, with a clear `v:2` header
+  and authenticated `PYLOS2` archive marker. A 1 MiB frame size, per-frame
+  nonce (`base‖counter`), and header AAD let export/import stage JSONL members
+  and object spans without constructing the archive in memory. Partial exports
+  include `prev_hash` at `from` so the chain verifies from the manifest.
+- Both formats carry per-file or per-entry SHA-256 data and manifest counts;
+  import refuses on authentication, digest, chain, partition, or recomputed
+  ledger disagreement. No million-turn v2 result is claimed by this review.
 
 ## Contradictions with the math (minor)
 

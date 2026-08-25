@@ -1,11 +1,17 @@
 import type {
-  Atom,
+  AnswerReceipt,
+  AtomView,
+  ByteLocator,
   ChatMessage,
+  ClaimClassificationReceipt,
+  CoverageReceipt,
   Epistemic,
   Packet,
+  ReachabilitySpan,
   RequestRound,
   ResidentItem,
   ResidentType,
+  SemanticReceipt,
   ThreadStats,
 } from "@pylos/protocol";
 import { useEffect, useMemo, useState } from "react";
@@ -50,7 +56,7 @@ const EPISTEMIC_LABEL: Record<Epistemic, string> = {
 
 export function Xray(props: XrayProps): React.JSX.Element {
   const [packet, setPacket] = useState<Packet | undefined>(undefined);
-  const [atoms, setAtoms] = useState<Atom[]>([]);
+  const [atoms, setAtoms] = useState<AtomView[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
   const [verified, setVerified] = useState<{ ok: boolean; headHash: string; checkedTo: number } | undefined>(
     undefined,
@@ -81,9 +87,9 @@ export function Xray(props: XrayProps): React.JSX.Element {
   useEffect(() => {
     let cancelled = false;
     void api
-      .atoms(props.threadId)
-      .then((list) => {
-        if (!cancelled) setAtoms(list);
+      .atomsPage(props.threadId, { limit: 32 })
+      .then((page) => {
+        if (!cancelled) setAtoms(page.atoms);
       })
       .catch(() => undefined);
     return () => {
@@ -127,7 +133,7 @@ export function Xray(props: XrayProps): React.JSX.Element {
               reconstructed
             </span>
           ) : null}
-          <span style={{ flex: 1 }} />
+          <span className="drawer-flex" />
           <button type="button" className="ghost" onClick={props.onClose}>
             Close
           </button>
@@ -178,6 +184,11 @@ export function Xray(props: XrayProps): React.JSX.Element {
                   ) : null}
                 </dl>
               </Section>
+
+              <ClosureReceipt spans={packet.reachability} pages={packet.pages} />
+              <CollectionReceipt coverage={packet.coverage} />
+              <GateReceipt receipt={packet.answerReceipt} />
+              <SemanticStatus receipt={packet.semantic} />
 
               {rounds.length > 0 ? (
                 <Section title="Rounds" count={String(rounds.length)} defaultOpen>
@@ -238,13 +249,18 @@ export function Xray(props: XrayProps): React.JSX.Element {
                     <div key={`${page.trigger}-${index}`} className="page-row">
                       {/* KERNEL A11.1: a fault is not an UNKNOWN locator — it is the receipt
                           that no locator was found, and it says which question found none. */}
-                      <span className="trigger" data-resolved={page.resolved}>
-                        {page.resolved || page.trigger === "fault" ? page.trigger : "unknown"}
+                      <span className="trigger" data-resolved={page.resolved} data-trigger={page.trigger}>
+                        {page.resolved || page.trigger === "fault"
+                          ? pageTriggerLabel(page.trigger)
+                          : "unknown"}
                       </span>
                       <span>
                         {page.trigger === "path" ? pageLabel(page) : (page.name ?? page.query ?? "—")}
                         {page.seqs.length > 0
                           ? ` · #${page.seqs.slice(0, 6).map(groupedNumber).join(", #")}`
+                          : ""}
+                        {page.source !== undefined && page.byteRange !== undefined
+                          ? ` · bytes ${page.byteRange[0]}–${page.byteRange[1]}`
                           : ""}
                       </span>
                       <span className="latency">
@@ -315,11 +331,282 @@ export function Xray(props: XrayProps): React.JSX.Element {
 }
 
 /**
+ * A12's closure receipt is deliberately shown as four states. An absent
+ * receipt is treated as a legacy packet, never as an implicit fifth state.
+ */
+function ClosureReceipt({
+  spans,
+  pages,
+}: {
+  spans: ReachabilitySpan[] | undefined;
+  pages: Packet["pages"];
+}): React.JSX.Element {
+  if (spans === undefined) {
+    return (
+      <Section title="Byte closure" count="legacy" defaultOpen>
+        <div className="receipt-empty">
+          This packet predates the four-state closure receipt. No reachability state is inferred here.
+        </div>
+      </Section>
+    );
+  }
+
+  const counts: Record<ReachabilitySpan["state"], number> = {
+    resident: 0,
+    capsule: 0,
+    pageable: 0,
+    opaque: 0,
+  };
+  for (const span of spans) counts[span.state] += 1;
+  const exactFromReceipt = spans.filter(hasExactLocator).length;
+  const exactFromPages = pages.filter(
+    (page) => page.source !== undefined && page.byteRange !== undefined && page.sourceHash !== undefined,
+  ).length;
+  const exact = exactFromReceipt + exactFromPages;
+  return (
+    <Section title="Byte closure" count={`${groupedNumber(spans.length)} spans`} defaultOpen>
+      <div className="receipt-card closure-card">
+        <p className="receipt-lede">
+          Every retained byte is resident, carried by a capsule, pageable, or covered by an opaque receipt.
+        </p>
+        <div className="receipt-metrics">
+          {(["resident", "capsule", "pageable", "opaque"] as const).map((state) => (
+            <div className="receipt-metric" key={state}>
+              <b>{groupedNumber(counts[state])}</b>
+              <span>{state}</span>
+            </div>
+          ))}
+        </div>
+        <div className="receipt-foot">
+          <span>exact locators</span>
+          <b>{groupedNumber(exact)}</b>
+          <span className="receipt-muted">hash-bound byte ranges in this receipt and its pages</span>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function hasExactLocator(span: ReachabilitySpan): boolean {
+  if (span.kind === "episode" || span.kind === "attachment") return true;
+  return "locator" in span && span.locator !== undefined;
+}
+
+/** A13 is a route receipt and a lower bound, never a claim that the set is complete. */
+function CollectionReceipt({ coverage }: { coverage: CoverageReceipt | undefined }): React.JSX.Element {
+  if (coverage === undefined) {
+    return (
+      <Section title="Collection coverage" count="none" defaultOpen={false}>
+        <div className="receipt-empty">No collection cue was recorded for this question.</div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Collection coverage" count={coverage.completeness} defaultOpen>
+      <div className="receipt-card">
+        <p className="receipt-lede">
+          Cue <b>{coverage.cue}</b> · routes ran against the archive as of turn #
+          {groupedNumber(coverage.asOfSeq)}.
+        </p>
+        <div className="receipt-metrics receipt-metrics-five">
+          <div className="receipt-metric">
+            <b>{groupedNumber(coverage.located)}</b>
+            <span>located</span>
+          </div>
+          <div className="receipt-metric">
+            <b>{groupedNumber(coverage.supported)}</b>
+            <span>supported</span>
+          </div>
+          <div className="receipt-metric">
+            <b>{groupedNumber(coverage.historical)}</b>
+            <span>historical</span>
+          </div>
+          <div className="receipt-metric">
+            <b>{coverage.required === undefined ? "unknown" : groupedNumber(coverage.required)}</b>
+            <span>required</span>
+          </div>
+          <div className="receipt-metric">
+            <b>{groupedNumber(coverage.unresolved ?? 0)}</b>
+            <span>unknown</span>
+          </div>
+        </div>
+        <div className="receipt-foot">
+          <span>completeness</span>
+          <b data-status={coverage.completeness}>{coverage.completeness}</b>
+          <span className="receipt-muted">a route lower bound; cardinality is not inferred</span>
+        </div>
+        {coverage.routes.length > 0 ? (
+          <div className="receipt-locators">
+            {coverage.routes.slice(0, 24).map((route) => (
+              <div className="receipt-locator" key={route.digest}>
+                <span className="trigger">{route.status}</span>
+                <span>
+                  {route.source} · bytes {route.byteRange[0]}–{route.byteRange[1]}
+                </span>
+                <span className="latency">{shortHash(route.revision)}</span>
+              </div>
+            ))}
+            {coverage.routes.length > 24 ? (
+              <div className="receipt-muted">+{groupedNumber(coverage.routes.length - 24)} more locators</div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Section>
+  );
+}
+
+/** A14's release receipt: per-claim classes and exact witnesses, when any. */
+function GateReceipt({ receipt }: { receipt: AnswerReceipt | undefined }): React.JSX.Element {
+  if (receipt === undefined) {
+    return (
+      <Section title="Memory gate" count="none" defaultOpen={false}>
+        <div className="receipt-empty">No answer receipt was stored with this packet.</div>
+      </Section>
+    );
+  }
+  const witnessed = receipt.classifications.filter((claim) => claim.witness !== undefined).length;
+  const coverageBases = receipt.classifications.filter(
+    (claim) => claim.witness === undefined && claim.basis !== undefined,
+  ).length;
+  const currentEvidence = receipt.classifications.filter(hasCurrentEvidence).length;
+  return (
+    <Section title="Memory gate" count={receipt.status} defaultOpen>
+      <div className="receipt-card">
+        <p className="receipt-lede">
+          Kernel release: <b data-status={receipt.status}>{receipt.status}</b> · {currentEvidence} of{" "}
+          {receipt.classifications.length} remembered claims have current evidence.
+          {witnessed > 0 || coverageBases > 0 ? (
+            <span className="receipt-muted">
+              {" "}
+              ({witnessed} exact source {witnessed === 1 ? "witness" : "witnesses"} · {coverageBases} coverage{" "}
+              {coverageBases === 1 ? "base" : "bases"})
+            </span>
+          ) : null}
+        </p>
+        <div className="receipt-claims">
+          {receipt.classifications.length === 0 ? (
+            <div className="receipt-empty">No remembered claims were classified.</div>
+          ) : (
+            receipt.classifications.map((claim) => {
+              const candidate = receipt.candidates.find((item) => sameSpan(item.span, claim.span));
+              const evidenceKey = claim.witness?.hash ?? claim.basis?.digest ?? "none";
+              return (
+                <div
+                  className="receipt-claim"
+                  key={`${claim.span[0]}-${claim.span[1]}-${claim.kind}-${claim.classification}-${evidenceKey}`}
+                >
+                  <div className="receipt-claim-head">
+                    <span className="trigger">{claim.kind}</span>
+                    <b data-classification={claim.classification}>{claim.classification}</b>
+                  </div>
+                  <div className="receipt-claim-text">
+                    {candidate?.text ?? `answer span ${claim.span.join("–")}`}
+                  </div>
+                  <div className="receipt-witness">{formatClaimEvidence(claim)}</div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        {receipt.qualifications.length > 0 ? (
+          <div className="receipt-qualifications">
+            {receipt.qualifications.map((qualification) => (
+              <div key={qualification}>{qualification}</div>
+            ))}
+          </div>
+        ) : null}
+        <p className="receipt-muted receipt-note">
+          The gate controls remembered claims only; it does not certify reasoning, entailment, or creative
+          prose.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+function sameSpan(left: [number, number], right: [number, number]): boolean {
+  return left[0] === right[0] && left[1] === right[1];
+}
+
+function hasCurrentEvidence(claim: ClaimClassificationReceipt): boolean {
+  return claim.witness !== undefined || claim.basis !== undefined;
+}
+
+export function formatClaimEvidence(claim: ClaimClassificationReceipt): string {
+  if (claim.witness !== undefined) return `current witness · ${formatWitness(claim.witness)}`;
+  if (claim.basis !== undefined) {
+    return `coverage · ${claim.basis.metric} ${groupedNumber(claim.basis.value)} · ${shortHash(claim.basis.digest)}`;
+  }
+  return "no current witness";
+}
+
+function formatWitness(witness: ByteLocator): string {
+  return `${witness.source} · bytes ${witness.from}–${witness.to} · ${shortHash(witness.hash)}`;
+}
+
+/** A15.2 is address-only. The UI must not imply semantic retrieval efficacy. */
+function SemanticStatus({ receipt }: { receipt: SemanticReceipt | undefined }): React.JSX.Element {
+  if (receipt === undefined) {
+    return (
+      <Section title="Semantic route" count="none" defaultOpen={false}>
+        <div className="receipt-empty">No semantic route receipt was recorded for this packet.</div>
+      </Section>
+    );
+  }
+  const count = receipt.status === "ready" ? `${receipt.indexed ?? 0} indexed` : receipt.status;
+  return (
+    <Section title="Semantic route" count={count} defaultOpen={receipt.status !== "ready"}>
+      <div className="receipt-card" data-semantic-status={receipt.status}>
+        <p className="receipt-lede">
+          Address route: <b data-status={receipt.status}>{receipt.status}</b>
+        </p>
+        {receipt.status === "ready" ? (
+          <p className="receipt-copy">
+            {groupedNumber(receipt.indexed ?? 0)} indexed · {groupedNumber(receipt.eligible ?? 0)} eligible.
+            Hits still require exact byte paging and a receipt before they can be read.
+          </p>
+        ) : (
+          <p className="receipt-copy">
+            {receipt.reason ?? "The semantic route did not produce a usable index."}
+          </p>
+        )}
+        <p className="receipt-muted receipt-note">
+          Semantic addresses are not authority and do not become facts.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+function pageTriggerLabel(trigger: Packet["pages"][number]["trigger"]): string {
+  switch (trigger) {
+    case "address":
+      return "address route";
+    case "invalidation":
+      return "address invalidation";
+    case "semantic":
+      return "semantic address";
+    case "semantic-unavailable":
+      return "semantic unavailable";
+    case "attachment-tail":
+      return "attachment tail";
+    case "recent-overflow":
+      return "recent overflow";
+    case "fault":
+      return "page fault";
+    default:
+      return trigger;
+  }
+}
+
+/**
  * What the thread believes, and on whose word. PROPOSED atoms were asserted by
  * a model rather than the user (KERNEL A9.1): they are shown, marked, and never
  * dressed up as certificates.
  */
-function Memory({ atoms }: { atoms: Atom[] }): React.JSX.Element {
+function Memory({ atoms }: { atoms: AtomView[] }): React.JSX.Element {
   const held = atoms.filter((atom) => atom.phase === "SUPPORTED");
   const proposed = atoms.filter((atom) => atom.phase === "PROPOSED");
   return (
@@ -345,7 +632,7 @@ function Memory({ atoms }: { atoms: Atom[] }): React.JSX.Element {
   );
 }
 
-function AtomRow({ atom }: { atom: Atom }): React.JSX.Element {
+function AtomRow({ atom }: { atom: AtomView }): React.JSX.Element {
   const unconfirmed = atom.phase === "PROPOSED";
   return (
     <div className="page-row atom-row" data-proposed={unconfirmed}>

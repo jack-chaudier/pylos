@@ -1,0 +1,451 @@
+{
+  "schema": "pylos.bench.laptop-funeral.v3",
+  "ok": true,
+  "startedAt": 1787636839689,
+  "finishedAt": 1787636991412,
+  "durationMs": 151723,
+  "source": {
+    "threadId": "th_funeral_million",
+    "turns": 1000000,
+    "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da",
+    "fullVerify": {
+      "ok": true,
+      "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da",
+      "checkedTo": 1000000,
+      "checkedFrom": 0
+    },
+    "receipts": {
+      "packets": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "answerReceipts": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "coverageReceipts": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "addresses": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "aliases": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+      }
+    },
+    "manifest": {
+      "schema": "pylos.bench.archive-manifest.v1",
+      "headSeq": 1000000,
+      "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da",
+      "tables": {
+        "episodes": {
+          "count": 1000000,
+          "digest": "a101007b14544eaa400df9631fe52a36e29234a9027725eea7ca3fa391479fa5"
+        },
+        "atoms": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "capsules": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "capsuleLedgerEntries": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "loss": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "packets": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "tombstones": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "addressRoutes": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "addressAliases": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "atomizationReceipts": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        }
+      },
+      "digest": "beab4c111198f508b4caa6be985c2ae8f7d4e51b579f0dd7471882293af5f306"
+    }
+  },
+  "restore": {
+    "threadId": "th_funeral_million",
+    "turns": 1000000,
+    "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da",
+    "import": {
+      "episodes": 1000000,
+      "verified": true,
+      "headSeq": 1000000,
+      "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da"
+    },
+    "fullVerify": {
+      "ok": true,
+      "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da",
+      "checkedTo": 1000000,
+      "checkedFrom": 0
+    },
+    "receipts": {
+      "packets": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "answerReceipts": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "coverageReceipts": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "addresses": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff",
+        "sample": []
+      },
+      "aliases": {
+        "count": 0,
+        "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+      }
+    },
+    "manifest": {
+      "schema": "pylos.bench.archive-manifest.v1",
+      "headSeq": 1000000,
+      "headHash": "602ce624efd20b1bb9d2354a552351ec062e1e4b87de558468dd0890429c27da",
+      "tables": {
+        "episodes": {
+          "count": 1000000,
+          "digest": "a101007b14544eaa400df9631fe52a36e29234a9027725eea7ca3fa391479fa5"
+        },
+        "atoms": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "capsules": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "capsuleLedgerEntries": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "loss": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "packets": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "tombstones": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "addressRoutes": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "addressAliases": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        },
+        "atomizationReceipts": {
+          "count": 0,
+          "digest": "cfae0d4248f7142f7b17f826cd7a519280e312577690e957830d23dcf35a3fff"
+        }
+      },
+      "digest": "beab4c111198f508b4caa6be985c2ae8f7d4e51b579f0dd7471882293af5f306"
+    }
+  },
+  "bundle": {
+    "bytes": 434722285,
+    "sha256": "ade96e8277537f8639f67fba87534d4e7c15465a9c3ff01cb4cdaa4bed626ec0",
+    "exportMs": 13177.69,
+    "importMs": 72705.191,
+    "exportProgress": {
+      "eventCount": 417,
+      "phases": [
+        "staging",
+        "encrypting",
+        "done"
+      ],
+      "final": {
+        "phase": "done",
+        "bytes": 434713741,
+        "stagedBytes": 434712708,
+        "rows": 1000000,
+        "entries": 11,
+        "bufferedBytes": 0,
+        "peakBufferedBytes": 35848320
+      },
+      "declaredBufferBoundBytes": 35848320,
+      "withinDeclaredBufferBound": true,
+      "max": {
+        "bytes": 434713741,
+        "stagedBytes": 434712708,
+        "rows": 1000000,
+        "entries": 11,
+        "bufferedBytes": 1048576,
+        "peakBufferedBytes": 35848320
+      }
+    },
+    "importProgress": {
+      "eventCount": 431,
+      "phases": [
+        "staging",
+        "decrypting",
+        "extracting",
+        "loading",
+        "installing",
+        "done"
+      ],
+      "final": {
+        "phase": "done",
+        "bytes": 434712708,
+        "stagedBytes": 434712708,
+        "rows": 1000000,
+        "entries": 11,
+        "bufferedBytes": 0,
+        "peakBufferedBytes": 35848320
+      },
+      "declaredBufferBoundBytes": 35848320,
+      "withinDeclaredBufferBound": true,
+      "max": {
+        "bytes": 434722285,
+        "stagedBytes": 434722285,
+        "rows": 1000000,
+        "entries": 415,
+        "bufferedBytes": 1048576,
+        "peakBufferedBytes": 35848320
+      }
+    }
+  },
+  "receiptCoverage": {
+    "schema": "pylos.bench.receipt-coverage.v1",
+    "namespaces": {
+      "packet": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "request-round": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "reachability": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "coverage": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "evidence": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "answer": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "semantic": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "address-route": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "address-alias": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "atomization": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "capsule-ledger": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "tombstone": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      },
+      "attachment-manifest": {
+        "source": 0,
+        "restore": 0,
+        "exercised": false
+      }
+    },
+    "exercised": [],
+    "unexercised": [
+      "packet",
+      "request-round",
+      "reachability",
+      "coverage",
+      "evidence",
+      "answer",
+      "semantic",
+      "address-route",
+      "address-alias",
+      "atomization",
+      "capsule-ledger",
+      "tombstone",
+      "attachment-manifest"
+    ],
+    "digest": "707569adf18056ec6bc6ca9b074e410790203142ec881761cbe3c58ba315bc8c"
+  },
+  "page": {
+    "source": {
+      "requested": true,
+      "request": {
+        "seq": 730000
+      },
+      "records": [
+        {
+          "trigger": "explicit",
+          "seqs": [
+            730000
+          ],
+          "tokens": 33,
+          "resolved": true
+        }
+      ],
+      "blocks": [
+        {
+          "seq": 730000,
+          "role": "assistant",
+          "trigger": "explicit",
+          "text": "Funeral fixture witness: the distant turn carries byte-exact marker FNF-730000.",
+          "epistemic": "PROPOSED"
+        }
+      ],
+      "digest": "fd2b26077046628b0807012cfa780df4d89fbec0bc751015657e05e1c3332904",
+      "exact": true,
+      "resolvedSeqs": [
+        730000
+      ]
+    },
+    "restore": {
+      "requested": true,
+      "request": {
+        "seq": 730000
+      },
+      "records": [
+        {
+          "trigger": "explicit",
+          "seqs": [
+            730000
+          ],
+          "tokens": 33,
+          "resolved": true
+        }
+      ],
+      "blocks": [
+        {
+          "seq": 730000,
+          "role": "assistant",
+          "trigger": "explicit",
+          "text": "Funeral fixture witness: the distant turn carries byte-exact marker FNF-730000.",
+          "epistemic": "PROPOSED"
+        }
+      ],
+      "digest": "fd2b26077046628b0807012cfa780df4d89fbec0bc751015657e05e1c3332904",
+      "exact": true,
+      "resolvedSeqs": [
+        730000
+      ]
+    },
+    "digestEqual": true,
+    "byteExact": true
+  },
+  "memory": {
+    "beforeExport": {
+      "rss": 1127890944,
+      "heapUsed": 31464885,
+      "external": 29817916,
+      "arrayBuffers": 28418061
+    },
+    "afterExport": {
+      "rss": 1168621568,
+      "heapUsed": 21847641,
+      "external": 20000233,
+      "arrayBuffers": 14507099
+    },
+    "afterImport": {
+      "rss": 1132920832,
+      "heapUsed": 29881227,
+      "external": 27912011,
+      "arrayBuffers": 25524461
+    },
+    "afterVerify": {
+      "rss": 1134247936,
+      "heapUsed": 55183858,
+      "external": 54788620,
+      "arrayBuffers": 52562160
+    },
+    "deltas": {
+      "export": {
+        "rss": 40730624,
+        "heapUsed": -9617244,
+        "external": -9817683,
+        "arrayBuffers": -13910962
+      },
+      "import": {
+        "rss": -35700736,
+        "heapUsed": 8033586,
+        "external": 7911778,
+        "arrayBuffers": 11017362
+      },
+      "verify": {
+        "rss": 1327104,
+        "heapUsed": 25302631,
+        "external": 26876609,
+        "arrayBuffers": 27037699
+      }
+    }
+  },
+  "passphrase": "generated",
+  "fixture": {
+    "turns": 1000000,
+    "plantedSeq": 730000,
+    "seeded": true
+  },
+  "destinationCleaned": true,
+  "failures": []
+}

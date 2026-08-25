@@ -1,6 +1,7 @@
 import type { ChatMessage, ModelInfo } from "@pylos/protocol";
 import type { AuthService } from "../auth/xai.ts";
-import { isRecord, streamOpenAiChat } from "./openai-chat.ts";
+import { fetchProvider } from "./fetch.ts";
+import { isRecord, readProviderJson, streamOpenAiChat } from "./openai-chat.ts";
 import type { Provider, ProviderEvent, StreamOptions } from "./types.ts";
 
 const API_BASE = "https://api.openai.com/v1";
@@ -43,11 +44,16 @@ export class OpenAiProvider implements Provider {
     if (!available) return fallback;
     try {
       const key = await this.auth.token("openai");
-      const response = await fetch(`${API_BASE}/models`, {
-        headers: key === undefined ? {} : { Authorization: `Bearer ${key}` },
-      });
+      const response = await fetchProvider(
+        fetch,
+        `${API_BASE}/models`,
+        {
+          headers: key === undefined ? {} : { Authorization: `Bearer ${key}` },
+        },
+        { label: "OpenAI" },
+      );
       if (!response.ok) return fallback;
-      const value: unknown = await response.json();
+      const value = await readProviderJson(response);
       const rows = isRecord(value) && Array.isArray(value.data) ? value.data : [];
       const models = rows.flatMap((row): ModelInfo[] => {
         if (!isRecord(row) || typeof row.id !== "string") return [];

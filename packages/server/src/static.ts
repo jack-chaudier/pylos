@@ -3,6 +3,7 @@
  * Anything outside that prefix is left to the API router.
  */
 import { existsSync } from "node:fs";
+import { lstat, realpath } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -20,9 +21,59 @@ export interface StaticSite {
   handle(url: URL, method: string): Promise<Response | undefined>;
 }
 
+type SafePath = "missing" | "directory" | "unsafe" | string;
+
+function inside(root: string, target: string): boolean {
+  return target === root || target.startsWith(root + sep);
+}
+
 export function staticSite(directory: string): StaticSite {
   const root = resolve(directory);
   const indexPath = resolve(root, "index.html");
+  let rootRealpath: Promise<string | undefined> | undefined;
+
+  const safeRoot = (): Promise<string | undefined> => {
+    rootRealpath ??= realpath(root)
+      .then(async (resolved) => {
+        try {
+          return (await lstat(resolved)).isDirectory() ? resolved : undefined;
+        } catch {
+          return undefined;
+        }
+      })
+      .catch(() => undefined);
+    return rootRealpath;
+  };
+
+  const safePath = async (target: string): Promise<SafePath> => {
+    let stat: Awaited<ReturnType<typeof lstat>>;
+    try {
+      stat = await lstat(target);
+    } catch {
+      return "missing";
+    }
+    // Directories are not assets; let the SPA fallback handle a route-shaped
+    // directory. Symlinks and all other non-regular entries are refused
+    // instead of handing Bun.file a path that it may follow or stream.
+    if (stat.isDirectory()) return "directory";
+    if (!stat.isFile()) return "unsafe";
+
+    const resolvedRoot = await safeRoot();
+    if (resolvedRoot === undefined) return "unsafe";
+    let resolvedTarget: string;
+    try {
+      resolvedTarget = await realpath(target);
+    } catch {
+      return "unsafe";
+    }
+    if (!inside(resolvedRoot, resolvedTarget)) return "unsafe";
+    try {
+      const resolvedStat = await lstat(resolvedTarget);
+      return resolvedStat.isFile() ? resolvedTarget : "unsafe";
+    } catch {
+      return "unsafe";
+    }
+  };
 
   return {
     async handle(url: URL, method: string): Promise<Response | undefined> {
@@ -44,8 +95,10 @@ export function staticSite(directory: string): StaticSite {
       if (target !== root && !target.startsWith(root + sep)) return plain(404, "Not found.");
 
       if (rest.length > 0 && target !== indexPath) {
-        const file = Bun.file(target);
-        if (await file.exists()) {
+        const safeTarget = await safePath(target);
+        if (safeTarget === "unsafe") return plain(404, "Not found.");
+        if (typeof safeTarget === "string" && safeTarget !== "missing" && safeTarget !== "directory") {
+          const file = Bun.file(safeTarget);
           return new Response(file, {
             headers: {
               ...SECURITY_HEADERS,
@@ -58,8 +111,11 @@ export function staticSite(directory: string): StaticSite {
         }
       }
 
-      const index = Bun.file(indexPath);
-      if (!(await index.exists())) return plain(404, "Not found.");
+      const safeIndex = await safePath(indexPath);
+      if (safeIndex === "unsafe" || safeIndex === "missing" || safeIndex === "directory") {
+        return plain(404, "Not found.");
+      }
+      const index = Bun.file(safeIndex);
       return new Response(index, {
         headers: {
           ...SECURITY_HEADERS,

@@ -1,12 +1,16 @@
 {
   "name": "@pylos/bench",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "million": "bun run million.ts"
+    "million": "bun run million.ts",
+    "natural": "bun run natural.ts",
+    "funeral": "bun run funeral.ts",
+    "funeral:test": "bun test funeral.test.ts",
+    "contract:test": "bun test natural.test.ts funeral.test.ts"
   },
   "dependencies": {
     "@pylos/core": "workspace:*",

@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import type { AuthStatus, ProviderId } from "@pylos/protocol";
 import { grokCliAuthPath } from "../home.ts";
+import { fetchProvider, PROVIDER_HEADER_TIMEOUT_MS } from "../providers/fetch.ts";
+import { readProviderJson } from "../providers/openai-chat.ts";
 import { type Credential, CredentialStore, type OauthCredential } from "./store.ts";
 
 export const XAI_AUTH_BASE = "https://auth.x.ai";
@@ -9,6 +11,9 @@ export const XAI_API_BASE = "https://api.x.ai/v1";
 export const XAI_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
 export const XAI_SCOPES = "openid profile email offline_access grok-cli:access api:access";
 export const REFRESH_WINDOW_MS = 120_000;
+export const MAX_GROK_CLI_AUTH_BYTES = 256 * 1024;
+/** Public device grants retained in memory while the user visits x.ai. */
+export const MAX_PENDING_DEVICES = 8_192;
 
 export class AuthError extends Error {
   constructor(
@@ -49,6 +54,7 @@ type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 export interface AuthServiceOptions {
   store?: CredentialStore;
   fetch?: Fetcher;
+  headerTimeoutMs?: number;
   now?: () => number;
 }
 
@@ -62,13 +68,17 @@ const API_KEY_PROVIDERS: ProviderId[] = ["xai", "anthropic", "openai", "openai-c
 export class AuthService {
   readonly store: CredentialStore;
   private readonly fetcher: Fetcher;
+  private readonly headerTimeoutMs: number;
   private readonly now: () => number;
   private readonly pending = new Map<string, PendingDevice>();
+  private nextPendingExpiry = Number.POSITIVE_INFINITY;
+  private pendingStarts = 0;
   private refreshFlight: Promise<string> | undefined;
 
   constructor(options: AuthServiceOptions = {}) {
     this.store = options.store ?? new CredentialStore();
     this.fetcher = options.fetch ?? ((input, init) => fetch(input, init));
+    this.headerTimeoutMs = options.headerTimeoutMs ?? PROVIDER_HEADER_TIMEOUT_MS;
     this.now = options.now ?? Date.now;
   }
 
@@ -162,7 +172,10 @@ export class AuthService {
   }
 
   async logout(provider: ProviderId): Promise<AuthStatus> {
-    if (provider === "xai") this.pending.clear();
+    if (provider === "xai") {
+      this.pending.clear();
+      this.nextPendingExpiry = Number.POSITIVE_INFINITY;
+    }
     await this.store.clear(provider);
     return this.status(provider);
   }
@@ -170,41 +183,68 @@ export class AuthService {
   // ---------- device flow ----------
 
   async startDevice(): Promise<DeviceStart> {
-    const response = await this.request(`${XAI_AUTH_BASE}/oauth2/device/code`, {
-      client_id: XAI_CLIENT_ID,
-      scope: XAI_SCOPES,
-    });
-    if (!response.ok) {
-      throw new AuthError("auth_unavailable", "xAI device sign-in is unavailable.", 502);
+    this.prunePending(this.now());
+    // Count in-flight upstream requests as reservations. Without this, 8,193
+    // concurrent starts could all pass the synchronous size check before any
+    // response inserts its grant.
+    if (this.pending.size + this.pendingStarts >= MAX_PENDING_DEVICES) {
+      throw new AuthError("auth_busy", "Too many sign-in requests are already pending.", 429);
     }
-    const value = await json(response);
-    const deviceCode = requiredString(value, "device_code");
-    const userCode = requiredString(value, "user_code");
-    const verificationUrl = requiredString(value, "verification_uri");
-    const expiresIn = numberOr(value.expires_in, 600);
-    const interval = numberOr(value.interval, 5);
-    const complete = optionalString(value.verification_uri_complete) ?? verificationUrl;
-    const handle = randomBytes(24).toString("base64url");
-    const now = this.now();
-    this.pending.set(handle, {
-      deviceCode,
-      expiresAt: now + expiresIn * 1000,
-      interval,
-      nextPollAt: now,
-    });
-    return {
-      handle,
-      userCode,
-      verificationUrl,
-      verificationUrlComplete: complete,
-      expiresIn,
-      interval,
-    };
+    this.pendingStarts += 1;
+    try {
+      const response = await this.request(`${XAI_AUTH_BASE}/oauth2/device/code`, {
+        client_id: XAI_CLIENT_ID,
+        scope: XAI_SCOPES,
+      });
+      if (!response.ok) {
+        throw new AuthError("auth_unavailable", "xAI device sign-in is unavailable.", 502);
+      }
+      const value = await json(response);
+      const deviceCode = requiredString(value, "device_code");
+      const userCode = requiredString(value, "user_code");
+      const verificationUrl = requiredString(value, "verification_uri");
+      const expiresIn = numberOr(value.expires_in, 600);
+      const interval = numberOr(value.interval, 5);
+      const complete = optionalString(value.verification_uri_complete) ?? verificationUrl;
+      const handle = randomBytes(24).toString("base64url");
+      const now = this.now();
+      this.pending.set(handle, {
+        deviceCode,
+        expiresAt: now + expiresIn * 1000,
+        interval,
+        nextPollAt: now,
+      });
+      this.nextPendingExpiry = Math.min(this.nextPendingExpiry, now + expiresIn * 1000);
+      return {
+        handle,
+        userCode,
+        verificationUrl,
+        verificationUrlComplete: complete,
+        expiresIn,
+        interval,
+      };
+    } finally {
+      this.pendingStarts -= 1;
+    }
   }
 
   /** Whether this handle is a device grant this service started and still holds. */
   knowsDevice(handle: string): boolean {
-    return this.pending.has(handle);
+    const entry = this.pending.get(handle);
+    if (entry === undefined) return false;
+    if (this.now() < entry.expiresAt) return true;
+    this.pending.delete(handle);
+    return false;
+  }
+
+  private prunePending(at: number): void {
+    if (at < this.nextPendingExpiry) return;
+    let next = Number.POSITIVE_INFINITY;
+    for (const [handle, entry] of this.pending) {
+      if (at >= entry.expiresAt) this.pending.delete(handle);
+      else next = Math.min(next, entry.expiresAt);
+    }
+    this.nextPendingExpiry = next;
   }
 
   /** Never returns a token; the caller sees only `pending` or the masked status. */
@@ -266,11 +306,16 @@ export class AuthService {
   async userInfo(accessToken: string): Promise<XaiProfile> {
     let value: unknown;
     try {
-      const response = await this.fetcher(`${XAI_AUTH_BASE}/oauth2/userinfo`, {
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-      });
+      const response = await fetchProvider(
+        this.fetcher,
+        `${XAI_AUTH_BASE}/oauth2/userinfo`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+        },
+        { label: "xAI authentication", timeoutMs: this.headerTimeoutMs },
+      );
       if (!response.ok) return {};
-      value = await response.json();
+      value = await readProviderJson(response);
     } catch {
       return {};
     }
@@ -289,12 +334,7 @@ export class AuthService {
 
   /** Adopts an existing `grok login` session. Tokens are never echoed back. */
   async importGrokCli(path = grokCliAuthPath()): Promise<AuthStatus> {
-    let text: string;
-    try {
-      text = await readFile(path, "utf8");
-    } catch {
-      throw new AuthError("grok_cli_missing", "No Grok CLI login found on this machine.", 404);
-    }
+    const text = await readGrokCliAuth(path);
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
@@ -326,7 +366,7 @@ export class AuthService {
 
   async grokCliAvailable(path = grokCliAuthPath()): Promise<boolean> {
     try {
-      const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+      const parsed: unknown = JSON.parse(await readGrokCliAuth(path));
       return findGrokEntry(parsed) !== undefined;
     } catch {
       return false;
@@ -385,15 +425,63 @@ export class AuthService {
 
   private async request(url: string, form: Record<string, string>): Promise<Response> {
     try {
-      return await this.fetcher(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(form),
-      });
+      return await fetchProvider(
+        this.fetcher,
+        url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(form),
+        },
+        { label: "xAI authentication", timeoutMs: this.headerTimeoutMs },
+      );
     } catch {
       throw new AuthError("auth_unavailable", "Unable to reach xAI authentication.", 502);
     }
   }
+}
+
+async function readGrokCliAuth(path: string): Promise<string> {
+  let info: Awaited<ReturnType<typeof stat>>;
+  try {
+    info = await stat(path);
+  } catch {
+    throw new AuthError("grok_cli_missing", "No Grok CLI login found on this machine.", 404);
+  }
+  if (!info.isFile()) {
+    throw new AuthError("grok_cli_invalid", "The Grok CLI login is not a regular file.", 422);
+  }
+  if (info.size > MAX_GROK_CLI_AUTH_BYTES) throw oversizedGrokCliAuth();
+
+  let handle: Awaited<ReturnType<typeof open>>;
+  try {
+    handle = await open(path, "r");
+  } catch {
+    throw new AuthError("grok_cli_missing", "No Grok CLI login found on this machine.", 404);
+  }
+  try {
+    // The extra byte closes the stat/open race: a file that grows after the
+    // early stat is still refused without ever allocating its full contents.
+    const bytes = Buffer.alloc(MAX_GROK_CLI_AUTH_BYTES + 1);
+    let length = 0;
+    while (length < bytes.byteLength) {
+      const read = await handle.read(bytes, length, bytes.byteLength - length, length);
+      if (read.bytesRead === 0) break;
+      length += read.bytesRead;
+    }
+    if (length > MAX_GROK_CLI_AUTH_BYTES) throw oversizedGrokCliAuth();
+    return bytes.subarray(0, length).toString("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+function oversizedGrokCliAuth(): AuthError {
+  return new AuthError(
+    "grok_cli_invalid",
+    `The Grok CLI login exceeds the ${MAX_GROK_CLI_AUTH_BYTES}-byte limit.`,
+    422,
+  );
 }
 
 // ---------- masking ----------
@@ -478,7 +566,7 @@ function parseTimestamp(value: unknown): number | undefined {
 
 async function json(response: Response): Promise<Record<string, unknown>> {
   try {
-    const value: unknown = await response.json();
+    const value = await readProviderJson(response);
     if (isRecord(value)) return value;
   } catch {
     // fall through

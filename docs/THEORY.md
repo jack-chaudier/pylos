@@ -8,6 +8,12 @@ re-analysis), **REFUTED**. Sources: `stark` (theorem ledger), `epistemic-debt`
 (results table rows cited as "row N"), `revelation-context` (RCP), `revelation`
 (kernel), and `DREAM.md` §8.
 
+Current product claims stop at recognized, addressable retained history. “Exact”
+means exact bytes or receipts within the named synthetic fixture, route, or test
+oracle; it does not mean universal semantic recall, arbitrary natural-language
+coverage, or unbounded operation. Provider-request and frontier budgets bound
+packet accounting, not semantic width.
+
 Notation: `H_t` archive, `B` budget, `K_t` packet, `L_t` loss ledger, `P_t` page
 map, `names(x)` the normalized routing keys found in text `x`.
 
@@ -36,8 +42,9 @@ claim exists without ever presenting it as support. KERNEL A10.2 moves the
 authoring further upstream than the ledger: the user's rule atomization now
 runs before the packet is even compiled (tx A), so a correction made this turn
 is a certificate in the very first request the model sees, and a provider
-failure after that point still leaves the user's word committed — the archive
-does not need a reply to be true.
+failure after that point still leaves the user's word committed as
+user-authorized archive state — it is provenance, not independent verification
+that the assertion is true.
 
 **Oracle.** For every frontier line in `K_t`, `episodes.get(seq).content` contains
 `value` (string-presence after the same normalization as `names()`). For every
@@ -72,18 +79,22 @@ concentrated in the drop round (row 38, PREREGISTERED split, per-model).
 
 **Implication for the hierarchy.** Loss happens at contraction events, not with the
 number of generations. A level-k capsule is a ~5× contraction of its 8 children
-(8×400 → 600 tokens), so every level is a loss event, and a **rolling root**
-(recompacting one root capsule each time a leaf seals) is as safe as a tree of
-fixed depth: generation count is free, budget is not. What is *not* free is
-letting any resident capsule's terminal budget fall below the witness knee
-(≈30 dense words per decision cluster). Consequence: resident capsule count must
-be constant, not O(log n), and the rolling root must be sized generously (see
-`KERNEL_REVIEW.md`).
+(8×400 → 600 tokens), so every level is a loss event. A **rolling root**
+(recompacting one root capsule each time a leaf seals) has the same *ledger
+completeness* guarantee as a fixed-depth tree only under the oracle below:
+generation count is free for that invariant, budget is not. This does not license
+semantic recall or the text quality of a root after an untested number of
+recompactions. What is *not* free is letting any resident capsule's terminal
+budget fall below the witness knee (≈30 dense words per decision cluster).
+Consequence: resident capsule count must be constant, not O(log n), and the
+rolling root must be sized generously (see `docs/KERNEL_REVIEW.md`).
 
 **Oracle (path independence of the ledger).** For any range `[a,b]` compacted two
 ways (tree vs direct), `names(episodes[a..b]) ⊆ names(c.text) ∪ ledger(c)` holds
-for both. This **completeness** invariant is the one that matters; conservation
-(`ledger(parent) ⊇ ⋃ ledger(children)`) follows from it by construction.
+for both. This **completeness** invariant is the only sense in which the rolling
+root is licensed; conservation (`ledger(parent) ⊇ ⋃ ledger(children)`) follows
+from it by construction. It is not a claim that the root prose remains
+semantically sufficient.
 
 ## 4. Row 16: the value-dense, contract-blind writer
 
@@ -120,11 +131,12 @@ absent after truncation appear in `dropped(c)`.
 ## 6. Row 21: deterministic loss-ledger routing (the rule, exactly)
 
 **Statement, as run.** On the cached routing corpus (grok, 30 DENIED items), route
-iff any policy value is absent from the artifact by string check: recall 1.00,
-precision 0.917, end-to-end 30/30 vs 26/30 for the best reader-side router
-(OBSERVED, re-analysis, one model). The three items no reader-side trigger can
-catch are silent: confident wrong, or coherent-but-wrong. The ledger routes them
-by construction.
+iff any recognized policy value is absent from the artifact by string check:
+recall 1.00, precision 0.917, end-to-end 30/30 vs 26/30 for the best reader-side
+router (OBSERVED, re-analysis, one model). The three items no reader-side trigger
+can catch are silent: confident wrong, or coherent-but-wrong. The ledger routes
+recognized losses by construction; this is not natural-language or universal
+recall.
 
 **The rule as run in the source experiment**
 (`experiments/lib/dissociation.py`, `runner3.py`) used a 1% relative tolerance.
@@ -228,7 +240,7 @@ histories that need no read.
 slot: every query is answered with `t ≥ 1` pages resolving exactly, none by
 fallback (`UNKNOWN`), and `packet.tokens ≤ B` throughout.
 
-## 9. Row 41 and the 1K→1M result: what may be resident
+## 9. Row 41 and the finite 1K→1M result: what may be resident
 
 **Statement (row 41, THEOREM + EXACT).** With `m` cells and `v` values, `r`
 predeclared complete-frontier checkpoints need `log N_T = Θ(r + (m−1)Σ log gap)`
@@ -250,13 +262,16 @@ PROPOSED atoms (KERNEL A9.1) are a third, disjoint case: never frontier-
 resident, never capsule text, regardless of budget — an assistant's or a
 model extractor's claim does not compete for the frontier slot at all. The
 recent window is the exact last-`w` component. Resident size is a function of
-`(B, frontier, fixed capsule count)` and must not trend with `n`.
+`(B, frontier, fixed capsule count)` and must not trend with `n` under the
+fixed-frontier fixture. This is a finite accounting result, not a bound on
+semantic coverage or universal recall.
 
 **Oracle.** Bench: at checkpoints with the planted frontier held fixed,
 `packet.tokens` for a fixed query set does not trend with `n` (slope of tokens vs
 `log n` within header-digit noise); no HISTORICAL atom is resident unless the
 query names its key; an all-as-of query ("where did X live when we first
 discussed Y") is answered by a page, with both intervals in `ledger.historical`.
+The oracle covers the stated fixture and routes only.
 
 ## 10. Mirage conservation `L_{t+1} ⊇ transport(L_t) \ R_t`
 
@@ -327,22 +342,28 @@ the provider call is made; a fixture where a name is resident only in an
 assistant episode or only in capsule prose still pages on request and still
 fires the check round if the final draft restates it unconfirmed.
 
-## 12. Semantic frontier width `W_t ≤ B`
+## 12. Provider/frontier budget is not semantic width
 
-**Status.** Definition (`DREAM.md` §8). Empirically, `revelation-context` measured
-the project-level frontier on real sessions as **sublinear, not bounded**
+**Status.** `W_t ≤ B` is a packet/request accounting definition (`DREAM.md` §8),
+not a semantic-width theorem. Empirically, `revelation-context` measured the
+project-level frontier on real sessions as **sublinear, not bounded**
 (`frontier-sublinear`, median α = 0.344; "bounded" withdrawn) and showed that the
-declared witness cap, not the mechanism, is what holds residency down.
+declared witness cap, not the mechanism, is what holds residency down. Neither
+observation bounds the number, variety, or paraphrase coverage of meanings in
+the retained archive.
 
-**Mechanism.** The frontier slot is capped; overflow atoms are evicted by
-(pinned > kind priority > recency) and each eviction writes a `loss` row of
-kind `atom` so the overflow is pageable, never silent.
+**Mechanism.** The provider-facing frontier slot is capped; overflow recognized
+atoms are evicted by (pinned > kind priority > recency) and each eviction writes
+a `loss` row of kind `atom` so the overflow is pageable, never silent. This
+controls the packet's resident state, not semantic width.
 
 **Oracle.** When `|SUPPORTED atoms| × line tokens > frontier slot`, every
-non-resident SUPPORTED atom key appears in the unresolved ledger; a query naming
-it pages it.
+non-resident SUPPORTED atom key recognized by the oracle appears in the unresolved
+ledger; a query naming it pages it. The receipt is exact for that recognized
+address, not evidence of semantic recall.
 
-**KERNEL A10.3 extends the bound past the compiled packet.** `W_t ≤ B` held only
+**KERNEL A10.3 extends the provider-request bound past the compiled packet.**
+`W_t ≤ B` held only
 for the first message the provider saw; a `recall` result or the check prompt
 (A9.5) could grow a later request in the same turn without limit. Every
 provider request of a turn is now measured by the kernel's own count over
@@ -406,14 +427,48 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
   portfolios factor over connected components — Pylos pages per ledger name
   independently, which is exact only because names are treated as independent.
 
+### A12–A15 release map: mechanism, oracle, and claim boundary
+
+The following rows are the public boundary for the v2.0.0 contract. A kernel test
+licenses the existence and failure mode of a mechanism; it does not turn a test
+fixture into a natural-language or run-scale efficacy result.
+
+| Mechanism | Oracle / evidence | What it licenses | What it does not license |
+| --- | --- | --- | --- |
+| A12 retained-byte closure | `packages/core/test/reachability.test.ts`, [`natural.md`](../bench/results/natural.md) + `natural.json` | Within the tested retained-byte domains, every retained interval is represented as resident, capsule, pageable, or explicit opaque; recent overflow and attachment-tail receipts are mechanically checked. The natural run observed reachability-receipt presence on 13/13 probes. | Natural discoverability, a full-scale four-state receipt audit, paraphrase recall, or semantic coverage outside the named byte domains. |
+| A12 stream bundles | `packages/core/test/bundle-stream.test.ts`, [`funeral-6.md`](../bench/results/funeral-6.md) + `funeral-6.json` | Framed export/import, staging, late-corruption refusal, and exact million-episode/atom/capsule/loss/table transport are evidenced; turn-730,000 paging restored byte-exact within that synthetic artifact. | Nonempty Phase 2/4 receipt survival at scale, a total process-RSS bound, or universal transport/recall claims. |
+| A13 collection obligations | `packages/core/test/obligation.test.ts`, `packages/core/test/integrity.test.ts`, [`natural.md`](../bench/results/natural.md) + `natural.json` | Cue-bearing questions carry located/supported/historical/unresolved counts plus a bounded kernel issuance basis for exact route membership; 2/2 authored coverage probes emitted receipts; known cardinality may be incomplete and unknown cardinality remains unestablished. User-authorized archive assertions remain provenance state, not verified truth. | An archive total, world cardinality, natural collection-recall rate, independent fact verification, or cryptographic proof against a full database rewrite and replacement hash-chain head. |
+| A14 remembered-claim gate | `packages/core/test/claim-gate.test.ts`, `packages/server/test/gate-stream.test.ts`, [`natural.md`](../bench/results/natural.md) + `natural.json` | Kernel-issued capabilities, independent candidate scanning, source revalidation, qualifications, and post-gate streaming; 4 gate receipts and 0 safety-oracle violations in the authored run. It gates release of an authorized/provenance-bearing claim, not truth. | Entailment, fact-checking, model truth, or arbitrary-prose certification. |
+| A15 address graph | `packages/core/test/address.test.ts` | A grounded route persists until an explicit invalidation or supersession, including export/import and source-hash checks. | Correct routing for arbitrary natural paraphrase or a measured second-question cost reduction. |
+| A15 semantic and alias addresses | `packages/core/test/semantic.test.ts`, `address.test.ts`, `semantic-runtime.test.ts`, [`natural.md`](../bench/results/natural.md) + `natural.json` | Optional pinned local resources and model-written aliases can propose exact byte addresses; the compile-only authored run observed semantic receipt availability on 13/13 probes, produced 6/13 exact target semantic addresses, and recorded 5/13 false/non-target pages on the reported resolved-page denominator. It marks the `sqlite-vec` runtime mechanism implemented:yes/tested:no — the runtime exists in-tree (`packages/core/src/semantic-runtime.ts`) with kernel tests, but this compile-only bench invokes no semantic runtime directly. A separate arm64 macOS compiled-C preflight receipt is retained at [`semantic-preflight-aarch64-apple-darwin.md`](../bench/results/semantic-preflight-aarch64-apple-darwin.md) + `.json`: it shows one host loading pinned staged assets and answering one KNN probe, not an installed application or packaged/signed runtime; Linux semantic runtime support is unproven. | Semantic recall, precision, ranking, multilingual quality, authority, provider efficacy, or any packaged-runtime claim beyond the retained evidence. |
+| Proof-thread demo | `packages/core/test/demo.test.ts`, `packages/server/test/demo.test.ts`, `apps/app/src/components/ProofTour.tsx` | A scripted local tour reads durable correction, coverage, invalidation, attachment-tail, and answer-gate receipts. | A benchmark number or provider/model quality claim. |
+| Natural-question bench | `bench/natural.ts`, `packages/core/test/natural.test.ts`, [`natural.md`](../bench/results/natural.md) + `natural.json` | The asking turn is in the index; the linked artifacts retain one execution's result, digest `cd86341177409aaebe090757920cf4d9866aa5ea266e058e69b331a324589202`. Repeated-run stability of that digest is not evidenced by the retained artifact. It records 13 probes, 0 safety-oracle violations, semantic receipt availability 13/13, exact target semantic addresses 6/13, false pages 5/13, unresolved receipts 0/4, qualification errors 0/4, release errors 0/3, infrastructure failures 0/13, coverage receipts 2, answer/gate receipts 4, and model calls 0. | Recall, precision, ranking, multilingual, graph-reuse, provider efficacy, or packaged sqlite-vec runtime implementation; most families remain single-denominator and only two families have matched pairs. |
+
 ## 14. What we are NOT claiming
 
+- That the finite, one-million-turn synthetic evidence proves unbounded storage,
+  universal recall, or arbitrary natural-language coverage. The claim ceiling is
+  recognized/addressable retained history only.
+- That exact pageable bytes or receipts extend beyond their stated route and
+  retained-byte domains; a receipt is evidence of a kernel route/oracle, not a
+  guarantee that every meaning or paraphrase is discoverable.
 - That a model cannot be wrong, or that entailment is checked. Pylos bounds
   *silent* loss of context; it does not police reasoning.
+- That a user-authorized archive assertion is independently true. User episodes
+  can establish provenance/authority state for routing, while truth verification
+  remains outside this kernel.
 - That resident context is bounded for natural conversations. Measured frontier
   growth on real sessions is sublinear (α ≈ 0.34); Pylos degrades to the ledger.
-- That any natural-conversation benchmark number exists. All v1 numbers are
-  deterministic synthetic; the live variant is a sample, not a result.
+- That the natural-question result is a recall, precision, ranking, multilingual,
+  graph-reuse, or provider-efficacy benchmark. [`natural.md`](../bench/results/natural.md)
+  + `natural.json` is a stable, deterministic authored-fixture safety
+  measurement with 13 probes and 0 oracle violations; semantic receipt
+  availability is not proof of semantic efficacy. The compile-only mechanism
+  row is implemented:yes/tested:no — the runtime exists in-tree with kernel
+  tests, but this bench invokes no semantic runtime directly. It has
+  single-denominator families except for one matched pair in partial collections
+  and one in claim-map omission. The live variant remains a sample, not a
+  natural efficacy result.
 - That the capsule hierarchy is information-theoretically small (RCP's byte
   ratios are implementation artifacts; ours will be too).
 - That succession across vendors preserves behaviour; it preserves the packet.
@@ -427,6 +482,9 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
   shown unconfirmed, `key ≈ value ⟨proposed by assistant #seq · unconfirmed⟩`,
   not hidden or suppressed; nothing stops a later model from reading it and
   restating it.
+- That a provider-request or frontier budget is a bound on semantic width. It
+  bounds packet accounting and recognized resident state, not the number,
+  variety, or paraphrase coverage of meanings.
 - That only the compiled packet is bounded and only it is receipted. Recall
   results and the check prompt used to be appended to a request with neither
   cap nor record; every provider request of a turn is now `≤ B` by
@@ -443,12 +501,32 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
 - That the path (KERNEL A11.2) makes a recurring question cheaper. That is the
   mechanism's intent; no bench result measures a cost reduction, and none is
   claimed.
-- That a question needing many sources — *compare the eleven stories* — is
-  known to be incompletely answered when only one source is found. A question
-  today is answered from whichever routes fire; there is no receipt for the
-  n−k sources that did not resolve. The fault (KERNEL A11.1) covers the total
-  miss, not the partial one; collection completeness is the next kernel
-  milestone (A12), not a shipped one.
+- That a question needing many sources — *compare the eleven stories* — has an
+  archive-total or completeness guarantee when only some sources are found.
+  A13 records located, supported, historical, unresolved, and (only when
+  authorized or explicit) required counts; unknown cardinality remains
+  `completeness not established`.
+- That the internal hash chain and A13 issuance basis are an external signature.
+  They replay current sources and preserve later-forgotten route membership
+  relative to the retained head. An attacker who can rewrite the whole vault,
+  rewrite the basis, and replace every later hash needs an independently
+  anchored head, MAC, or signing key to be distinguishable.
+- That rolling-root safety extends beyond the ledger completeness oracle. The
+  oracle licenses conservation of recognized names; root prose quality after
+  long or untested recompaction is not established.
+- That the operator-managed `serve --hosted` mode is a public Pylos service. It
+  is a self-hosted/operator boundary with operator-supplied quotas and
+  monitoring; Pylos does not operate a public multi-tenant deployment.
+- That the v2 preview is a signed release. It is unsigned and source-only,
+  pending a tagged release.
+- That the reported arm64 macOS semantic preflight is a retained receipt, or
+  that Linux semantic runtime support is proven. No preflight receipt is linked
+  here; Linux remains unproven.
+- That the historical v1 model drill or handoff sample generalizes to current
+  providers, models, or product behavior.
+- That checkpoint counts can be added to make a larger success total. Final-
+  checkpoint counts and across-checkpoint probe totals are different
+  denominators and must remain labelled separately.
 
 ## 15. Where the mechanism exceeds the evidence
 
@@ -460,8 +538,8 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
 2. **Precision 0.917 was on 30 items, one model.** Free-text queries will fire on
    common names; the routing cap and stop-names exist for this reason.
 3. **Rows 18/37/38 are 1–3 models, 3–8 generations.** A rolling root recompacted
-   30,000 times is far outside the tested regime; the ledger makes it safe, the
-   *quality* of the root text is untested.
+   30,000 times is far outside the tested regime; the ledger oracle preserves
+   recognized-name completeness, but the *quality* of the root text is untested.
 4. **The extractive writer was never run in epistemic-debt**; row 16 tested model
    writers with a value-dense instruction. Our writer is value-dense by
    construction, which is a stronger property, but its capsule quality is unmeasured.
@@ -470,8 +548,9 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
 6. **Frontier = current atoms** assumes the atomizer finds the key. Rule-based
    atomization on natural text is the weakest link; a missed atom is still in the
    ledger only if `names()` caught a value in it.
-7. **1K→1M invariance (RCP)** used stable keys known in advance and an oracle
-   selector. Pylos's keys are discovered by the atomizer; the bench plants them.
+7. **The finite 1K→1M comparison (RCP)** used stable keys known in advance and an
+   oracle selector. Pylos's keys are discovered by the atomizer; the bench plants
+   them. It is not evidence of semantic-width or universal-recall invariance.
 8. **The lexical route (KERNEL A9.4) is an address, not a guarantee.** It finds
    an episode only when the query shares ≥ 2 stemmed content words with it and
    either the query names something unknown or no name route resolved a page
@@ -499,28 +578,61 @@ packet.digest`; recomputing `roundsDigest` from the stored rounds matches
     deterministically: that a routing miss on a question carrying a
     conversational cue and two words the corpus cannot contain leaves exactly
     one `fault` record and the notice, and that every addressable probe —
-    sequence, name, or lexical — never draws one (`bench/results/million-5.md`,
-    kernel 1.3.0; `million-4.md` is the same kernel before the version bump). Whether the cue
-    list fires on the right natural sentences, and how often it fires on ones
+   sequence, name, or lexical — never draws one (`bench/results/million-5.md`,
+   kernel 1.3.0; `million-4.md`, kernel 1.2.0). Whether the cue list fires on
+   the right natural sentences, and how often it fires on ones
     that need no fault, is not a number this or any release reports.
 12. **The path's precision on natural conversation (KERNEL A11.2) is
     unmeasured, and it has no run-scale number.** The kernel tests establish
     that the mechanism does what §13 describes on planted fixtures; nothing in
     `bench/results` runs it at the million-turn scale or asks whether the
     edges it follows on natural paraphrase are the ones a user meant.
-13. **The search self-hit was invisible to the deterministic bench.** The
+13. **The search self-hit was invisible to the old deterministic bench.** The
     lexical route's strict AND pass matched the asking turn's own episode
     before the broader OR pass could run, so a natural question with a cue
     could fault instead of recovering the line it named — fixed by excluding
     the asking turn from `episodes.search` inside the SQL, with a kernel
-    regression test. The bench never surfaced it because it compiles without
-    a question seq: the corpus's probes are asked of an already-compiled
-    packet, not appended as a turn that then searches the index containing
-    itself. A natural-question family that compiles *with* the asking turn in
-    the index — the shape a real conversation has — is a measurement still
-    owed.
-14. **Collection completeness is unmeasured and unbuilt.** A question that
-    needs n sources is answered today from whichever routes fire, with
-    nothing recorded about the n−k that did not resolve; the fault (KERNEL
-    A11.1) is a receipt for a total miss, not a count against a known n. This
-    is the next kernel milestone (A12), not a claim this release makes.
+    regression test. The old million bench still compiles probes without a
+    question seq; `bench/natural.ts` now supplies the real-turn shape. The
+    retained artifact ([`natural.md`](../bench/results/natural.md) +
+    `natural.json`) carries one execution's result, digest `cd863411…`;
+    repeated-run stability of that digest is not evidenced by the retained
+    artifact. It is a safety measurement, not a recall or precision result.
+14. **Collection coverage is measured as receipt safety, not natural recall.**
+    A13 records lower-bound routes and explicit unresolved/unknown states; the
+    natural run emitted 2/2 authored coverage receipts with no invented
+    cardinality. It does not measure natural cue precision, collection recall,
+    or the quality of a provider's qualified answer.
+15. **The optional semantic runtime is an address mechanism, not evidence.**
+    `sqlite-vec`, `sqlite-lembed`, the embedding model, dimensions, extension
+    versions, and asset hashes are pinned; absent or incompatible resources
+    fail closed. The compile-only authored natural run observed semantic receipt
+    availability on 13/13 probes, exact target semantic addresses on 6/13, and
+    false/non-target pages on 5/13 of the reported resolved-page denominator;
+    its mechanism row is implemented:yes/tested:no, since the runtime exists
+    in-tree with kernel tests but this bench invokes no semantic runtime
+    directly. A separate local
+    compiled-C arm64 macOS preflight receipt is retained at
+    [`semantic-preflight-aarch64-apple-darwin.md`](../bench/results/semantic-preflight-aarch64-apple-darwin.md)
+    + `.json`: pinned staged assets loaded and answered one KNN probe on that
+    host; it does not exercise an installed application, packaging, signing,
+    or notarization, and Linux semantic runtime support is unproven. None of
+    these observations estimate semantic recall, precision, ranking,
+    multilingual quality, or authority.
+16. **The proof thread is a product demonstration, not a benchmark.** It uses a
+    deterministic scripted provider and reads kernel receipts for correction,
+    coverage, invalidation, attachment tail, and the memory gate. Its tests
+    establish the demo contract; they do not establish provider quality or
+    natural recall.
+17. **The v2 stream path has one finite synthetic million-turn transport result,
+    with a narrow receipt boundary.** [`funeral-6.md`](../bench/results/funeral-6.md) +
+    `funeral-6.json` restores 1,000,000 episodes with the
+    same head, full verification, exact turn-730,000 paging, 1,000,000 max
+    staged rows, and declared transport bound 35,848,320 bytes with 1 MiB
+    maximum buffers.
+    Packet, answer, coverage, address, and alias counts were all zero, so the
+    run does not establish nonempty Phase 2/4 receipt survival. RSS values are
+    snapshots, not a bound; the historical v1 Laptop Funeral remains separate
+    evidence for its old bundle. The local v2 preview remains unsigned and
+    source-only pending a tagged release; this artifact is not a public hosted
+    service or universal-recall claim.

@@ -1,10 +1,12 @@
 /**
- * Page behaviour that is not the aperture: copying the install line, marking
- * the visitor's platform, and moving focus with in-page links so the keyboard
- * lands where the page just travelled.
+ * Page behaviour that is not the aperture: the nav's turn counter and scrolled
+ * state, copying the install line, marking the visitor's platform, and moving
+ * focus with in-page links so the keyboard lands where the page just travelled.
  */
 
 const LIVE_ID = "pylos-live";
+
+const nf = new Intl.NumberFormat("en-US");
 
 function live(): HTMLElement {
   let node = document.getElementById(LIVE_ID);
@@ -122,6 +124,42 @@ function markPlatform(): void {
   }
 }
 
+// ── nav ─────────────────────────────────────────────────────────────────────
+
+/** The bench's headline figure, counted up once so the nav states a result. */
+const PULSE_TURNS = 1_000_000;
+const PULSE_MS = 2400;
+
+function wireNavPulse(): void {
+  const node = document.querySelector<HTMLElement>("[data-nav-count]");
+  if (!node) return;
+  if (prefersReducedMotion()) {
+    node.textContent = nf.format(PULSE_TURNS);
+    return;
+  }
+  const t0 = performance.now();
+  const step = (now: number): void => {
+    const p = Math.min(1, (now - t0) / PULSE_MS);
+    // ease-out cubic: the number lands rather than stopping dead
+    const eased = 1 - (1 - p) ** 3;
+    node.textContent = nf.format(Math.round(PULSE_TURNS * eased));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  node.textContent = nf.format(0);
+  requestAnimationFrame(step);
+}
+
+/** Flat kiln at the top of the page; a blurred bar with a hairline below it. */
+function wireNavScroll(): void {
+  const nav = document.querySelector<HTMLElement>(".nav");
+  if (!nav) return;
+  const sync = (): void => {
+    nav.dataset.scrolled = window.scrollY > 24 ? "true" : "false";
+  };
+  sync();
+  window.addEventListener("scroll", sync, { passive: true });
+}
+
 // ── anchors ─────────────────────────────────────────────────────────────────
 
 function wireAnchors(): void {
@@ -144,6 +182,8 @@ function wireAnchors(): void {
 }
 
 export function mountPage(): void {
+  wireNavPulse();
+  wireNavScroll();
   wireCopy();
   markPlatform();
   wireAnchors();

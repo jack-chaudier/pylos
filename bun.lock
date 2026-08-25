@@ -12,7 +12,7 @@
     },
     "apps/app": {
       "name": "@pylos/app",
-      "version": "1.2.0",
+      "version": "2.0.0",
       "dependencies": {
         "@pylos/protocol": "workspace:*",
         "@tauri-apps/api": "^2.9.0",
@@ -31,7 +31,7 @@
     },
     "apps/desktop": {
       "name": "@pylos/desktop",
-      "version": "1.2.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@tauri-apps/cli": "^2.9.0",
         "typescript": "^5.9.3",
@@ -39,7 +39,7 @@
     },
     "apps/web": {
       "name": "@pylos/web",
-      "version": "1.2.0",
+      "version": "2.0.0",
       "dependencies": {
         "@pylos/core": "workspace:*",
       },
@@ -50,7 +50,7 @@
     },
     "bench": {
       "name": "@pylos/bench",
-      "version": "1.2.0",
+      "version": "2.0.0",
       "dependencies": {
         "@pylos/core": "workspace:*",
         "@pylos/protocol": "workspace:*",
@@ -58,21 +58,23 @@
     },
     "packages/core": {
       "name": "@pylos/core",
-      "version": "1.2.0",
+      "version": "2.0.0",
       "bin": {
         "pylos": "./src/cli.ts",
       },
       "dependencies": {
         "@pylos/protocol": "workspace:*",
+        "sqlite-lembed": "0.0.1-alpha.8",
+        "sqlite-vec": "0.1.8",
       },
     },
     "packages/protocol": {
       "name": "@pylos/protocol",
-      "version": "1.2.0",
+      "version": "2.0.0",
     },
     "packages/server": {
       "name": "@pylos/server",
-      "version": "1.2.0",
+      "version": "2.0.0",
       "dependencies": {
         "@pylos/core": "workspace:*",
         "@pylos/protocol": "workspace:*",
@@ -375,6 +377,26 @@
     "semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
 
     "source-map-js": ["source-map-js@1.2.1", "", {}, "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA=="],
+
+    "sqlite-lembed": ["sqlite-lembed@0.0.1-alpha.8", "", { "optionalDependencies": { "sqlite-lembed-darwin-arm64": "0.0.1-alpha.8", "sqlite-lembed-darwin-x64": "0.0.1-alpha.8", "sqlite-lembed-linux-x64": "0.0.1-alpha.8", "sqlite-lembed-windows-x64": "0.0.1-alpha.8" } }, "sha512-TPj4Nwh2xVTJgb29FLFb/onMQ7nIi1P5aNceGi9EHKX7VM33CKtcelnMLmsiBbAkuFFaZMDv8oxHxDhO1IqDvg=="],
+
+    "sqlite-lembed-darwin-arm64": ["sqlite-lembed-darwin-arm64@0.0.1-alpha.8", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Dg3nmU9stayqDNzlNRKOvhmERhpRU/uqKclf2mtRPo0hyB8uG9k4LGDgDtCoSOoPK9jMXdabI+qSUckqvn8o5w=="],
+
+    "sqlite-lembed-darwin-x64": ["sqlite-lembed-darwin-x64@0.0.1-alpha.8", "", { "os": "darwin", "cpu": "x64" }, "sha512-S5Ix4/8WXBk5yHjqjugm1Xh4Uq0axU8AhH5G97Kk5PzteXlXv24QzgUu6QE0hNh8HSKuDxyga89aUwRV1MsFjQ=="],
+
+    "sqlite-lembed-linux-x64": ["sqlite-lembed-linux-x64@0.0.1-alpha.8", "", { "os": "linux", "cpu": "x64" }, "sha512-N4Nlu0DqIDKIKgR51EBgURwwvTx8jp3NsJHm9yZBRc4OhqlG3eEaNUe5lX/MKWY31g+fO+0/Ew+gcQ2Sppk2Qw=="],
+
+    "sqlite-vec": ["sqlite-vec@0.1.8", "", { "optionalDependencies": { "sqlite-vec-darwin-arm64": "0.1.8", "sqlite-vec-darwin-x64": "0.1.8", "sqlite-vec-linux-arm64": "0.1.8", "sqlite-vec-linux-x64": "0.1.8", "sqlite-vec-windows-x64": "0.1.8" } }, "sha512-L3xKhQUYQ7kcb3v31KPyPaEigE2upETMSx/5K3vTwm8HRsbci9PKGklXU+mxEYVogojpkenM0TZK5Sz/2FXTQw=="],
+
+    "sqlite-vec-darwin-arm64": ["sqlite-vec-darwin-arm64@0.1.8", "", { "os": "darwin", "cpu": "arm64" }, "sha512-EoHyjPgX8uhWWcYSWbLwJHU6j8AQvwYbwDXFaT1ocdNtJy5qAGtX6LLsBR3vuWOyosMnULF6+DExjldku23h7A=="],
+
+    "sqlite-vec-darwin-x64": ["sqlite-vec-darwin-x64@0.1.8", "", { "os": "darwin", "cpu": "x64" }, "sha512-IafNV502w90y1BvWQXaRZ2AyyqNINmZ+7LEvkfL45Gf7kC182EFKxn9vbCy6UrY6QYXN/XQo7aICpTO7MIZBqw=="],
+
+    "sqlite-vec-linux-arm64": ["sqlite-vec-linux-arm64@0.1.8", "", { "os": "linux", "cpu": "arm64" }, "sha512-R/zogzxQ4LEAgju3knhZuWs8MKdIqN6Bq+ORhLYz5S4eQ98F+rYqilHQ8vsE3Ouy347yxNB2HyldDMcwzgfTyQ=="],
+
+    "sqlite-vec-linux-x64": ["sqlite-vec-linux-x64@0.1.8", "", { "os": "linux", "cpu": "x64" }, "sha512-DBIf2d2mvDb1M//snAKljpIsNQNqXX2AXWNBua0YCj40F/ygFJJ8j3k1pbcJfaEoaP21B+VquH0Gc6RIwZvXig=="],
+
+    "sqlite-vec-windows-x64": ["sqlite-vec-windows-x64@0.1.8", "", { "os": "win32", "cpu": "x64" }, "sha512-+fBb7kzTpSAvoO/06YMDefnM5PpRhnPVqAYiUvLfBnUCRILDq2F9lcjQQIRjhobrb3eoJWzsGHwnqdVfaIUNxQ=="],
 
     "tinyglobby": ["tinyglobby@0.2.17", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g=="],
 

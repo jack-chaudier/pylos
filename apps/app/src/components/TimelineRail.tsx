@@ -1,10 +1,10 @@
-import type { Capsule, Episode } from "@pylos/protocol";
+import type { CapsuleView, Episode } from "@pylos/protocol";
 import { useMemo, useRef, useState } from "react";
 import { groupedNumber, shortDate } from "../format.ts";
 
 export interface RailProps {
   turns: number;
-  capsules: Capsule[];
+  capsules: CapsuleView[];
   handoffs: Episode[];
   /** The seq range currently on screen. */
   view: { firstSeq: number; lastSeq: number };

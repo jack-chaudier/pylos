@@ -70,7 +70,7 @@ export function mountAperture(): void {
   }
 
   els.engine.textContent = `engine · ${driver.info.label}`;
-  els.budget.textContent = `budget ${nf.format(driver.info.budget)}`;
+  els.budget.textContent = `budget ${nf.format(driver.info.budget)} tokens`;
 
   let lastChipId = -1;
   let lastSlow = 0;
@@ -100,9 +100,26 @@ export function mountAperture(): void {
 
   // ── painting ──────────────────────────────────────────────────────────────
 
+  /**
+   * A wall of zeros is the first thing a visitor meets otherwise, and it reads
+   * as a broken exhibit rather than as one that has not started.
+   */
+  function waking(): void {
+    els.archive.textContent = "—";
+    els.archiveSub.textContent = "Waking the million-turn archive…";
+    els.rate.textContent = " ";
+    els.view.textContent = "";
+    els.view.append(document.createTextNode("—"), span("counter__of", ` / ${nf.format(driver.info.budget)}`));
+    els.ledgerCount.textContent = "waiting for the first summary to seal";
+  }
+
   function paint(state: RunState, rate: number): void {
+    if (state.turn === 0) {
+      waking();
+      return;
+    }
     els.archive.textContent = nf.format(state.turn);
-    els.archiveSub.textContent = `${nf.format(state.capsules)} capsules · ≈${bytes(state.archiveBytes)} of archive text · ${Math.max(state.levelCounts.length, 1)} levels`;
+    els.archiveSub.textContent = `${nf.format(state.capsules)} summaries · ≈${bytes(state.archiveBytes)} of archive text · ${levelWord(state.levelCounts.length)}`;
     els.rate.textContent = rate > 0 ? `${nf.format(Math.round(rate))} turns/s` : " ";
 
     const p = state.packet;
@@ -115,17 +132,17 @@ export function mountAperture(): void {
       const el = meter[s];
       if (el) el.style.width = `${((p.slots[s] / p.budget) * 100).toFixed(3)}%`;
     }
-    els.ledgerCount.textContent = `Ledger · ${nf.format(state.lossRows)} entries · 0 removed (conserved)`;
+    els.ledgerCount.textContent = ledgerLine(state.lossRows);
 
     const counts = state.levelCounts;
     const marks =
       state.recovered === null
-        ? `the full-height mark is turn ${nf.format(REVISION_SEQ)}`
-        : `the full-height marks are turns ${nf.format(REVISION_SEQ)} and ${nf.format(state.recovered.seq)}`;
+        ? `the full-height mark is turn ${nf.format(REVISION_SEQ)}, where the rule changed`
+        : `the full-height marks are turns ${nf.format(REVISION_SEQ)}, where the rule changed, and ${nf.format(state.recovered.seq)}, the turn brought back`;
     els.levels.textContent =
       counts.length === 0
-        ? `Compaction hierarchy · level 4 → level 0 · ${marks}`
-        : `Capsules · ${counts
+        ? `Summaries of summaries, coarsest lane at the top down to the raw turns at the bottom (level 4 → level 0) · ${marks}`
+        : `Summaries at each level, coarsest first · ${counts
             .map((n, i) => `L${i} ${nf.format(n)}`)
             .reverse()
             .join(" · ")} · ${marks}`;
@@ -162,17 +179,17 @@ export function mountAperture(): void {
     els.resident.textContent =
       state.resident === null
         ? ""
-        : `● resident #${nf.format(state.resident.seq)} · “${clip(state.resident.query)}” · the current rule certificate is in the view and the turn-1 version is kept ⟨historical⟩ · no page needed`;
+        : `● already in the view #${nf.format(state.resident.seq)} · “${clip(state.resident.query)}” · the rule as it stands now was carried in without fetching anything, and the turn-1 version is kept beside it, labelled older`;
     const r = state.recovered;
     if (!r) {
-      els.recovLine.textContent = "no route fired";
+      els.recovLine.textContent = "↺ nothing came back";
       els.recovQuote.textContent =
-        "The closing question matched nothing this run still holds a locator for. Nothing was recovered, and nothing is claimed for it.";
+        "The closing question matched nothing this run still has a way back to. Nothing was brought back, and nothing is claimed for it.";
       els.recovMeta.textContent = `${nf.format(state.lossRows)} ledger entries recorded, none removed`;
       els.recovery.dataset.on = "none";
       return;
     }
-    els.recovLine.textContent = `↺ recovered turn ${nf.format(r.seq)}`;
+    els.recovLine.textContent = `↺ brought back turn ${nf.format(r.seq)}, word for word`;
     els.recovQuote.textContent = "";
     for (const part of split(r.text, r.quote)) {
       if (part.hit) {
@@ -183,7 +200,7 @@ export function mountAperture(): void {
         els.recovQuote.append(document.createTextNode(part.text));
       }
     }
-    els.recovMeta.textContent = `“${clip(r.query)}” · trigger ${r.trigger} · exact span · paged before the model answered · ${nf.format(state.lossRows)} ledger entries recorded, none removed`;
+    els.recovMeta.textContent = `“${clip(r.query)}” · found by a name the summaries dropped ⟨${r.trigger}⟩ · the exact span, fetched before the model answered · ${nf.format(state.lossRows)} ledger entries recorded, none removed`;
     els.recovery.dataset.on = "true";
   }
 
@@ -193,9 +210,11 @@ export function mountAperture(): void {
     latest = state;
     const rate = elapsed > 250 ? (state.turn / elapsed) * 1000 : 0;
 
-    els.archive.textContent = nf.format(state.turn);
-    els.rate.textContent = rate > 0 ? `${nf.format(Math.round(rate))} turns/s` : " ";
-    els.ledgerCount.textContent = `Ledger · ${nf.format(state.lossRows)} entries · 0 removed (conserved)`;
+    if (state.turn > 0) {
+      els.archive.textContent = nf.format(state.turn);
+      els.rate.textContent = rate > 0 ? `${nf.format(Math.round(rate))} turns/s` : " ";
+      els.ledgerCount.textContent = ledgerLine(state.lossRows);
+    }
     pushChips(state.strip, done ? MAX_CHIPS : CHIPS_PER_TICK);
 
     const now = performance.now();
@@ -216,12 +235,12 @@ export function mountAperture(): void {
     askConsole?.setState(state, "live");
     els.replay.disabled = false;
     els.replay.textContent = "Replay";
-    els.status.textContent = `Measured in this browser · ${nf.format(state.turn)} turns in ${(elapsed / 1000).toFixed(1)}s · packet ${nf.format(state.packet.tokens)}/${nf.format(state.packet.budget)} · ledger ${nf.format(state.lossRows)} · seed ${SEED}`;
+    els.status.textContent = `Measured in this browser · ${nf.format(state.turn)} turns in ${(elapsed / 1000).toFixed(1)}s · the model's view held at ${nf.format(state.packet.tokens)} of ${nf.format(state.packet.budget)} tokens · ${nf.format(state.lossRows)} ledger entries · the same numbers every run (seed ${SEED})`;
     const view = `${nf.format(state.turn)} turns archived, the model's view held at ${nf.format(state.packet.tokens)} of ${nf.format(state.packet.budget)} tokens`;
     els.live.textContent =
       state.recovered === null
-        ? `The run finished: ${view}. No ledger route fired for the closing question, so nothing was recovered.`
-        : `The run finished: ${view}, and turn ${nf.format(state.recovered.seq)} was recovered from the loss ledger before answering.`;
+        ? `The run finished: ${view}. No route reached the closing question, so nothing was brought back.`
+        : `The run finished: ${view}, and turn ${nf.format(state.recovered.seq)} was brought back from the loss ledger before answering.`;
   }
 
   function clear(): void {
@@ -245,7 +264,7 @@ export function mountAperture(): void {
     playing = true;
     els.replay.disabled = true;
     els.replay.textContent = "Running";
-    els.status.textContent = `Streaming · 32-episode capsules, fan-out 8 · seed ${SEED}`;
+    els.status.textContent = `Streaming · one summary every 32 turns, and every 8 summaries fold into one · the same numbers every run (seed ${SEED})`;
     els.live.textContent = "Streaming one million turns through the compiler.";
     driver.run(DURATION_MS);
   }
@@ -260,7 +279,7 @@ export function mountAperture(): void {
         pushChips(snap.strip, MAX_CHIPS);
         reveal(snap);
         askConsole?.setState(snap, "live");
-        els.status.textContent = `Finished run, precomputed from the same seed · ${nf.format(snap.turn)} turns · packet ${nf.format(snap.packet.tokens)}/${nf.format(snap.packet.budget)} · ledger ${nf.format(snap.lossRows)} · seed ${SEED}`;
+        els.status.textContent = `The finished run, computed when this page was built · ${nf.format(snap.turn)} turns · the model's view held at ${nf.format(snap.packet.tokens)} of ${nf.format(snap.packet.budget)} tokens · ${nf.format(snap.lossRows)} ledger entries · the same numbers every run (seed ${SEED})`;
       } else {
         driver.end();
       }
@@ -418,6 +437,16 @@ function span(cls: string, text: string): HTMLElement {
   el.className = cls;
   el.textContent = text;
   return el;
+}
+
+/** The ledger strip carries its own label in the markup; this states only the count. */
+function ledgerLine(rows: number): string {
+  return `${nf.format(rows)} entries · none removed`;
+}
+
+function levelWord(levels: number): string {
+  const n = Math.max(levels, 1);
+  return `${n} ${n === 1 ? "level" : "levels"} of summary`;
 }
 
 /** Questions are sentences; receipts are one line. */

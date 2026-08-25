@@ -1,6 +1,6 @@
 {
   "name": "@pylos/app",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "The Pylos app — one composer, served at /app/ and wrapped by the desktop shell.",

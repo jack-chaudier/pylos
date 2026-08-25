@@ -1,13 +1,28 @@
 import type {
   Atom,
+  AtomPage,
   AtomPhase,
+  BudgetShares,
   Capsule,
+  CapsulePage,
+  DemoAttachmentSpanResource,
+  DemoEpisodeResource,
+  DemoPacketReceipt,
+  DemoRouteResource,
+  DemoSummary,
   Episode,
+  EpisodePage,
+  EpisodeView,
+  LedgerPage,
   LossEntry,
   Packet,
   ProviderId,
+  SearchPage,
   Seq,
   ThreadId,
+  ThreadListOptions,
+  ThreadListPage,
+  ThreadSourceReadiness,
   ThreadStats,
   TurnEvent,
 } from "@pylos/protocol";
@@ -41,6 +56,34 @@ export interface ForgetTarget {
 export interface ThreadSettings {
   model?: string;
   budget?: number;
+  shares?: BudgetShares;
+}
+
+/**
+ * The authenticated boundary of a partial bundle.  A fragment is useful as a
+ * read-only archive, but it is not a new genesis chain that the server may
+ * append to or edit.
+ */
+export interface ThreadFragmentStatus {
+  readOnly: true;
+  threadId: ThreadId;
+  originalThreadId: ThreadId;
+  fromSeq: Seq;
+  toSeq: Seq;
+  prevHash: string;
+  headHash: string;
+  createdAt: number;
+}
+
+export interface ThreadVerification {
+  ok: boolean;
+  headHash: string;
+  checkedTo: Seq;
+  checkedFrom?: Seq;
+  failedAt?: Seq;
+  reason?: string;
+  fragmentVerified?: boolean;
+  fragment?: Pick<ThreadFragmentStatus, "originalThreadId" | "fromSeq" | "toSeq" | "prevHash" | "headHash">;
 }
 
 /** What a removal did, and what it deliberately left alone (KERNEL A10.6). */
@@ -56,6 +99,8 @@ export interface ForgetOutcome {
   packets: number;
   /** Attachment blobs deleted because nothing surviving referenced them. */
   blobs: number;
+  /** True when SQLite committed but object cleanup remains in a durable journal. */
+  cleanupPending: boolean;
 }
 
 /**
@@ -65,17 +110,40 @@ export interface ForgetOutcome {
 export interface Kernel {
   readonly home: string;
   readonly backend: "core";
-  listThreads(): Promise<ThreadStats[]>;
+  listThreads(options?: ThreadListOptions): Promise<ThreadListPage>;
   createThread(title?: string): Promise<ThreadStats>;
   getThread(id: ThreadId): Promise<ThreadStats | undefined>;
   episodes(threadId: ThreadId, opts: { before?: Seq; after?: Seq; limit?: number }): Promise<Episode[]>;
-  episode(threadId: ThreadId, seq: Seq): Promise<Episode | undefined>;
-  search(threadId: ThreadId, query: string): Promise<{ episodes: Episode[]; atoms: Atom[] }>;
+  episodesPage(threadId: ThreadId, opts: { before?: Seq; after?: Seq; limit?: number }): Promise<EpisodePage>;
+  episode(threadId: ThreadId, seq: Seq): Promise<EpisodeView | undefined>;
+  search(threadId: ThreadId, query: string): Promise<SearchPage>;
   packet(threadId: ThreadId, turnSeq: Seq): Promise<Packet | undefined>;
+  packetById(threadId: ThreadId, packetId: string): Promise<Packet | undefined>;
+  /** Bounded proof exhibit for an exact episode locator; never returns raw content. */
+  demoEpisode(threadId: ThreadId, seq: Seq): Promise<DemoEpisodeResource | undefined>;
+  demoPacket(threadId: ThreadId, packetIdOrTurnSeq: string): Promise<DemoPacketReceipt | undefined>;
+  demoRoute(threadId: ThreadId, routeId: string): Promise<DemoRouteResource | undefined>;
+  demoAttachmentSpan(
+    threadId: ThreadId,
+    seq: Seq,
+    ordinal: number,
+  ): Promise<DemoAttachmentSpanResource | undefined>;
   atoms(threadId: ThreadId, phase?: AtomPhase): Promise<Atom[]>;
+  atomsPage(
+    threadId: ThreadId,
+    opts?: { phase?: AtomPhase; after?: string; limit?: number },
+  ): Promise<AtomPage>;
   pinAtom(threadId: ThreadId, atomId: string, pinned: boolean): Promise<Atom | undefined>;
   capsules(threadId: ThreadId, level?: number): Promise<Capsule[]>;
+  capsulesPage(
+    threadId: ThreadId,
+    opts?: { level?: number; after?: string; limit?: number },
+  ): Promise<CapsulePage>;
   ledger(threadId: ThreadId, opts: { name?: string; limit?: number }): Promise<LossEntry[]>;
+  ledgerPage(
+    threadId: ThreadId,
+    opts?: { name?: string; after?: string; limit?: number },
+  ): Promise<LedgerPage>;
   /**
    * Claims this thread's place in the turn queue, synchronously, so a route can
    * take it the moment the request arrives and hand it to `runTurn` later. A
@@ -105,9 +173,24 @@ export interface Kernel {
   handoff(threadId: ThreadId, model: string, provider: ProviderId): Promise<Episode | undefined>;
   forget(threadId: ThreadId, target: ForgetTarget): Promise<ForgetOutcome>;
   exportBundle(threadId: ThreadId, opts: { passphrase: string; range?: [Seq, Seq] }): Promise<Uint8Array>;
+  exportBundleStream(
+    threadId: ThreadId,
+    opts: { passphrase: string; range?: [Seq, Seq] },
+  ): Promise<ReadableStream<Uint8Array>>;
   importBundle(data: Uint8Array, passphrase: string): Promise<ThreadStats>;
-  verify(threadId: ThreadId): Promise<{ ok: boolean; headHash: string; checkedTo: Seq }>;
+  importBundleStream(stream: ReadableStream<Uint8Array>, passphrase: string): Promise<ThreadStats>;
+  verify(threadId: ThreadId): Promise<ThreadVerification>;
   stats(threadId: ThreadId): Promise<ThreadStats>;
+  /** Read-only fragment marker; absence means ordinary mutable thread. */
+  fragmentStatus(threadId: ThreadId): Promise<ThreadFragmentStatus | undefined>;
+  /** Legacy source quarantine marker; absence means new turns are admissible. */
+  sourceReadiness(threadId: ThreadId): Promise<ThreadSourceReadiness | undefined>;
+  /** Advance a fixed bounded number of derived-index passes and return progress. */
+  maintenance(threadId: ThreadId): Promise<ThreadStats>;
+  /** Seed the deterministic receipt-backed proof thread on an empty thread. */
+  demo(threadId: ThreadId): Promise<DemoSummary>;
+  /** Read a persisted proof thread without seeding or mutating the vault. */
+  demoSummary(threadId: ThreadId): Promise<DemoSummary | undefined>;
   settings(threadId: ThreadId): Promise<ThreadSettings>;
   setSettings(threadId: ThreadId, patch: ThreadSettings): Promise<void>;
   close(): Promise<void>;

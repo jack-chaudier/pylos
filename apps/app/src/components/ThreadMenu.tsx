@@ -6,9 +6,15 @@ import { useDismiss } from "./Composer.tsx";
 export interface ThreadMenuProps {
   stats: ThreadStats | undefined;
   threads: ThreadStats[];
+  hasMore: boolean;
+  hasNewer: boolean;
+  loadingMore: boolean;
   onNew: () => void;
+  onLoadOlder: () => void;
+  onLoadNewer: () => void;
   onOpen: (threadId: string) => void;
   onExport: () => void;
+  onExportPartial: () => void;
   onImport: () => void;
   onClose: () => void;
 }
@@ -16,15 +22,34 @@ export interface ThreadMenuProps {
 export function ThreadMenu(props: ThreadMenuProps): React.JSX.Element {
   useDismiss(props.onClose);
   const others = props.threads.filter((thread) => thread.threadId !== props.stats?.threadId);
+  const fragment = props.stats?.fragment;
   return (
     <div className="menu menu-down" role="menu">
       <button type="button" className="menu-item" onClick={props.onNew}>
         New thread
       </button>
-      <button type="button" className="menu-item" onClick={props.onExport}>
-        Export…
-        <small>.pylos</small>
-      </button>
+      {fragment === undefined ? (
+        <button type="button" className="menu-item" onClick={props.onExport}>
+          Export…
+          <small>.pylos</small>
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="menu-item"
+            disabled
+            title="Full-vault export is unavailable for an authenticated fragment."
+          >
+            Full export unavailable
+            <small>read-only</small>
+          </button>
+          <button type="button" className="menu-item" onClick={props.onExportPartial}>
+            Export this range…
+            <small>{`#${fragment.fromSeq}–#${fragment.toSeq}`}</small>
+          </button>
+        </>
+      )}
       <button type="button" className="menu-item" onClick={props.onImport}>
         Import…
       </button>
@@ -32,26 +57,37 @@ export function ThreadMenu(props: ThreadMenuProps): React.JSX.Element {
         <>
           <div className="menu-sep" />
           <div className="menu-group">Other threads</div>
-          {others.slice(0, 12).map((thread) => (
+          {others.map((thread) => (
             <button
               key={thread.threadId}
               type="button"
               className="menu-item"
               onClick={() => props.onOpen(thread.threadId)}
             >
-              <span
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  maxWidth: "22ch",
-                }}
-              >
-                {thread.title}
-              </span>
+              <span className="menu-item-title">{thread.title}</span>
               <small>{groupedNumber(thread.turns)}</small>
             </button>
           ))}
+          {props.hasMore ? (
+            <button
+              type="button"
+              className="menu-item"
+              onClick={props.onLoadOlder}
+              disabled={props.loadingMore}
+            >
+              {props.loadingMore ? "Loading older threads…" : "Load older threads"}
+            </button>
+          ) : null}
+          {props.hasNewer ? (
+            <button
+              type="button"
+              className="menu-item"
+              onClick={props.onLoadNewer}
+              disabled={props.loadingMore}
+            >
+              {props.loadingMore ? "Loading newer threads…" : "Load newer threads"}
+            </button>
+          ) : null}
         </>
       ) : null}
     </div>

@@ -37,6 +37,8 @@ export interface NameHit {
 export interface NamesOptions {
   /** Cap on distinct names per text; taken by kind priority. Default 64. */
   max?: number;
+  /** Stop as soon as the cap is proven exceeded; returned only for fail-closed work checks. */
+  stopWhenExceeded?: boolean;
 }
 
 /** KERNEL_REVIEW fix 4: cap 64 names per episode. */
@@ -368,6 +370,7 @@ export function names(text: string, options: NamesOptions = {}): NameHit[] {
             if (!seen.has(name)) {
               seen.add(name);
               hits.push({ name, kind: pattern.kind, start, end, raw: match[0] });
+              if (options.stopWhenExceeded === true && hits.length > max) return hits;
             }
           }
         }

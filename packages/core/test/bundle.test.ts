@@ -103,7 +103,7 @@ test("a bundle carries the attachments its own episodes reach, and no others", a
     content: "mine.txt",
     blob: { bytes: new TextEncoder().encode("thread A attachment"), mime: "text/plain", name: "mine.txt" },
   });
-  vault.episodes.append(other.id, {
+  const theirs = vault.episodes.append(other.id, {
     role: "attachment",
     content: "theirs.txt",
     blob: {
@@ -112,7 +112,17 @@ test("a bundle carries the attachments its own episodes reach, and no others", a
       name: "theirs.txt",
     },
   });
-  expect(vault.blobs.list()).toHaveLength(2);
+  // A12.3 retains the whole object plus every content-addressed manifest
+  // span.  A short shared prefix may split a span even when the FTS row stores
+  // only a filename, so count the authenticated object set rather than just
+  // whole-blob pointers.
+  const expectedObjects = new Set([
+    mine.meta.blob as string,
+    ...(mine.meta.manifest?.spans.map((span) => span.objectHash) ?? []),
+    ...(theirs.meta.manifest?.spans.map((span) => span.objectHash) ?? []),
+    theirs.meta.blob as string,
+  ]);
+  expect(vault.blobs.list()).toHaveLength(expectedObjects.size);
 
   const bytes = await exportBundle(vault, thread.id, { passphrase: "pw" });
   const target = freshVault();
@@ -142,14 +152,24 @@ test("a partial export reaches only the attachments inside its range", async () 
   const target = freshVault();
   const imported = await importBundle(target, bytes, { passphrase: "pw" });
   const objects = Object.keys(imported.manifest.files).filter((name) => name.startsWith("objects/"));
-  expect(objects).toEqual([`objects/${early.meta.blob as string}`]);
+  expect(objects).toEqual(
+    [
+      ...new Set([
+        early.meta.blob as string,
+        ...(early.meta.manifest?.spans.map((span) => span.objectHash) ?? []),
+      ]),
+    ].map((hash) => `objects/${hash}`),
+  );
 });
 
 test("the receipts survive the round trip so the X-ray does too", async () => {
   const { vault, thread } = seeded(36, 96);
   const turn = vault.episodes.append(thread.id, { role: "user", content: "where does Ada Okafor live?" });
-  const packet = compile(vault, thread.id, { query: turn.content, turnSeq: turn.seq });
-  vault.packets.insert(packet);
+  const packet = {
+    ...compile(vault, thread.id, { query: turn.content, turnSeq: turn.seq }),
+    status: "pending" as const,
+  };
+  vault.packets.insert(packet, "pending");
 
   const bytes = await exportBundle(vault, thread.id, { passphrase: "pw" });
   const target = freshVault();
@@ -163,7 +183,7 @@ test("the receipts survive the round trip so the X-ray does too", async () => {
   expect(restored?.resident).toEqual(packet.resident);
   expect(restored?.ledger).toEqual(packet.ledger);
   expect(restored?.pages).toEqual(packet.pages);
-  expect(restored?.status).toBe("done");
+  expect(restored?.status).toBe("pending");
   // Messages are large and off by default: the X-ray re-renders from resident[].
   expect(restored?.messages).toEqual([]);
 });
@@ -171,8 +191,11 @@ test("the receipts survive the round trip so the X-ray does too", async () => {
 test("a bundle exported with packet messages restores them verbatim", async () => {
   const { vault, thread } = seeded(37, 64);
   const turn = vault.episodes.append(thread.id, { role: "user", content: "what did we decide?" });
-  const packet = compile(vault, thread.id, { query: turn.content, turnSeq: turn.seq });
-  vault.packets.insert(packet);
+  const packet = {
+    ...compile(vault, thread.id, { query: turn.content, turnSeq: turn.seq }),
+    status: "pending" as const,
+  };
+  vault.packets.insert(packet, "pending");
 
   const bytes = await exportBundle(vault, thread.id, { passphrase: "pw", includePacketMessages: true });
   const target = freshVault();

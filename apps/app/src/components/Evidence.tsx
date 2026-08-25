@@ -4,6 +4,8 @@ import { bytesLabel, groupedNumber, tokenCount } from "../format.ts";
 
 export interface EvidenceProps {
   stats: ThreadStats | undefined;
+  /** Turns the ring is showing: a new one counts when its arrival settles. */
+  turns: number;
   recovered: number;
   viewTokens: number | undefined;
   /** KERNEL A10.3: provider requests the last turn spent, packet included. */
@@ -18,10 +20,18 @@ export interface EvidenceProps {
  * still holds. Each opens the X-ray that proves it.
  */
 export function EvidenceFigures(props: EvidenceProps): React.JSX.Element {
-  const { stats, recovered, viewTokens, viewRounds, budget } = props;
-  const turns = stats?.turns ?? 0;
+  const { stats, turns, recovered, viewTokens, viewRounds, budget } = props;
   const verifiedTo = stats?.verifiedTo ?? 0;
   const verified = turns > 0 && verifiedTo >= turns;
+  const hints = figureHints({
+    turns,
+    recovered,
+    viewTokens,
+    viewRounds,
+    budget,
+    verifiedTo,
+    archiveBytes: stats?.archiveBytes ?? 0,
+  });
 
   return (
     <>
@@ -30,10 +40,7 @@ export function EvidenceFigures(props: EvidenceProps): React.JSX.Element {
         label="archive"
         value={groupedNumber(turns)}
         unit="turns"
-        hint={
-          `Turns held verbatim in the hash-chained vault — ${bytesLabel(stats?.archiveBytes ?? 0)} on disk. ` +
-          "Compaction never touches them."
-        }
+        hint={hints.archive}
         onOpen={props.onOpen}
       />
       <Figure
@@ -41,18 +48,15 @@ export function EvidenceFigures(props: EvidenceProps): React.JSX.Element {
         label="view"
         value={`${viewTokens === undefined ? "—" : tokenCount(viewTokens)} / ${tokenCount(budget)}`}
         {...(viewRounds !== undefined && viewRounds > 1 ? { unit: `· ${viewRounds} rounds` } : {})}
-        hint={
-          "Tokens in the packet the model last saw, against the budget it may never exceed. " +
-          "A turn that recalled, or was checked, costs more than one request — each held to that same budget."
-        }
+        hint={hints.view}
         onOpen={props.onOpen}
       />
       <Figure
         place="recovered"
-        label="recovered"
+        label="paged"
         value={groupedNumber(recovered)}
         lit={recovered > 0}
-        hint="Spans paged back from the archive before the last answer."
+        hint={hints.paged}
         onOpen={props.onOpen}
       />
       <Figure
@@ -60,17 +64,66 @@ export function EvidenceFigures(props: EvidenceProps): React.JSX.Element {
         label="chain"
         value={verified ? "✓" : "—"}
         lit={verified}
-        hint={
-          turns === 0
-            ? "Nothing has been written to this thread yet."
-            : `Hash chain verified to #${groupedNumber(verifiedTo)} of #${groupedNumber(turns)}.${
-                verified ? "" : " Open the X-ray to verify the rest."
-              }`
-        }
+        hint={hints.chain}
         onOpen={props.onOpen}
       />
     </>
   );
+}
+
+/** Where every figure leads, said the way the drawer titles itself. */
+const XRAY = "Click to open what the model saw.";
+
+export interface FigureHints {
+  archive: string;
+  view: string;
+  paged: string;
+  chain: string;
+}
+
+/**
+ * A figure with no sentence behind it is a dial with no dial face. Each hint
+ * says in plain speech what the number measures — including the states before
+ * a first turn, where `—` on its own reads as a fault rather than an empty
+ * thread — and then where clicking goes.
+ */
+export function figureHints(input: {
+  turns: number;
+  recovered: number;
+  viewTokens: number | undefined;
+  viewRounds: number | undefined;
+  budget: number;
+  verifiedTo: number;
+  archiveBytes: number;
+}): FigureHints {
+  const { turns, recovered, viewTokens, viewRounds, budget, verifiedTo, archiveBytes } = input;
+  const rounds =
+    viewRounds !== undefined && viewRounds > 1
+      ? ` The last answer took ${viewRounds} requests, each held to that same budget.`
+      : "";
+
+  return {
+    archive:
+      turns === 0
+        ? `Every turn is kept exactly, word for word, and hashed into one chain; nothing has been said in this thread yet. ${XRAY}`
+        : `Every turn kept exactly, word for word, and hashed into one chain — ${bytesLabel(archiveBytes)} on disk, never rewritten. ${XRAY}`,
+    view:
+      viewTokens === undefined
+        ? `The bounded text the model reads, over its budget of ${tokenCount(budget)} tokens — nothing has been compiled for a model yet, so your first question fills this. ${XRAY}`
+        : `The bounded text the model reads, over its budget: ${tokenCount(viewTokens)} of ${tokenCount(budget)} tokens, a limit it may never exceed.${rounds} ${XRAY}`,
+    paged:
+      recovered > 0
+        ? `Earlier turns brought back exactly, word for word, for the last answer — ${groupedNumber(recovered)} of them. ${XRAY}`
+        : `Earlier turns are brought back exactly, word for word, when an answer needs them; ${
+            turns === 0 ? "nothing has been asked yet" : "none were needed for the last one"
+          }. ${XRAY}`,
+    chain:
+      turns === 0
+        ? `Whether the archive's hash chain verified — nothing has been written to this thread yet, so there is nothing to verify. ${XRAY}`
+        : verifiedTo >= turns
+          ? `Whether the archive's hash chain verified: it holds through all ${groupedNumber(turns)} turns so far. ${XRAY}`
+          : `Whether the archive's hash chain verified: checked through turn ${groupedNumber(verifiedTo)} of ${groupedNumber(turns)} so far. ${XRAY}`,
+  };
 }
 
 function Figure({
@@ -94,7 +147,14 @@ function Figure({
 }): React.JSX.Element {
   const changed = useChanged(value);
   return (
-    <button type="button" className="figure" data-place={place} title={hint} onClick={onOpen}>
+    <button
+      type="button"
+      className="figure"
+      data-place={place}
+      title={hint}
+      aria-label={`${label} ${value}${unit === undefined ? "" : ` ${unit}`} — ${hint}`}
+      onClick={onOpen}
+    >
       <span className="figure-label">{label}</span>
       <em data-lit={lit === true} data-changed={changed}>
         {value}
